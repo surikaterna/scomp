@@ -1,0 +1,7 @@
+{
+    "extends": "surikat/es6",
+    "parser": "babel-eslint",
+    "env": {
+      "mocha": true
+    }
+}
