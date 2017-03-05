@@ -29,5 +29,6 @@
   "author": "Surikaterna",
   "license": "MIT",
   "dependencies": {
+    "slf": "^1.0.0"
   }
 }
