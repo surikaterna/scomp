@@ -9,6 +9,13 @@ export class Scomp {
   request(req) {
     this._wire(req);
   }
+  // on req
+  // on sub
+  // on res
+  // on connect
+  // on disconnect
+  // on reconnect
+  // on error
 
   client() {
     LOG.info('client builder');
