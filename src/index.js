@@ -1,5 +1,13 @@
-import {Logger} from 'slf';
+import { Logger } from 'slf';
 const LOG = Logger.getLogger('scomp:core')
+
+const PathProxyFactory = (path) =>
+  new Proxy(function () {
+    console.log('calling', path, arguments);
+  }, {
+
+      get: (target, name) => PathProxyFactory(path + '/' + name)
+    });
 
 export class Scomp {
   constructor(wire) {
@@ -19,5 +27,6 @@ export class Scomp {
 
   client() {
     LOG.info('client builder');
+    return PathProxyFactory('');
   }
 }
