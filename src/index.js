@@ -1,17 +1,26 @@
 import { Logger } from 'slf';
+import NullWire from './null';
+import { EventEmitter } from 'events';
+export { ScompServer } from './server';
 const LOG = Logger.getLogger('scomp:core')
 
-const PathProxyFactory = (path) =>
-  new Proxy(function () {
-    console.log('calling', path, arguments);
+const PathProxyFactory = (path, wire) =>
+  new Proxy(function (...params) {
+    LOG.info('calling', path, params);
+    wire.send({
+      id: 123,
+      svc: path,
+      params
+    });
   }, {
-
-      get: (target, name) => PathProxyFactory(path + '/' + name)
+      get: (target, name) => PathProxyFactory(path + '/' + name, wire)
     });
 
-export class Scomp {
+export class Scomp extends EventEmitter {
   constructor(wire) {
-    this._wire = wire;
+    super();
+    this._wire = wire || new NullWire();
+    this._wire.on('data', packet => console.log('PP', packet));
   }
 
   request(req) {
@@ -27,6 +36,7 @@ export class Scomp {
 
   client() {
     LOG.info('client builder');
-    return PathProxyFactory('');
+    return PathProxyFactory('', this._wire);
   }
 }
+

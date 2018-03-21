@@ -1,5 +1,8 @@
 import { EventEmitter } from 'events';
+import { Logger } from 'slf';
+const LOG = Logger.getLogger('scomp:wire:null')
 
+/*
 class Observable {
   constructor(fn) {
     fn({
@@ -17,17 +20,23 @@ class Observable {
 
   }
 }
+*/
 
 /**
  * Wire responsible for transferring data，should keep connection alive or reconnect if necessary
  */
-export class NullWire extends EventEmitter {
+export default class NullWire extends EventEmitter {
   send(packet) {
-
+    LOG.info('send %j', packet);
+    console.log('send %j', packet);
+    this._fromClient(packet);
+  }
+  _fromClient(packet) {
+    this.emit('data', packet);
   }
 }
 
-
+/*
 const req = {
   id: 123123121,
   svc: '$scomp',
@@ -52,7 +61,7 @@ const ev = {
 
 
 const viewdb = Scomp.asProxy('viewdb');
-saft.toArray('collection', )
+viewdb.toArray('collection', )
 
 const server = new ScompServer(scomp);
 //server.install(Module);
@@ -64,3 +73,5 @@ server.service('viewdb').on('query', (collection, query, options) => {
 server.service('viewdb').on('query', (collection, query, options) => {
 
 });
+
+*/

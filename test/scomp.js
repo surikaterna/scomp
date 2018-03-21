@@ -1,4 +1,4 @@
-import { Scomp } from '..';
+import { Scomp, ScompServer } from '..';
 import { Logger, LoggerFactory } from 'slf';
 LoggerFactory.setFactory((e) => console.log(e.name, e.params.join(' ')));
 
@@ -10,17 +10,28 @@ describe('Scomp', () => {
   it('should do something', (done) => {
     // Scomp.request('viewdb');
     // Creates a proxy
-    const viewdb = new Scomp().client().viewdb;//('viewdb');
-    viewdb.query('shipments');
-    new Scomp().client().window.alert('Hej!');
-    new Scomp().client().devices.x1231234532.window.alert('think quick');
-    done();
-   /* viewdb.observe('shipments', {}).next((ev) => {
-      //_process(ev);
-      done();
-    }).error((err) => {
-      done(err);
+    //    const viewdb = new Scomp().client().viewdb;//('viewdb');
+    //    viewdb.query('shipments');
+    const scomp = new Scomp();
+    scomp.client().window.alert('Hej!');
+
+    //scomp.client().saft.get('test').banan();
+    //scomp.call(saft.get('test').banan());
+
+    const server = new ScompServer(scomp);
+    server.use('window', {
+      alert: msg => console.log('Server alert', msg)
     });
-    */
+
+    //    new Scomp().client().devices.x1231234532.window.alert('think quick');
+    //new Scomp().client().saft.get('messageService').alert('think quick');
+    done();
+    /* viewdb.observe('shipments', {}).next((ev) => {
+       //_process(ev);
+       done();
+     }).error((err) => {
+       done(err);
+     });
+     */
   });
 });
