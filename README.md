@@ -40,10 +40,10 @@ service()
 
 ```json
 {
-  id: 123123121,
-  req: {
-    s:'saft'
-    p:['eh', 'oh']
+  "id": 123123121,
+  "req": {
+    "s": "saft",
+    "p":[ "eh", "oh"]
   }
 }
 ```
@@ -52,10 +52,10 @@ service()
 
 ```json
 {
-  id: 123123121, // corresponds to
-  res: {}, // user data
-  str: {}, // stream control data
-  err: {} // error
+  "id": 123123121, // corresponds to
+  "res": {}, // user data
+  "str": {}, // stream control data
+  "err": {} // error
 }
 ```
 
@@ -63,10 +63,10 @@ service()
 
 ```json
 {
-  id: 123123123, // corresponds to
-  seq: 0, // sequence of events, start at 0
-  res: {}, // user data
-  str: {}, // stream control data
-  err: {} // error
+  "id": 123123123, // corresponds to
+  "seq": 0, // sequence of events, start at 0
+  "res": {}, // user data
+  "str": {}, // stream control data
+  "err": {} // error
 }
 ```
