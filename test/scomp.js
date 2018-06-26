@@ -13,7 +13,27 @@ describe('Scomp', () => {
     //    const viewdb = new Scomp().client().viewdb;//('viewdb');
     //    viewdb.query('shipments');
     const scomp = new Scomp();
+
+    //Void
     scomp.client().window.alert('Hej!');
+
+    //Callback
+    scomp.client().window.alert('Hej!').then((message) => {
+      console.log(message);
+    });
+
+
+    //Stream
+    
+    //subscribe, observe, stream
+    scomp.client().subscribe('notifications').onEvent((event, error) => {
+
+    });
+
+    scomp.client().notifications.observe((event, error) => {
+
+    });
+
 
     //scomp.client().saft.get('test').banan();
     //scomp.call(saft.get('test').banan());
