@@ -1,5 +1,6 @@
 import { Scomp, ScompServer } from '..';
 import { Logger, LoggerFactory } from 'slf';
+import should from 'should';
 LoggerFactory.setFactory((e) => console.log(e.name, e.params.join(' ')));
 
 const LOG = Logger.getLogger('scomp:client');
@@ -13,26 +14,21 @@ describe('Scomp', () => {
     //    const viewdb = new Scomp().client().viewdb;//('viewdb');
     //    viewdb.query('shipments');
     const scomp = new Scomp();
-
-    //Void
-    scomp.client().window.alert('Hej!');
-
-    //Callback
-    scomp.client().window.alert('Hej!').then((message) => {
-      console.log(message);
+    scomp.client().timeService.ticks(10).then((timeServiceObservable) => {
+      timeServiceObservable.onNext(time => {
+        should.exist(time);
+        console.log(time);
+        done();
+      }).onError(err => {
+        should.not.exist(err);
+        done();
+      });
     });
 
+    /*scomp.client().notificationService.find('1').then( (notifications) => {
+    });*/
 
-    //Stream
-    
-    //subscribe, observe, stream
-    scomp.client().subscribe('notifications').onEvent((event, error) => {
 
-    });
-
-    scomp.client().notifications.observe((event, error) => {
-
-    });
 
 
     //scomp.client().saft.get('test').banan();
@@ -45,7 +41,7 @@ describe('Scomp', () => {
 
     //    new Scomp().client().devices.x1231234532.window.alert('think quick');
     //new Scomp().client().saft.get('messageService').alert('think quick');
-    done();
+    //done();
     /* viewdb.observe('shipments', {}).next((ev) => {
        //_process(ev);
        done();
