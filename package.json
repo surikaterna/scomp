@@ -29,6 +29,7 @@
   "author": "Surikaterna",
   "license": "MIT",
   "dependencies": {
+    "bluebird": "^3.5.1",
     "slf": "^1.0.0"
   }
 }

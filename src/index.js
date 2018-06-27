@@ -1,20 +1,28 @@
 import { Logger } from 'slf';
 import NullWire from './null';
 import { EventEmitter } from 'events';
+import Promise from 'bluebird';
+import Observable from './Observable';
+
 export { ScompServer } from './server';
+
+
 const LOG = Logger.getLogger('scomp:core')
 
 const PathProxyFactory = (path, wire) =>
   new Proxy(function (...params) {
-    LOG.info('calling', path, params);
-    wire.send({
-      id: 123,
-      svc: path,
-      params
+    return new Promise((resolve, reject) => {
+      LOG.info('calling', path, params);
+      wire.send({
+        id: 123,
+        svc: path,
+        params
+      });
+      resolve(new Observable());
     });
   }, {
-      get: (target, name) => PathProxyFactory(path + '/' + name, wire)
-    });
+    get: (target, name) => PathProxyFactory(path + '/' + name, wire)
+  });
 
 export class Scomp extends EventEmitter {
   constructor(wire) {
