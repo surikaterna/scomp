@@ -6,18 +6,25 @@ export default class Observable {
   }
 
   isUnsubscribed() {
+    return false;
+  }
+
+  _getNext() {
+    return this._onNext;
   }
 
   onNext(fn) {
-    fn(1);
+    this._onNext = fn;
     return this;
   }
 
   onError(fn) {
+    this._onError = fn;
     return this;
   }
 
   onComplete(fn){
+    this._onComplete = fn;
     return this;
   }
 }
