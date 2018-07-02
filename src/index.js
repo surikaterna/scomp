@@ -9,19 +9,29 @@ export { ScompServer } from './server';
 
 const LOG = Logger.getLogger('scomp:core')
 
-const PathProxyFactory = (path, scomp) =>
+const PathProxyFactory = (path, scomp, paths) =>
   new Proxy(function (...params) {
-    return new Promise((resolve, reject) => {
-      LOG.info('calling', path, params);
-      scomp.request(path, params).then((res) => {
-        resolve(res);
-      });
-    });
   }, {
-    get: (target, name) => PathProxyFactory(path + '/' + name, scomp)
+    get: (target, name) => PathProxyFactory(path + '/' + name, scomp, paths),
+    apply: (target, thisArg, argumentsList) => {
+      if (path === '/then') {
+        return new Promise((resolve, reject) => {
+          LOG.info('calling', paths);
+          scomp.request(paths).then((res) => {
+            LOG.info('Proxy response', res);
+            argumentsList[0](res);
+            resolve(res);
+          });
+        });
+      } else {
+        paths.push({ path, params: argumentsList });
+        return PathProxyFactory('', scomp, paths);
+      }
+    }
   });
 
 
+//TODO rename and fix return values
 class ValueObservable extends Observable {
   constructor(value) {
     super();
@@ -77,6 +87,7 @@ export class Scomp extends EventEmitter {
   }
 
   response(id, res) {
+    LOG.info('Response ', id, res);
     this._wire.emit('res', {
       id,
       res
@@ -87,11 +98,18 @@ export class Scomp extends EventEmitter {
     const requestId = this._id++;
     return new Promise((resolve, reject) => {
       LOG.info('Request ', path, params);
-      this._wire.emit('req', {
-        id: requestId,
-        path,
-        params
-      });
+      if (path instanceof Array) {
+        this._wire.emit('req', {
+          id: requestId,
+          paths: path
+        });
+      } else {
+        this._wire.emit('req', {
+          id: requestId,
+          path,
+          params
+        });
+      }
       this._waitForResponse(requestId, resolve, reject);
     });
   }
@@ -113,7 +131,7 @@ export class Scomp extends EventEmitter {
 
   client() {
     LOG.info('client builder');
-    return PathProxyFactory('', this);
+    return PathProxyFactory('', this, []);
   }
 }
 

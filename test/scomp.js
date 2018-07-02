@@ -6,34 +6,33 @@ LoggerFactory.setFactory((e) => console.log(e.name, e.params.join(' ')));
 const LOG = Logger.getLogger('scomp:client');
 
 LOG.debug('HI', { ts: 0 });
+const scomp = new Scomp();
+const server = new ScompServer(scomp);
 
 describe('Scomp', () => {
-  it('should do something', (done) => {
-    const scomp = new Scomp();
-
-    const server = new ScompServer(scomp);
+  it('should be possible to call service', (done) => {
     server.use('window', {
       alert: msg => console.log('Server alert', msg)
     });
 
     server.use('timeService', {
-      tick: (time, scomp) => {
-        LOG.debug('timeService ', time, scomp);
+      tick: (time, wire) => {
+        LOG.debug('timeService ', time, wire);
         setInterval(() => {
-          scomp.response(new Date().getTime());
+          wire.response(new Date().getTime());
         }, time);
       }
     });
-    
 
     scomp.client().timeService.tick(50).then((timeServiceObservable) => {
       let count = 0;
       timeServiceObservable.onNext(time => {
         LOG.debug('Response ', time);
         should.exist(time);
-        if (count > 10) {
+        if (count === 10) {
+          //TODO need to fix unsubscribe, client and server.
           timeServiceObservable.unsubscribe();
-          timeServiceObservable.isUnsubscribed().should.equal(false);
+          timeServiceObservable.isUnsubscribed().should.equal(true);
           done();          
         }
         count++;
@@ -41,9 +40,38 @@ describe('Scomp', () => {
         should.not.exist(err);
         done();
       });
+    });    
+    
+  });
+  it('should be possible to call function on remote service', function (done) {
+    server.use('timeService2', {
+      get: (timer, wire) => {
+        LOG.debug('Time service ', timer);
+        return {
+          tick: (time, wire) => {
+            console.log(time);
+            LOG.debug('timeService ', time, wire);
+            setInterval(() => {
+              wire.response(new Date().getTime());
+            }, time);
+          }
+        }
+      }
     });
 
-
+    scomp.client().timeService2.get('timer2').tick(150).then((timeServiceObservable) => {
+      let count = 0;
+      timeServiceObservable.onNext(time => {
+        LOG.debug('Response ', time);
+        should.exist(time);
+        if (count === 1) {
+          timeServiceObservable.unsubscribe();
+          timeServiceObservable.isUnsubscribed().should.equal(true);
+          done();          
+        }
+        count++;
+      });          
+    });
 
 
 

@@ -2,6 +2,7 @@ import { Logger } from 'slf';
 const LOG = Logger.getLogger('scomp:server');
 
 const reflectionHandler = (obj, path) => obj[path];
+const isLastIndex = (array, index) => array.length - 1 === index;
 
 export class ScompServer {
   constructor(scomp) {
@@ -9,17 +10,41 @@ export class ScompServer {
     this._scomp = scomp;
     this._scomp._wire.on('req', (packet) => {
       LOG.info('Request ', packet);
-      const paths = packet.path.split('/').filter(x => x);
-      LOG.info('Paths ', paths);
-      LOG.info('Params ', packet.params);
-      if (this._paths[paths[0]]) {
-        LOG.info('Found handler ', this._paths[paths[0]]);
-        this._paths[paths[0]].obj[paths[1]](...packet.params, {
-          response: (res) => {
-            LOG.info('Prepare response ', packet.id, res);
-            this._scomp.response(packet.id, res);
+
+      let commands = packet.paths;
+      if (!packet.paths) {
+        commands = [{ path: packet.path, params: packet.params }];
+      }
+      let target;
+      for (let i = 0; i < commands.length; i++) {
+        const command = commands[i];
+        const paths = command.path.split('/').filter(x => x);
+        LOG.info('Paths ', paths);
+        LOG.info('Params ', command.params);
+        LOG.info('Target ', target);
+
+        let index = 0;
+        if (target || this._paths[paths[0]]) {
+          target = target || this._paths[paths[index++]].obj;
+          LOG.info('Found handler ', target);
+          for (let j = index; j < paths.length; j++) {
+            if (isLastIndex(paths, j)) {
+              if (isLastIndex(commands, i)) {
+                //Todo wire implementation
+                target[paths[j]](...command.params, {
+                  response: (res) => {
+                    this._scomp.response(packet.id, res);
+                  }
+                });
+              } else {
+                //Todo support promise?
+                target = target[paths[j]](...command.params);
+              }
+            } else {
+              target = target[paths[j]];
+            }
           }
-        });
+        }
       }
     });
   }

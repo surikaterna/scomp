@@ -6,7 +6,7 @@ export default class Observable {
   }
 
   isUnsubscribed() {
-    return false;
+    return true;
   }
 
   _getNext() {
