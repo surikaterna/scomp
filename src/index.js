@@ -9,10 +9,10 @@ export { ScompServer } from './server';
 
 const LOG = Logger.getLogger('scomp:core')
 
-const PathProxyFactory = (path, scomp, paths) =>
+const pathProxyFactory = (path, scomp, paths) =>
   new Proxy(function (...params) {
   }, {
-    get: (target, name) => PathProxyFactory(path + '/' + name, scomp, paths),
+    get: (target, name) => pathProxyFactory(path + '/' + name, scomp, paths),
     apply: (target, thisArg, argumentsList) => {
       if (path === '/then') {
         return new Promise((resolve, reject) => {
@@ -29,7 +29,7 @@ const PathProxyFactory = (path, scomp, paths) =>
         });
       } else {
         paths.push({ path, params: argumentsList });
-        return PathProxyFactory('', scomp, paths);
+        return pathProxyFactory('', scomp, paths);
       }
     }
   });
@@ -65,11 +65,13 @@ export class Scomp extends EventEmitter {
         }
         delete this._requests[packet.id];
       }
+    } else {
+      throw new Error('No request handler found for request id %s', packet.id);
     }
   }
 
-  _stringifyError(error) {
-    return (error instanceof Error) ? JSON.stringify({ message: error.message, stack: error.stack }) : error;
+  _parseError(error) {
+    return (error instanceof Error) ? JSON.stringify({ message: error.message }) : error;
   }
 
   response(id, res, err) {
@@ -88,7 +90,7 @@ export class Scomp extends EventEmitter {
       res.onError(error => {
         this._wire.emit('res', {
           id,
-          err: this._stringifyError(error),
+          err: this._parseError(error),
           sub: { id: responseId, type: 'observable' }
         });
       });
@@ -96,7 +98,7 @@ export class Scomp extends EventEmitter {
       this._wire.emit('res', {
         id,
         res,
-        err: this._stringifyError(err)
+        err: this._parseError(err)
       });
     }
   }
@@ -139,7 +141,7 @@ export class Scomp extends EventEmitter {
 
   client() {
     LOG.info('client builder');
-    return PathProxyFactory('', this, []);
+    return pathProxyFactory('', this, []);
   }
 }
 

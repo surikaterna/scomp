@@ -19,12 +19,12 @@ describe('Scomp', () => {
     server.use('timeService', {
       tick: (time) => {
         LOG.debug('timeService ', time);
-        const observable = new Observable((o) => {
+
+        return new Observable((next) => {
           const _interval = setInterval(() => {
-            o.onNext(new Date().getTime());
+            next(new Date().getTime());
           }, time);
         });
-        return observable;
       }
     });
 
@@ -47,6 +47,7 @@ describe('Scomp', () => {
     });    
     
   });
+
   it('should be possible to call function on remote service', function (done) {
     server.use('timeService2', {
       get: (timer) => {
@@ -54,12 +55,11 @@ describe('Scomp', () => {
         return {
           tick: (time) => {
             LOG.debug('timeService ', time);
-            const observable = new Observable((o) => {
+            return new Observable((next) => {
               const _interval = setInterval(() => {
-                o.onNext(new Date().getTime());
+                next(new Date().getTime());
               }, time);
             });
-            return observable;
           }
         }
       }

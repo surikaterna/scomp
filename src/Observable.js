@@ -1,14 +1,14 @@
 export default class Observable {
   constructor(fn) {
-    fn({
-      onNext: this._onNext.bind(this),
-      onError: this._onError.bind(this),
-      onComplete: this._onComplete.bind(this)
-    });
+    fn(
+      this._onNext.bind(this),
+      this._onError.bind(this),
+      this._onComplete.bind(this)
+    );
   }
 
   unsubscribe() {
-    
+
   }
 
   isUnsubscribed() {

@@ -39,6 +39,8 @@ export class ScompServer {
           }
           LOG.info('Found handler ', target);
           for (let j = index; j < paths.length; j++) {
+            //Last path is always a function.
+            //Last command is always then.
             if (isLastIndex(paths, j)) {
               if (isLastIndex(commands, i)) {
                 try {
