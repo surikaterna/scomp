@@ -8,7 +8,9 @@ export default class Observable {
   }
 
   unsubscribe() {
-
+    if (this._onUnsubscribe) {
+      this._onUnsubscribe();
+    }
   }
 
   isUnsubscribed() {
@@ -45,6 +47,11 @@ export default class Observable {
 
   onComplete(fn) {
     this._onCompleteListener = fn;
+    return this;
+  }
+
+  onUnsubscribe(fn) {
+    this._onUnsubscribe = fn;
     return this;
   }
 }

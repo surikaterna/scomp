@@ -5,10 +5,20 @@ import Promise from 'bluebird';
 import Observable from './Observable';
 
 export { ScompServer } from './server';
+const LOG = Logger.getLogger('scomp:core');
 
-
-const LOG = Logger.getLogger('scomp:core')
-
+/**
+ * Uses proxy class to create paths
+ * 
+ * Example
+ * a.b(param1).c.d(param2).then(...)
+ * 
+ * Paths used for request:
+ * [
+ *  {path: '/a/b', params: [ param1 ]}
+ *  , {path: '/c/d' params: [ param2 ]
+ * ]
+ */
 const pathProxyFactory = (path, scomp, paths) =>
   new Proxy(function (...params) {
   }, {
@@ -53,8 +63,12 @@ export class Scomp extends EventEmitter {
         if (this._requests[packet.id].observable) {
           this._requests[packet.id].observable._onNext(packet.res);
         } else {
-          this._requests[packet.id].observable = new Observable(() => {
+          this._requests[packet.id].observable = new Observable(() => { 
           });
+          this._requests[packet.id].observable.onUnsubscribe = () => {
+            this._unsubscribe(packet.sub.id);
+            delete this._requests[packet.id];
+          };
           this._requests[packet.id].resolve(this._requests[packet.id].observable);
         }
       } else {
@@ -72,6 +86,21 @@ export class Scomp extends EventEmitter {
 
   _parseError(error) {
     return (error instanceof Error) ? JSON.stringify({ message: error.message }) : error;
+  }
+
+  _unsubscribe(id) {
+    const requestId = this._requestId++;
+    this._wire.emit('unsub', { id: requestId, sub: { id } });
+  }
+
+
+  unsubscribe(id) {
+    LOG.info('Unsubscribe ', id);
+    if (this._responses[id]) {
+      this._responses[id].unsubscribe();
+    } else {
+      throw new Error('No subscription found for response id %s', id);
+    }
   }
 
   response(id, res, err) {

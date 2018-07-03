@@ -9,6 +9,10 @@ export class ScompServer {
   constructor(scomp) {
     this._paths = {};
     this._scomp = scomp;
+    this._scomp._wire.on('unsub', (packet) => {
+      this._scomp.unsubscribe(packet.sub.id);
+      this._scomp.response(packet.id, true);
+    });
     this._scomp._wire.on('req', (packet) => {
       LOG.info('Request ', packet);
       let error;
@@ -40,8 +44,8 @@ export class ScompServer {
           LOG.info('Found handler ', target);
           for (let j = index; j < paths.length; j++) {
             //Last path is always a function.
-            //Last command is always then.
             if (isLastIndex(paths, j)) {
+              //Last command is always then.
               if (isLastIndex(commands, i)) {
                 try {
                   this._scomp.response(packet.id, target[paths[j]](...command.params));
