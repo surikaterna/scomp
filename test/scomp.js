@@ -108,6 +108,7 @@ describe('Scomp', () => {
      });
      */
   });
+  
   it('should be possible to get none observable value', function (done) {
     server.use('counter', {
       next: () => {
@@ -127,4 +128,24 @@ describe('Scomp', () => {
 
 
   });
+
+  it('should return error if path does not exists', function (done) {
+    scomp.client().a.b.c.next().then((test) => {
+    }).catch((err) => {
+      done();
+    });
+  });  
+
+  it('should return error if server error', function (done) {
+    server.use('a', {
+      b: () => {
+        throw new Error('Simple error');
+      }
+    });
+    scomp.client().a.b().then((test) => {
+    }).catch((err) => {
+      done();
+    });
+  });    
 });
+

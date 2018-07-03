@@ -11,7 +11,7 @@ export class ScompServer {
     this._scomp = scomp;
     this._scomp._wire.on('req', (packet) => {
       LOG.info('Request ', packet);
-
+      let error;
       let commands = packet.paths;
       if (!packet.paths) {
         commands = [{ path: packet.path, params: packet.params }];
@@ -20,6 +20,11 @@ export class ScompServer {
       for (let i = 0; i < commands.length; i++) {
         const command = commands[i];
         const paths = command.path.split('/').filter(x => x);
+        if (paths.length === 0) {
+          error = new Error('Path is empty!', command);
+          this._scomp.response(packet.id, null, error);
+          throw error;
+        }
         LOG.info('Paths ', paths);
         LOG.info('Params ', command.params);
         LOG.info('Target ', target);
@@ -27,11 +32,20 @@ export class ScompServer {
         let index = 0;
         if (target || this._paths[paths[0]]) {
           target = target || this._paths[paths[index++]].obj;
+          if (target === undefined || target === null) {
+            error = new Error('No target found for path.', command.path);
+            this._scomp.response(packet.id, null, error);
+            throw error;
+          }
           LOG.info('Found handler ', target);
           for (let j = index; j < paths.length; j++) {
             if (isLastIndex(paths, j)) {
               if (isLastIndex(commands, i)) {
-                this._scomp.response(packet.id, target[paths[j]](...command.params));
+                try {
+                  this._scomp.response(packet.id, target[paths[j]](...command.params));
+                } catch (err) {
+                  this._scomp.response(packet.id, null, err);
+                }
               } else {
                 target = target[paths[j]](...command.params);
               }
@@ -39,6 +53,10 @@ export class ScompServer {
               target = target[paths[j]];
             }
           }
+        } else {
+          error = new Error('No target exists.', command.path);
+          this._scomp.response(packet.id, null, error);
+          throw error;
         }
       }
     });

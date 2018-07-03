@@ -19,8 +19,12 @@ const PathProxyFactory = (path, scomp, paths) =>
           LOG.info('calling', paths);
           scomp.request(paths).then((res) => {
             LOG.info('Proxy response', res);
-            argumentsList[0](res);
+            if (argumentsList && argumentsList.length > 0) {
+              argumentsList[0](res);
+            }
             resolve(res);
+          }).catch(err => {
+            reject(err);
           });
         });
       } else {
@@ -45,27 +49,30 @@ export class Scomp extends EventEmitter {
     // TODO need to check response for observable
     LOG.info('onPacket ', packet.id, packet.res, packet.err);
     if (this._requests[packet.id]) {
-      if (packet.err) {
-        this._requests[packet.id].reject(packet.err);
+      if (packet.sub && packet.sub.type === 'observable') {
+        if (this._requests[packet.id].observable) {
+          this._requests[packet.id].observable._onNext(packet.res);
+        } else {
+          this._requests[packet.id].observable = new Observable(() => {
+          });
+          this._requests[packet.id].resolve(this._requests[packet.id].observable);
+        }
       } else {
-        if (packet.sub && packet.sub.type === 'observable') {
-          if (this._requests[packet.id].observable) {
-            this._requests[packet.id].observable._onNext(packet.res);
-          } else {
-            this._requests[packet.id].observable = new Observable(() => {
-            });
-            this._requests[packet.id].resolve(this._requests[packet.id].observable);
-          }
+        if (packet.err) {
+          this._requests[packet.id].reject(packet.err);
         } else {
           this._requests[packet.id].resolve(packet.res);
-          delete this._requests[packet.id];
         }
+        delete this._requests[packet.id];
       }
-      
     }
   }
 
-  response(id, res) {
+  _stringifyError(error) {
+    return (error instanceof Error) ? JSON.stringify({ message: error.message, stack: error.stack }) : error;
+  }
+
+  response(id, res, err) {
     LOG.info('Response ', id, res);
     if (res instanceof Observable) {
       //TODO remake response id, make safe
@@ -78,17 +85,18 @@ export class Scomp extends EventEmitter {
           sub: { id: responseId, type: 'observable' }
         });
       });
-      res.onError(err => {
+      res.onError(error => {
         this._wire.emit('res', {
           id,
-          err,
+          err: this._stringifyError(error),
           sub: { id: responseId, type: 'observable' }
         });
       });
     } else {
       this._wire.emit('res', {
         id,
-        res
+        res,
+        err: this._stringifyError(err)
       });
     }
   }
