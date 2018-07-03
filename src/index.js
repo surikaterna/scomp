@@ -30,74 +30,75 @@ const PathProxyFactory = (path, scomp, paths) =>
     }
   });
 
-
-//TODO rename and fix return values
-class ValueObservable extends Observable {
-  constructor(value) {
-    super();
-    this._pendingValues = [];
-    this._pendingValues.push(value);
-  }
-
-  onNext(fn) {
-    super.onNext(fn);
-    return this;
-  }
-
-  set(value) {
-    this._pendingValues.push(value);
-    this._pushValues();
-  }
-
-  _pushValues() {
-    if (this._onNext) {
-      this._pendingValues.forEach((value, index) => {
-        this._onNext(value);
-        this._pendingValues.splice(index, 1);
-      });
-    }
-  }
-
-}
-
 export class Scomp extends EventEmitter {
   constructor(wire) {
     super();
-    this._id = 0;
+    this._requestId = 0;
+    this._responseId = 0;
     this._requests = {};
+    this._responses = {};
     this._wire = wire || new NullWire();
     this._wire.on('res', (packet) => this._onPacket(packet));
   }
 
   _onPacket(packet) {
     // TODO need to check response for observable
+    LOG.info('onPacket ', packet.id, packet.res, packet.err);
     if (this._requests[packet.id]) {
       if (packet.err) {
         this._requests[packet.id].reject(packet.err);
       } else {
-        if (this._requests[packet.id].observable) {
-          this._requests[packet.id].observable.set(packet.res);
+        if (packet.sub && packet.sub.type === 'observable') {
+          if (this._requests[packet.id].observable) {
+            this._requests[packet.id].observable._onNext(packet.res);
+          } else {
+            this._requests[packet.id].observable = new Observable(() => {
+            });
+            this._requests[packet.id].resolve(this._requests[packet.id].observable);
+          }
         } else {
-          this._requests[packet.id].observable = new ValueObservable(packet.res);
-          this._requests[packet.id].resolve(this._requests[packet.id].observable);
+          this._requests[packet.id].resolve(packet.res);
+          delete this._requests[packet.id];
         }
       }
-      //delete this._requests[packet.id];
+      
     }
   }
 
   response(id, res) {
     LOG.info('Response ', id, res);
-    this._wire.emit('res', {
-      id,
-      res
-    });
+    if (res instanceof Observable) {
+      //TODO remake response id, make safe
+      const responseId = this._responseId++;
+      this._responses[responseId] = res;
+      res.onNext((next) => {
+        this._wire.emit('res', {
+          id,
+          res: next,
+          sub: { id: responseId, type: 'observable' }
+        });
+      });
+      res.onError(err => {
+        this._wire.emit('res', {
+          id,
+          err,
+          sub: { id: responseId, type: 'observable' }
+        });
+      });
+    } else {
+      this._wire.emit('res', {
+        id,
+        res
+      });
+    }
   }
 
   request(path, params) {
-    const requestId = this._id++;
+    //TODO remake request id, make safe
+    const requestId = this._requestId++;
     return new Promise((resolve, reject) => {
       LOG.info('Request ', path, params);
+      this._waitForResponse(requestId, resolve, reject);
       if (path instanceof Array) {
         this._wire.emit('req', {
           id: requestId,
@@ -110,13 +111,12 @@ export class Scomp extends EventEmitter {
           params
         });
       }
-      this._waitForResponse(requestId, resolve, reject);
     });
   }
 
   _waitForResponse(id, resolve, reject) {
+    LOG.info('Waiting for response ', id);
     this._requests[id] = { resolve, reject };
-    console.log( this._requests);
   }
 
 

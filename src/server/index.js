@@ -1,4 +1,5 @@
 import { Logger } from 'slf';
+import Observable from '../Observable';
 const LOG = Logger.getLogger('scomp:server');
 
 const reflectionHandler = (obj, path) => obj[path];
@@ -30,14 +31,8 @@ export class ScompServer {
           for (let j = index; j < paths.length; j++) {
             if (isLastIndex(paths, j)) {
               if (isLastIndex(commands, i)) {
-                //Todo wire implementation
-                target[paths[j]](...command.params, {
-                  response: (res) => {
-                    this._scomp.response(packet.id, res);
-                  }
-                });
+                this._scomp.response(packet.id, target[paths[j]](...command.params));
               } else {
-                //Todo support promise?
                 target = target[paths[j]](...command.params);
               }
             } else {

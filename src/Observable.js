@@ -1,30 +1,50 @@
 export default class Observable {
   constructor(fn) {
+    fn({
+      onNext: this._onNext.bind(this),
+      onError: this._onError.bind(this),
+      onComplete: this._onComplete.bind(this)
+    });
   }
 
   unsubscribe() {
+    
   }
 
   isUnsubscribed() {
     return true;
   }
 
-  _getNext() {
-    return this._onNext;
+  _onNext(next) {
+    if (this._onNextListener) {
+      this._onNextListener(next);
+    }
+  }
+
+  _onError(error) {
+    if (this._onErrorListener) {
+      this._onNextListener(error);
+    }
+  }
+
+  _onComplete(complete) {
+    if (this._onCompleteListener) {
+      this._onNextListener(complete);
+    }
   }
 
   onNext(fn) {
-    this._onNext = fn;
+    this._onNextListener = fn;
     return this;
   }
 
   onError(fn) {
-    this._onError = fn;
+    this._onErrorListener = fn;
     return this;
   }
 
-  onComplete(fn){
-    this._onComplete = fn;
+  onComplete(fn) {
+    this._onCompleteListener = fn;
     return this;
   }
 }
