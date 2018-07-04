@@ -30,6 +30,7 @@
   "license": "MIT",
   "dependencies": {
     "bluebird": "^3.5.1",
-    "slf": "^1.0.0"
+    "slf": "^1.0.0",
+    "sprintf-js": "^1.1.1"
   }
 }

@@ -1,5 +1,5 @@
 import { Logger } from 'slf';
-import Observable from '../Observable';
+import sprintf from 'sprintf-js';
 const LOG = Logger.getLogger('scomp:server');
 
 const reflectionHandler = (obj, path) => obj[path];
@@ -13,59 +13,71 @@ export class ScompServer {
       this._scomp.unsubscribe(packet.sub.id);
       this._scomp.response(packet.id, true);
     });
-    this._scomp._wire.on('req', (packet) => {
-      LOG.info('Request ', packet);
-      let error;
-      let commands = packet.paths;
-      if (!packet.paths) {
-        commands = [{ path: packet.path, params: packet.params }];
+    this._scomp._wire.on('req', this._onPacket.bind(this));
+  }
+  /**
+   * 
+   * [
+   *  {path: '/a/b', params: [ param1 ]}
+   *  , {path: '/c/d' params: [ param2 ]
+   * ]
+   */
+  async _onPacket(packet) {
+    LOG.info('Incoming request %d %j', packet.id, JSON.stringify(packet));
+    let target;
+    let commands = packet.paths;
+    if (!packet.paths) {
+      commands = [{ path: packet.path, params: packet.params }];
+    }
+    for (let i = 0; i < commands.length; i++) {
+      const command = commands[i];
+      const paths = command.path.split('/').filter(x => x);
+      if (paths.length === 0) {
+        this._handleError(packet, 'Path is empty!');
       }
-      let target;
-      for (let i = 0; i < commands.length; i++) {
-        const command = commands[i];
-        const paths = command.path.split('/').filter(x => x);
-        if (paths.length === 0) {
-          error = new Error('Path is empty!', command);
-          this._scomp.response(packet.id, null, error);
-          throw error;
+      let index = 0;
+      if (target || this._paths[paths[0]]) {
+        target = target || this._paths[paths[index++]].obj;
+        if (target === undefined || target === null) {
+          this._handleError(packet, 'No target found for path %s.', command.path);
         }
-        LOG.info('Paths ', paths);
-        LOG.info('Params ', command.params);
-        LOG.info('Target ', target);
-
-        let index = 0;
-        if (target || this._paths[paths[0]]) {
-          target = target || this._paths[paths[index++]].obj;
-          if (target === undefined || target === null) {
-            error = new Error('No target found for path.', command.path);
-            this._scomp.response(packet.id, null, error);
-            throw error;
-          }
-          LOG.info('Found handler ', target);
-          for (let j = index; j < paths.length; j++) {
-            //Last path is always a function.
-            if (isLastIndex(paths, j)) {
-              //Last command is always then.
-              if (isLastIndex(commands, i)) {
-                try {
-                  this._scomp.response(packet.id, target[paths[j]](...command.params));
-                } catch (err) {
-                  this._scomp.response(packet.id, null, err);
-                }
-              } else {
-                target = target[paths[j]](...command.params);
+        for (let j = index; j < paths.length; j++) {
+          if (isLastIndex(paths, j)) {
+            if (isLastIndex(commands, i)) {
+              try {
+                this._scomp.response(packet.id, await target[paths[j]](...command.params));
+                break;
+              } catch (err) {
+                this._scomp.response(packet.id, null, err);
+                break;
               }
             } else {
-              target = target[paths[j]];
+              target = await target[paths[j]](...command.params);
             }
+          } else {
+            target = target[paths[j]];
           }
-        } else {
-          error = new Error('No target exists.', command.path);
-          this._scomp.response(packet.id, null, error);
-          throw error;
+          if (!target) {
+            this._handleError(packet, 'Target is undefined for %s on %s.', command.path, paths[j]);
+          }
         }
+      } else {
+        this._handleError(packet, 'No binding for %s.', command.path);
       }
-    });
+    }
+  }
+
+  _handleError(packet, message, ...params) {
+    let m;
+    try {
+      m = sprintf.sprintf(message, ...params);
+    } catch (e) {
+      m = message;
+    }
+    const error = new Error(m);
+    LOG.error(message, ...params);
+    this._scomp.response(packet.id, null, error);
+    throw error;
   }
 
   use(path, obj, handler = reflectionHandler) {

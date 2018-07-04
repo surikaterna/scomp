@@ -2,6 +2,7 @@ import { Scomp, ScompServer } from '..';
 import { Logger, LoggerFactory } from 'slf';
 import should from 'should';
 import Observable from '../src/Observable';
+import Promise from 'bluebird'
 LoggerFactory.setFactory((e) => console.log(e.name, e.params.join(' ')));
 
 const LOG = Logger.getLogger('scomp:client');
@@ -130,8 +131,14 @@ describe('Scomp', () => {
   });
 
   it('should return error if path does not exists', function (done) {
+    server.use('a', {
+      b: () => {
+      }
+    });
+
     scomp.client().a.b.c.next().then((test) => {
     }).catch((err) => {
+      console.log(err);
       done();
     });
   });  
@@ -144,8 +151,30 @@ describe('Scomp', () => {
     });
     scomp.client().a.b().then((test) => {
     }).catch((err) => {
+      console.log(err);
+      done();
+    });
+  });  
+  
+  it('should wait for promises to be done', function (done) {
+    server.use('promiseService', {
+      waitForResponse: () => {
+        return new Promise((resolve) => {
+          resolve({
+            waitForResponse: (data) => {
+              return new Promise((resolve) => {
+                setTimeout(() => { resolve(data.message) }, 100);
+              });
+            }                  
+          })    
+        });
+      }
+    });
+    scomp.client().promiseService.waitForResponse().waitForResponse({message : 'Hej'}).then((message) => {
+      message.should.equal('Hej');
       done();
     });
   });    
+
 });
 
