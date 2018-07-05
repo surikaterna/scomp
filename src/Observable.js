@@ -3,7 +3,8 @@ export default class Observable {
     fn(
       this._onNext.bind(this),
       this._onError.bind(this),
-      this._onComplete.bind(this)
+      this._onComplete.bind(this),
+      this
     );
   }
 
@@ -25,14 +26,18 @@ export default class Observable {
 
   _onError(error) {
     if (this._onErrorListener) {
-      this._onNextListener(error);
+      this._onErrorListener(error);
     }
   }
 
   _onComplete(complete) {
     if (this._onCompleteListener) {
-      this._onNextListener(complete);
+      this._onCompleteListener(complete);
     }
+  }
+
+  getController(controller) {
+    return this._onController;
   }
 
   onNext(fn) {
@@ -52,6 +57,11 @@ export default class Observable {
 
   onUnsubscribe(fn) {
     this._onUnsubscribe = fn;
+    return this;
+  }
+
+  setController(fn) {
+    this._onController = fn;
     return this;
   }
 }

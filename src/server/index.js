@@ -9,14 +9,21 @@ export class ScompServer {
   constructor(scomp) {
     this._paths = {};
     this._scomp = scomp;
-    this._scomp._wire.on('unsub', (packet) => {
-      this._scomp.unsubscribe(packet.sub.id);
-      this._scomp.response(packet.id, true);
-    });
-    this._scomp._wire.on('req', this._onPacket.bind(this));
+    this._scomp._wire.on('data', this._onPacket.bind(this));
+
+    this.use('controller', new Proxy(function ( ...params) {
+    }, {
+      get: (target, name) => {
+        const o = this._scomp._getObservable(name);
+        if (o) {       
+          return o.getController()();
+        }
+        return undefined;
+      }
+    }));
   }
+
   /**
-   * 
    * [
    *  {path: '/a/b', params: [ param1 ]}
    *  , {path: '/c/d' params: [ param2 ]
@@ -58,7 +65,7 @@ export class ScompServer {
             target = target[paths[j]];
           }
           if (!target) {
-            this._handleError(packet, 'Target is undefined for %s on %s.', command.path, paths[j]);
+            this._handleError(packet, 'Target is undefined for %s on %s.', paths[j], command.path);
           }
         }
       } else {
@@ -66,7 +73,7 @@ export class ScompServer {
       }
     }
   }
-
+  
   _handleError(packet, message, ...params) {
     let m;
     try {
@@ -78,6 +85,10 @@ export class ScompServer {
     LOG.error(message, ...params);
     this._scomp.response(packet.id, null, error);
     throw error;
+  }
+
+  _observableUnsubscribe(packet) {
+    this._scomp.unsubscribe(packet.sub.id);
   }
 
   use(path, obj, handler = reflectionHandler) {

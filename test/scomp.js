@@ -6,8 +6,6 @@ import Promise from 'bluebird'
 LoggerFactory.setFactory((e) => console.log(e.name, e.params.join(' ')));
 
 const LOG = Logger.getLogger('scomp:client');
-
-LOG.debug('HI', { ts: 0 });
 const scomp = new Scomp();
 const server = new ScompServer(scomp);
 
@@ -20,17 +18,31 @@ describe('Scomp', () => {
     server.use('timeService', {
       tick: (time) => {
         LOG.debug('timeService ', time);
-
-        return new Observable((next) => {
+        return new Observable((next, err, complete, observable) => {
           const _interval = setInterval(() => {
             next(new Date().getTime());
           }, time);
-        });
+
+          observable.setController(() => ({
+            tick : (message) => {
+              console.log(message);
+              return message;
+            },
+            unsubscribe : () => {
+              clearInterval(_interval)
+            }
+          }));
+        });        
       }
     });
 
     scomp.client().timeService.tick(50).then((timeServiceObservable) => {
       let count = 0;
+
+      timeServiceObservable.controller.tick('Hej!!!!').then((message) => {
+        console.log(message);
+      });
+
       timeServiceObservable.onNext(time => {
         LOG.debug('Response ', time);
         should.exist(time);
@@ -45,6 +57,7 @@ describe('Scomp', () => {
         should.not.exist(err);
         done();
       });
+
     });    
     
   });
