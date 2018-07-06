@@ -3,7 +3,7 @@ import NullWire from './null';
 import { EventEmitter } from 'events';
 import Promise from 'bluebird';
 import Observable from './Observable';
-import pathProxyFactory from './util/PathProxyFactory.js';
+import pathProxyFactory from './util/pathProxyFactory.js';
 
 export { ScompServer } from './server';
 const LOG = Logger.getLogger('scomp:core');
@@ -52,10 +52,10 @@ export class Scomp extends EventEmitter {
       this._requests[packet.id].observable = new Observable(() => {
       });
       this._requests[packet.id].observable.controller = pathProxyFactory(`/controller/${packet.sub.id}`, this, []);
-      /*
-        this._requests[packet.id].observable.onUnsubscribe(() => {
+      
+      this._requests[packet.id].observable.onUnsubscribe(() => {
         this._unsubscribe(packet);
-      });*/
+      });
       this._requests[packet.id].resolve(this._requests[packet.id].observable);
     }
   }
@@ -65,7 +65,7 @@ export class Scomp extends EventEmitter {
   }
 
   _unsubscribe(packet) {
-    this.client()._core.unsubscribe({ id: packet.sub.id }).then(() => {
+    this.client()._server.unsubscribe({ id: packet.sub.id }).then(() => {
       delete this._requests[packet.id];
     });
   }

@@ -2,6 +2,7 @@ import { Scomp, ScompServer } from '..';
 import { Logger, LoggerFactory } from 'slf';
 import should from 'should';
 import Observable from '../src/Observable';
+import ControlledObservable from '../src/ControlledObservable';
 import Promise from 'bluebird'
 LoggerFactory.setFactory((e) => console.log(e.name, e.params.join(' ')));
 
@@ -18,31 +19,18 @@ describe('Scomp', () => {
     server.use('timeService', {
       tick: (time) => {
         LOG.debug('timeService ', time);
-        return new Observable((next, err, complete, observable) => {
-          const _interval = setInterval(() => {
-            next(new Date().getTime());
-          }, time);
-
-          observable.setController(() => ({
-            tick : (message) => {
-              console.log(message);
-              return message;
-            },
-            unsubscribe : () => {
-              clearInterval(_interval)
-            }
-          }));
+        const state = {};
+        return new Observable((next) => {
+          run = () => { next(new Date().getTime()); }
+          state._interval = setInterval(run , time);
+        }).onUnsubscribe(() => {
+          clearInterval(state._interval);
         });        
       }
     });
 
-    scomp.client().timeService.tick(50).then((timeServiceObservable) => {
+    scomp.client().timeService.tick(10).then((timeServiceObservable) => {
       let count = 0;
-
-      timeServiceObservable.controller.tick('Hej!!!!').then((message) => {
-        console.log(message);
-      });
-
       timeServiceObservable.onNext(time => {
         LOG.debug('Response ', time);
         should.exist(time);
@@ -69,17 +57,20 @@ describe('Scomp', () => {
         return {
           tick: (time) => {
             LOG.debug('timeService ', time);
+            const state = {};
             return new Observable((next) => {
-              const _interval = setInterval(() => {
+              state._interval = setInterval(() => {
                 next(new Date().getTime());
               }, time);
+            }).onUnsubscribe(() => {
+              clearInterval(state._interval);
             });
           }
         }
       }
     });
 
-    scomp.client().timeService2.get('timer2').tick(150).then((timeServiceObservable) => {
+    scomp.client().timeService2.get('timer2').tick(10).then((timeServiceObservable) => {
       let count = 0;
       timeServiceObservable.onNext(time => {
         LOG.debug('Response ', time);
@@ -176,7 +167,7 @@ describe('Scomp', () => {
           resolve({
             waitForResponse: (data) => {
               return new Promise((resolve) => {
-                setTimeout(() => { resolve(data.message) }, 100);
+                setTimeout(() => { resolve(data.message) }, 10);
               });
             }                  
           })    
@@ -188,6 +179,46 @@ describe('Scomp', () => {
       done();
     });
   });    
+
+  it('should be possible to control a observable', (done) => {
+    server.use('timeService', {
+      tick: (time) => {
+        LOG.debug('timeService ', time);
+        const state = {};
+        return new ControlledObservable({
+          tick : (time) => {
+            clearInterval(state._interval)
+            state._interval = setInterval(run, time)
+            return time;
+          },
+        }, (next) => {
+          run = () => { next(new Date().getTime()); }
+          state._interval = setInterval(run , time);
+        }).onUnsubscribe(() => {
+          clearInterval(state._interval);
+        });
+      }
+    });
+
+    scomp.client().timeService.tick(10).then((timeServiceObservable) => {
+ 
+      timeServiceObservable.controller.tick(20).then((tick) => {
+        tick.should.equal(20);
+      });
+
+      timeServiceObservable.onNext(time => {
+        LOG.debug('Response ', time);
+        should.exist(time);
+        timeServiceObservable.unsubscribe();
+        done();          
+      }).onError(err => {
+        should.not.exist(err);
+        done();
+      });
+
+    });    
+    
+  });
 
 });
 

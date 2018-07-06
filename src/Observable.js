@@ -1,10 +1,12 @@
+/**
+ * new Observable(function(function onNext, function onError, function onComplete) observable) -> Observable
+ */
 export default class Observable {
   constructor(fn) {
     fn(
       this._onNext.bind(this),
       this._onError.bind(this),
-      this._onComplete.bind(this),
-      this
+      this._onComplete.bind(this)
     );
   }
 
@@ -36,10 +38,6 @@ export default class Observable {
     }
   }
 
-  getController(controller) {
-    return this._onController;
-  }
-
   onNext(fn) {
     this._onNextListener = fn;
     return this;
@@ -57,11 +55,6 @@ export default class Observable {
 
   onUnsubscribe(fn) {
     this._onUnsubscribe = fn;
-    return this;
-  }
-
-  setController(fn) {
-    this._onController = fn;
     return this;
   }
 }

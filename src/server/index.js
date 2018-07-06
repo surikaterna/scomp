@@ -11,17 +11,35 @@ export class ScompServer {
     this._scomp = scomp;
     this._scomp._wire.on('data', this._onPacket.bind(this));
 
-    this.use('controller', new Proxy(function ( ...params) {
+    this.use('controller', this._controllerProxy());
+    this.use('_server', this._serverHandler());
+  }
+
+
+  _controllerProxy() {
+    return new Proxy(function ( ...params) {
     }, {
       get: (target, name) => {
         const o = this._scomp._getObservable(name);
-        if (o) {       
-          return o.getController()();
+        if (o) {
+          return o.getController();
         }
         return undefined;
       }
-    }));
+    });
   }
+
+  _serverHandler() {
+    return {
+      unsubscribe: (packet) => {
+        const observable = this._scomp._getObservable(packet.id);
+        if (observable) {
+          observable.unsubscribe();
+        }
+      }
+    };
+  }
+
 
   /**
    * [
@@ -73,7 +91,7 @@ export class ScompServer {
       }
     }
   }
-  
+
   _handleError(packet, message, ...params) {
     let m;
     try {
