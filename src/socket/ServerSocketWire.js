@@ -13,14 +13,18 @@ export default class ServerSocketWire extends EventEmitter {
       this.socketService.register(socket);
     });
     this.socketService.on('connected', socket => {
+      this._sockets[socket.id] = socket;
+
       socket.on('req', packet => {
-        const packetId = `${socket.id}/${packet.id}`;
-        packet.id = packetId;
-        this._sockets[packetId] = socket;
-        this._handleIncomingPacket(packet);
+        const data = packet;
+        // We need to store the socket id for the request to be abel
+        // to respond to the correct socket.
+        data.id = `${socket.id}/${packet.id}`;
+        this._handleIncomingPacket(data);
       });
       socket.on('disconnect', () => {
         console.log('disconnect!!!!!');
+        delete this._sockets[socket.id];
       });
     });
   }
@@ -33,21 +37,25 @@ export default class ServerSocketWire extends EventEmitter {
     this.socketService._io.listen(port);
   }
 
-  _getActualPacketId(packet) {
+  _getActualIds(packet) {
     let packetId = packet.id;
+    let socketId;
     if (packet.id && packet.id.indexOf('/')) {
-      packetId = packet.id.split('/')[1];
+      const splittedKeys = packet.id.split('/');
+      socketId = splittedKeys[0];
+      packetId = splittedKeys[1];
     }
-    return packetId;
+    return { socketId, packetId };
   }
 
   send(event, packet) {
-    const id = packet.id;
-    if (this._sockets[id]) {
-      if (this._sockets[id].connected) {
-        packet.id = this._getActualPacketId(packet);
+    const data = packet;
+    const { socketId, packetId } = this._getActualIds(packet);
+    if (this._sockets[socketId]) {
+      if (this._sockets[socketId].connected) {
+        data.id = packetId;
         console.log(packet);
-        this._sockets[id].emit(event, packet);
+        this._sockets[socketId].emit(event, data);
       }
     }
   }
