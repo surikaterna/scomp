@@ -20,21 +20,21 @@ export class Scomp extends EventEmitter {
   }
 
   _onPacket(packet) {
-    // TODO need to check response for observable
-    LOG.info('onPacket %d', packet.id);
-    if (this._requests[packet.id]) {
+    const packetId = `${packet.id}`;
+    LOG.info('onPacket %d', packetId);
+    if (this._requests[packetId]) {
       if (packet.sub && packet.sub.type === 'observable') {
         this._handleObservablePacket(packet);
       } else {
         if (packet.err) {
-          this._requests[packet.id].reject(packet.err);
+          this._requests[packetId].reject(packet.err);
         } else {
-          this._requests[packet.id].resolve(packet.res);
+          this._requests[packetId].resolve(packet.res);
         }
-        delete this._requests[packet.id];
+        delete this._requests[packetId];
       }
     } else {
-      throw new Error('No request handler found for id %s', packet.id);
+      throw new Error(`No request handler found for ${packet.id}`);
     }
   }
 
@@ -42,21 +42,22 @@ export class Scomp extends EventEmitter {
    * Creates a new observable if not exists for packet.id
    */
   _handleObservablePacket(packet) {
-    if (this._requests[packet.id].observable) {
+    const packetId = `${packet.id}`;
+    if (this._requests[packetId].observable) {
       if (packet.err) {
-        this._requests[packet.id].observable._onError(packet.err);
+        this._requests[packetId].observable._onError(packet.err);
       } else {
-        this._requests[packet.id].observable._onNext(packet.res);
+        this._requests[packetId].observable._onNext(packet.res);
       }
     } else {
-      this._requests[packet.id].observable = new Observable(() => {
+      this._requests[packetId].observable = new Observable(() => {
       });
-      this._requests[packet.id].observable.controller = pathProxyFactory(`/controller/${packet.sub.id}`, this, []);
+      this._requests[packetId].observable.controller = pathProxyFactory(`/controller/${packet.sub.id}`, this, []);
       
-      this._requests[packet.id].observable.onUnsubscribe(() => {
+      this._requests[packetId].observable.onUnsubscribe(() => {
         this._unsubscribe(packet);
       });
-      this._requests[packet.id].resolve(this._requests[packet.id].observable);
+      this._requests[packetId].resolve(this._requests[packetId].observable);
     }
   }
 
@@ -66,7 +67,7 @@ export class Scomp extends EventEmitter {
 
   _unsubscribe(packet) {
     this.client()._server.unsubscribe({ id: packet.sub.id }).then(() => {
-      delete this._requests[packet.id];
+      delete this._requests[`${packet.id}`];
     });
   }
 
@@ -75,8 +76,9 @@ export class Scomp extends EventEmitter {
     LOG.info('Unsubscribe ', id);
     if (this._responses[id]) {
       this._responses[id].unsubscribe();
+      delete this._responses[id];
     } else {
-      throw new Error('No subscription found for response id %s', id);
+      throw new Error(`No subscription found for response ${id}`);
     }
   }
 
@@ -84,24 +86,24 @@ export class Scomp extends EventEmitter {
     LOG.info('Response ', id, res);
     if (res && res.onNext) {
       //TODO remake response id, make safe
-      const responseId = this._responseId++;
+      const responseId = `${this._responseId++}`;
       this._responses[responseId] = res;
       res.onNext((next) => {
-        this._wire.emit('res', {
+        this._wire.send('res', {
           id,
           res: next,
           sub: { id: responseId, type: 'observable' }
         });
       });
       res.onError(error => {
-        this._wire.emit('res', {
+        this._wire.send('res', {
           id,
           err: this._parseError(error),
           sub: { id: responseId, type: 'observable' }
         });
       });
     } else {
-      this._wire.emit('res', {
+      this._wire.send('res', {
         id,
         res,
         err: this._parseError(err)
@@ -110,18 +112,17 @@ export class Scomp extends EventEmitter {
   }
 
   request(path, params) {
-    //TODO remake request id, make safe
-    const requestId = this._requestId++;
+    const requestId = `${this._requestId++}`;
     return new Promise((resolve, reject) => {
       LOG.info('Request ', path, params);
       this._waitForResponse(requestId, resolve, reject);
       if (path instanceof Array) {
-        this._wire.send({
+        this._wire.send('req', {
           id: requestId,
           paths: path
         });
       } else {
-        this._wire.send({
+        this._wire.send('req', {
           id: requestId,
           path,
           params
@@ -132,7 +133,7 @@ export class Scomp extends EventEmitter {
 
   _waitForResponse(id, resolve, reject) {
     LOG.info('Waiting for response %d.', id);
-    this._requests[id] = { resolve, reject };
+    this._requests[`${id}`] = { resolve, reject };
   }
 
   _getObservable(id) {

@@ -26,13 +26,13 @@ class Observable {
  * Wire responsible for transferring data，should keep connection alive or reconnect if necessary
  */
 export default class NullWire extends EventEmitter {
-  send(packet) {
+  send(event, packet) {
     LOG.info('send %j', packet);
     console.log('send %j', packet);
-    this._fromClient(packet);
+    this._fromClient(event, packet);
   }
-  _fromClient(packet) {
-    this.emit('data', packet);
+  _fromClient(event, packet) {
+    this.emit(event, packet);
   }
 }
 

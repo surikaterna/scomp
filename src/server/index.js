@@ -9,12 +9,11 @@ export class ScompServer {
   constructor(scomp) {
     this._paths = {};
     this._scomp = scomp;
-    this._scomp._wire.on('data', this._onPacket.bind(this));
+    this._scomp._wire.on('req', this._onPacket.bind(this));
 
     this.use('controller', this._controllerProxy());
     this.use('_server', this._serverHandler());
   }
-
 
   _controllerProxy() {
     return new Proxy(function ( ...params) {
@@ -32,10 +31,7 @@ export class ScompServer {
   _serverHandler() {
     return {
       unsubscribe: (packet) => {
-        const observable = this._scomp._getObservable(packet.id);
-        if (observable) {
-          observable.unsubscribe();
-        }
+        this._scomp.unsubscribe(packet.id);
       }
     };
   }
