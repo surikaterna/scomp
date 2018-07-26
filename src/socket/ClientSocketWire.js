@@ -26,7 +26,7 @@ export default class ClientSocketWire extends EventEmitter {
     if (this.socket && this.socket.connected) {
       this.socket.emit(event, packet);
     } else {
-      throw new Error('No available socket to make request!');
+      throw new Error('Socket has been disconnected.');
     }
   }
 }

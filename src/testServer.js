@@ -14,7 +14,13 @@ server.use('timeService', {
   tick: (time) => {
     const state = {};
     return new Observable((next) => {
-      const run = () => { next(new Date().getTime()); };
+      const run = () => {
+        try {
+          next(new Date().getTime()); 
+        } catch (e) {
+          console.log(e);
+        }
+      };
       state._interval = setInterval(run, time);
     }).onUnsubscribe(() => {
       clearInterval(state._interval);

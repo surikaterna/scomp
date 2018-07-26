@@ -17,7 +17,7 @@ export default class ServerSocketWire extends EventEmitter {
 
       socket.on('req', packet => {
         const data = packet;
-        // We need to store the socket id for the request to be abel
+        // We need to store the socket id for the request to be able
         // to respond to the correct socket.
         data.id = `${socket.id}/${packet.id}`;
         this._handleIncomingPacket(data);
@@ -51,12 +51,11 @@ export default class ServerSocketWire extends EventEmitter {
   send(event, packet) {
     const data = packet;
     const { socketId, packetId } = this._getActualIds(packet);
-    if (this._sockets[socketId]) {
-      if (this._sockets[socketId].connected) {
-        data.id = packetId;
-        console.log(packet);
-        this._sockets[socketId].emit(event, data);
-      }
+    if (this._sockets[socketId] && this._sockets[socketId].connected) {
+      data.id = packetId;
+      this._sockets[socketId].emit(event, data);
+    } else {
+      throw Error(`Socket has been disconnected ${socketId} for packet ${packetId}.`);
     }
   }
 }
