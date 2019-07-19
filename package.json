@@ -29,6 +29,10 @@
   "author": "Surikaterna",
   "license": "MIT",
   "dependencies": {
-    "slf": "^1.0.0"
+    "bluebird": "^3.5.1",
+    "eventemitter2": "^5.0.1",
+    "slf": "^1.0.0",
+    "socket.io": "^2.1.1",
+    "sprintf-js": "^1.1.1"
   }
 }
