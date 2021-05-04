@@ -1,5 +1,5 @@
-import { EventEmitter2 } from 'eventemitter2';
-export class SocketService extends EventEmitter2 {
+import EventEmitter from 'events';
+export class SocketService extends EventEmitter {
   constructor(io) {
     super();
     this._io = io;

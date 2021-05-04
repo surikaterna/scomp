@@ -3,7 +3,8 @@ import NullWire from './null';
 import { EventEmitter } from 'events';
 import Promise from 'bluebird';
 import Observable from './Observable';
-import pathProxyFactory from './util/pathProxyFactory.js';
+import pathProxyFactory from './util/PathProxyFactory.js';
+import { v4 as uuidv4 } from 'uuid';
 
 export { ScompServer } from './server';
 const LOG = Logger.getLogger('scomp:core');
@@ -11,15 +12,15 @@ const LOG = Logger.getLogger('scomp:core');
 export class Scomp extends EventEmitter {
   constructor(wire) {
     super();
-    this._requestId = 0;
-    this._responseId = 0;
     this._requests = {};
     this._responses = {};
     this._wire = wire || new NullWire();
-    this._wire.on('res', (packet) => this._onPacket(packet));
+    this._wire.on('res', (packet) => {
+      this._onResponsePacket(packet);
+    });
   }
 
-  _onPacket(packet) {
+  _onResponsePacket(packet) {
     const packetId = `${packet.id}`;
     LOG.info('onPacket %d', packetId);
     if (this._requests[packetId]) {
@@ -53,7 +54,7 @@ export class Scomp extends EventEmitter {
       this._requests[packetId].observable = new Observable(() => {
       });
       this._requests[packetId].observable.controller = pathProxyFactory(`/controller/${packet.sub.id}`, this, []);
-      
+
       this._requests[packetId].observable.onUnsubscribe(() => {
         this._unsubscribe(packet);
       });
@@ -71,7 +72,6 @@ export class Scomp extends EventEmitter {
     });
   }
 
-
   unsubscribe(id) {
     LOG.info('Unsubscribe ', id);
     if (this._responses[id]) {
@@ -85,8 +85,8 @@ export class Scomp extends EventEmitter {
   response(id, res, err) {
     LOG.info('Response ', id, res);
     if (res && res.onNext) {
-      //TODO remake response id, make safe
-      const responseId = `${this._responseId++}`;
+      // TODO remake response id, make safe
+      const responseId = uuidv4();
       this._responses[responseId] = res;
       res.onNext((next) => {
         this._wire.send('res', {
@@ -111,8 +111,8 @@ export class Scomp extends EventEmitter {
     }
   }
 
-  request(path, params) {
-    const requestId = `${this._requestId++}`;
+  request(path, params, headers) {
+    const requestId = uuidv4();
     return new Promise((resolve, reject) => {
       LOG.info('Request ', path, params);
       this._waitForResponse(requestId, resolve, reject);
@@ -120,13 +120,13 @@ export class Scomp extends EventEmitter {
         this._wire.send('req', {
           id: requestId,
           paths: path
-        });
+        }, headers);
       } else {
         this._wire.send('req', {
           id: requestId,
           path,
           params
-        });
+        }, headers);
       }
     });
   }
@@ -148,9 +148,9 @@ export class Scomp extends EventEmitter {
   // on reconnect
   // on error
 
-  client() {
+  client(headers) {
     LOG.info('client builder');
-    return pathProxyFactory('', this, []);
+    return pathProxyFactory('', this, [], headers);
   }
 }
 

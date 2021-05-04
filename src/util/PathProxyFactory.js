@@ -14,15 +14,17 @@ const LOG = Logger.getLogger('scomp:proxy');
  *  , {path: '/c/d' params: [ param2 ]
  * ]
  */
-const pathProxyFactory = (path, scomp, paths) =>
-  new Proxy(function ( ...params) {
-  }, {
-    get: (target, name) => pathProxyFactory(`${path}/${name}`, scomp, paths),
+const pathProxyFactory = (path, scomp, paths, headers) =>
+  new Proxy(() => {}, {
+    get: (target, name) => {
+      LOG.info('get::', path, name);
+      return pathProxyFactory(`${path}/${name}`, scomp, paths, headers);
+    },
     apply: (target, thisArg, argumentsList) => {
       if (path === '/then') {
         return new Promise((resolve, reject) => {
-          LOG.info('calling', paths);
-          scomp.request(paths).then((res) => {
+          LOG.info('calling', JSON.stringify(paths));
+          scomp.request(paths, null, headers).then((res) => {
             LOG.info('Proxy response', res);
             if (argumentsList && argumentsList.length > 0) {
               argumentsList[0](res);
@@ -33,8 +35,9 @@ const pathProxyFactory = (path, scomp, paths) =>
           });
         });
       } else {
+        LOG.info('else calling', argumentsList, path);
         paths.push({ path, params: argumentsList });
-        return pathProxyFactory('', scomp, paths);
+        return pathProxyFactory('', scomp, paths, headers);
       }
     }
   });
