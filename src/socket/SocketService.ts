@@ -1,10 +1,12 @@
 import EventEmitter from 'events';
 export class SocketService extends EventEmitter {
-  constructor(io) {
+  public io: any;
+
+  constructor(io: any) {
     super();
-    this._io = io;
+    this.io = io;
   }
-  register(socket) {
+  register(socket: any) {
     this.emit('connected', socket);
   }
 }

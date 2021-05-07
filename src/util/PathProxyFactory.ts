@@ -1,6 +1,12 @@
-import { Logger } from 'slf';
+import { LoggerFactory } from 'slf';
+import { Scomp, ScompHeader } from '../scomp';
 
-const LOG = Logger.getLogger('scomp:proxy');
+const LOG = LoggerFactory.getLogger('scomp:proxy');
+
+export interface Path {
+  path: string;
+  params: Array<any>
+}
 
 /**
  * Uses proxy class to create paths
@@ -14,11 +20,11 @@ const LOG = Logger.getLogger('scomp:proxy');
  *  , {path: '/c/d' params: [ param2 ]
  * ]
  */
-const pathProxyFactory = (path, scomp, paths, headers) =>
+const pathProxyFactory = (path: string, scomp: Scomp, paths: Path[], headers: ScompHeader = {}): any =>
   new Proxy(() => {}, {
     get: (target, name) => {
       LOG.info('get::', path, name);
-      return pathProxyFactory(`${path}/${name}`, scomp, paths, headers);
+      return pathProxyFactory(`${path}/${String(name)}`, scomp, paths, headers);
     },
     apply: (target, thisArg, argumentsList) => {
       if (path === '/then') {

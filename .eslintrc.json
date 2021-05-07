@@ -1,0 +1,9 @@
+{
+  "extends": [
+    "surikat/es6",
+    "tslint-config-surikaterna"
+  ],
+  "rules": {
+    "no-param-reassign": "off"
+  }
+}

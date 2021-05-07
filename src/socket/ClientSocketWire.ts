@@ -1,10 +1,20 @@
-import { EventEmitter } from 'events';
+import { EventEmitter2 } from 'eventemitter2';
 import io from 'socket.io-client';
+import { RequestPacket, ResponsePacket } from '../scomp';
+import { WireEvent } from '../WireInterface';
+import { getActualIds } from './Utils';
 
-export default class ClientSocketWire extends EventEmitter {
-  constructor(settings) {
+export interface ClientSocketWireConfig {
+  socket?: SocketIOClient.Socket;
+  address: string;
+  bidirectional: boolean;
+}
+
+export default class ClientSocketWire extends EventEmitter2 {
+  private socket: SocketIOClient.Socket;
+
+  constructor(config: ClientSocketWireConfig) {
     super();
-    const config = settings || {};
 
     if (config.socket) {
       this.socket = config.socket;
@@ -25,7 +35,7 @@ export default class ClientSocketWire extends EventEmitter {
     this.socket.on('res', this._handleResponsePacket.bind(this));
 
     if (config.bidirectional) {
-      this.socket.on('req', (packet) => {
+      this.socket.on('req', (packet: RequestPacket) => {
         const data = packet;
         data.id = `${this.socket.id}$$${packet.id}`;
 
@@ -35,30 +45,19 @@ export default class ClientSocketWire extends EventEmitter {
     }
   }
 
-  _handleRequestPacket(packet) {
+  _handleRequestPacket(packet: RequestPacket) {
     console.log('Receiving request packet', packet);
     this.emit('req', packet);
   }
 
-  _handleResponsePacket(packet) {
+  _handleResponsePacket(packet: ResponsePacket) {
     this.emit('res', packet);
   }
 
-  _getActualIds(packet) {
-    let packetId = packet.id;
-    let socketId;
-    if (packet.id && packet.id.indexOf('$$')) {
-      const splittedKeys = packet.id.split('$$');
-      socketId = splittedKeys[0];
-      packetId = splittedKeys[1];
-    }
-    return { socketId, packetId };
-  }
-
-  send(event, packet) {
+  send(event: WireEvent, packet: RequestPacket | ResponsePacket) {
     const data = packet;
-    if (event === 'res') {
-      const { packetId } = this._getActualIds(packet);
+    if (event === WireEvent.Response) {
+      const { packetId } = getActualIds(packet);
       data.id = packetId;
     }
     if (this.socket && this.socket.connected) {

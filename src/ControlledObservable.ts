@@ -1,10 +1,14 @@
-import Observable from './Observable';
+import Observable, { ObservableFunc } from './Observable';
+
+type Controller = Record<string, any>;
 
 /**
  * new ControlledObservable(function(), function(function onNext, function onError, function onComplete) observable) -> Observable
  */
 export default class ControlledObservable extends Observable {
-  constructor(controller, fn) {
+  private _onController?: Controller;
+
+  constructor(controller: Controller, fn: ObservableFunc) {
     super(fn);
     this.setController(controller);
   }
@@ -13,7 +17,7 @@ export default class ControlledObservable extends Observable {
     return this._onController;
   }
 
-  setController(controller) {
+  setController(controller: Controller) {
     this._onController = controller;
     return this;
   }

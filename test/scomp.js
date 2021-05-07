@@ -1,4 +1,4 @@
-import { Scomp, ScompServer } from '..';
+import { Scomp, ScompServer } from '../src';
 import { Logger, LoggerFactory } from 'slf';
 import should from 'should';
 import Observable from '../src/Observable';
@@ -219,6 +219,5 @@ describe('Scomp', () => {
     });    
     
   });
-
 });
 

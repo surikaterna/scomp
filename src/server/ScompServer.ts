@@ -1,27 +1,32 @@
-import { Logger } from 'slf';
+import { LoggerFactory } from 'slf';
 import sprintf from 'sprintf-js';
-const LOG = Logger.getLogger('scomp:server');
+import { Scomp, ResponsePacket, RequestPacket } from '../scomp';
+import { WireEvent } from '../WireInterface';
+const LOG = LoggerFactory.getLogger('scomp:server');
 
-const reflectionHandler = (obj, path) => obj[path];
-const isLastIndex = (array, index) => array.length - 1 === index;
+const reflectionHandler = (obj: any, path: string) => obj[path];
+const isLastIndex = (array: any[], index: number) => array.length - 1 === index;
 
 export class ScompServer {
-  constructor(scomp) {
-    this._paths = {};
+  private _scomp: Scomp;
+  private _servicePaths: any;
+
+  constructor(scomp: Scomp) {
+    this._servicePaths = {};
     this._scomp = scomp;
-    this._scomp._wire.on('req', this._onPacket.bind(this));
+    this._scomp.wire.on(WireEvent.Request, this._onRequestPacket.bind(this));
 
     this.use('controller', this._controllerProxy());
     this.use('_server', this._serverHandler());
   }
 
   _controllerProxy() {
-    return new Proxy(function ( ...params) {
+    return new Proxy(function () {
     }, {
       get: (target, name) => {
-        const o = this._scomp._getObservable(name);
+        const o = this._scomp._getObservable(String(name));
         if (o) {
-          return o.getController();
+          return o.controller;
         }
         return undefined;
       }
@@ -30,7 +35,7 @@ export class ScompServer {
 
   _serverHandler() {
     return {
-      unsubscribe: (packet) => {
+      unsubscribe: (packet: ResponsePacket) => {
         this._scomp.unsubscribe(packet.id);
       }
     };
@@ -43,11 +48,11 @@ export class ScompServer {
    *  , {path: '/c/d' params: [ param2 ]
    * ]
    */
-  async _onPacket(packet) {
+  async _onRequestPacket(packet: RequestPacket) {
     LOG.info('Incoming request %d %j', packet.id, JSON.stringify(packet));
-    let target;
-    let commands = packet.paths;
-    if (!packet.paths) {
+    let targetService;
+    let commands = packet.paths ?? [];
+    if (!packet.paths && packet.path) {
       commands = [{ path: packet.path, params: packet.params }];
     }
     for (let i = 0; i < commands.length; i++) {
@@ -57,28 +62,28 @@ export class ScompServer {
         this._handleError(packet, 'Path is empty!');
       }
       let index = 0;
-      if (target || this._paths[paths[0]]) {
-        target = target || this._paths[paths[index++]].obj;
-        if (target === undefined || target === null) {
+      if (targetService || this._servicePaths[paths[0]]) {
+        targetService = targetService || this._servicePaths[paths[index++]].obj;
+        if (targetService === undefined || targetService === null) {
           this._handleError(packet, 'No target found for path %s.', command.path);
         }
         for (let j = index; j < paths.length; j++) {
           if (isLastIndex(paths, j)) {
             if (isLastIndex(commands, i)) {
               try {
-                this._scomp.response(packet.id, await target[paths[j]](...command.params));
+                this._scomp.response(packet.id, await targetService[paths[j]](...command.params));
                 break;
               } catch (err) {
                 this._scomp.response(packet.id, null, err);
                 break;
               }
             } else {
-              target = await target[paths[j]](...command.params);
+              targetService = await targetService[paths[j]](...command.params);
             }
           } else {
-            target = target[paths[j]];
+            targetService = targetService[paths[j]];
           }
-          if (!target) {
+          if (!targetService) {
             this._handleError(packet, 'Target is undefined for %s on %s.', paths[j], command.path);
           }
         }
@@ -88,7 +93,7 @@ export class ScompServer {
     }
   }
 
-  _handleError(packet, message, ...params) {
+  _handleError(packet: RequestPacket, message: string, ...params: any[]) {
     let m;
     try {
       m = sprintf.sprintf(message, ...params);
@@ -101,11 +106,13 @@ export class ScompServer {
     throw error;
   }
 
-  _observableUnsubscribe(packet) {
-    this._scomp.unsubscribe(packet.sub.id);
+  _observableUnsubscribe(packet: ResponsePacket) {
+    if (packet.sub?.id) {
+      this._scomp.unsubscribe(packet.sub.id);
+    }
   }
 
-  use(path, obj, handler = reflectionHandler) {
-    this._paths[path] = { obj, handler };
+  use<ServiceType = any>(path: string, obj: ServiceType, handler = reflectionHandler) {
+    this._servicePaths[path] = { obj, handler };
   }
 }

@@ -1,23 +1,29 @@
-import EventEmitter from 'events';
+import { EventEmitter2 } from 'eventemitter2';
+import { RequestPacket, ResponsePacket, ScompHeader } from '../scomp';
+import { WireEvent } from '../WireInterface';
 import { SocketService } from './SocketService';
+import { getActualIds } from './Utils';
 
-const SOCKET_EVENTS = {
-  Request: 'req',
-  Response: 'res'
+export interface ServerSocketWireConfig {
+  server?: any;
+  io?: any;
+  bidirectional: boolean;
 }
 
-const WIRE_EVENTS = {
-  Request: 'req',
-  Response: 'res'
-}
+type Socket = any;
 
-export default class ServerSocketWire extends EventEmitter {
-  constructor(settings) {
+export default class ServerSocketWire extends EventEmitter2 {
+  private io: any;
+  private server: any;
+  private nsp: any;
+  private socketService: SocketService;
+  private _sockets: Record<string, Socket>;
+
+  constructor(settings: ServerSocketWireConfig) {
     super();
     
     // Settings
     this.server = settings.server;
-    this.bidirectional = settings.bidirectional || true;
 
     if (settings.io) {
       this.io = settings.io;
@@ -32,7 +38,7 @@ export default class ServerSocketWire extends EventEmitter {
     this.socketService = new SocketService(this.io);
     this._sockets = {};
 
-    this.nsp.on('connection', (socket) => {
+    this.nsp.on('connection', (socket: Socket) => {
       // TODO: Do authentication before register socket.
       console.log(socket.id);
       this.socketService.register(socket);
@@ -47,58 +53,47 @@ export default class ServerSocketWire extends EventEmitter {
       });
 
       // Request handler
-      socket.on(SOCKET_EVENTS.Request, packet => {
+      socket.on(WireEvent.Request, (packet: RequestPacket) => {
         const data = packet;
         data.id = `${socket.id}$$${packet.id}`;
         this._handleRequestPacket(data);
       });
 
       // Response handler
-      if (this.bidirectional) {
-        socket.on(SOCKET_EVENTS.Response, (packet) =>  this._handleResponsePacket(packet));
+      if (settings.bidirectional) {
+        socket.on(WireEvent.Response, (packet: ResponsePacket) =>  this._handleResponsePacket(packet));
       }
     });
   }
 
-  _handleRequestPacket(packet) {
+  _handleRequestPacket(packet: RequestPacket) {
     // emit 'req' event which ScompServer will handle
-    this.emit(WIRE_EVENTS.Request, packet);
+    this.emit(WireEvent.Request, packet);
   }
 
-  _handleResponsePacket(packet) {
+  _handleResponsePacket(packet: ResponsePacket) {
     // emit 'res' event' which Scomp will handle
     console.log('_handleResponsePacket', packet);
-    this.emit(WIRE_EVENTS.Response, packet);
+    this.emit(WireEvent.Response, packet);
   }
 
   listen() {
-    this.socketService._io.listen(this.server);
+    this.socketService.io.listen(this.server);
   }
 
-  _getActualIds(packet) {
-    let packetId = packet.id;
-    let socketId;
-    if (packet.id && packet.id.indexOf('$$')) {
-      const splittedKeys = packet.id.split('$$');
-      socketId = splittedKeys[0];
-      packetId = splittedKeys[1];
-    }
-    return { socketId, packetId };
-  }
-
-  send(event, packet, headers) {
-    if (event === 'req') {
+  send(event: WireEvent, packet: ResponsePacket | RequestPacket, headers: ScompHeader) {
+    if (event === WireEvent.Request) {
       const socketId = headers ? headers.socketId : null;
       if (socketId) {
-        this.io.to(socketId).emit(SOCKET_EVENTS.Request, packet);
+        this.io.to(socketId).emit(WireEvent.Request, packet);
       } else {
-        this.io.of('/scomp').emit(SOCKET_EVENTS.Request, packet);
+        this.io.of('/scomp').emit(WireEvent.Request, packet);
         // this.io.emit(SOCKET_EVENTS.Request, packet);
       }
     } else {
       const data = packet;
-      const { socketId, packetId } = this._getActualIds(packet);
-      if (this._sockets[socketId] && this._sockets[socketId].connected) {
+      const { socketId, packetId } = getActualIds(packet);
+      if (socketId && this._sockets[socketId] && this._sockets[socketId].connected) {
         data.id = packetId;
         this._sockets[socketId].emit(event, data);
       } else {
