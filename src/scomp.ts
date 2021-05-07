@@ -52,7 +52,7 @@ export class Scomp extends EventEmitter {
     });
   }
 
-  _onResponsePacket(packet: ResponsePacket) {
+  private _onResponsePacket(packet: ResponsePacket) {
     const packetId = `${packet.id}`;
     LOG.info('onPacket %d', packetId);
     if (this._requests[packetId]) {
@@ -74,7 +74,7 @@ export class Scomp extends EventEmitter {
   /**
    * Creates a new observable if not exists for packet.id
    */
-  _handleObservablePacket(packet: ResponsePacket) {
+  private _handleObservablePacket(packet: ResponsePacket) {
     const packetId = `${packet.id}`;
     if (this._requests[packetId].observable) {
       if (packet.err) {
@@ -94,11 +94,11 @@ export class Scomp extends EventEmitter {
     }
   }
 
-  _parseError(error?: Error | string) {
+  private _parseError(error?: Error | string) {
     return (error instanceof Error) ? JSON.stringify({ message: error.message }) : error;
   }
 
-  _unsubscribe(packet: ResponsePacket) {
+  private _unsubscribe(packet: ResponsePacket) {
     if (packet.sub?.id) {
       this.client()._server.unsubscribe({ id: packet.sub.id }).then(() => {
         delete this._requests[`${packet.id}`];
@@ -167,12 +167,12 @@ export class Scomp extends EventEmitter {
     });
   }
 
-  _waitForResponse(id: string, resolve: (data?: any) => void, reject: (error: any) => void) {
+  private _waitForResponse(id: string, resolve: (data?: any) => void, reject: (error: any) => void) {
     LOG.info('Waiting for response %d.', id);
     this._requests[`${id}`] = { resolve, reject };
   }
 
-  _getObservable(id: string) {
+  getObservable(id: string) {
     return this._responses[id];
   }
 

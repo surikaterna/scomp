@@ -27,17 +27,17 @@ export declare class Scomp extends EventEmitter {
     private _responses;
     wire: WireInterface;
     constructor(wire: WireInterface);
-    _onResponsePacket(packet: ResponsePacket): void;
+    private _onResponsePacket;
     /**
      * Creates a new observable if not exists for packet.id
      */
-    _handleObservablePacket(packet: ResponsePacket): void;
-    _parseError(error?: Error | string): string | undefined;
-    _unsubscribe(packet: ResponsePacket): void;
+    private _handleObservablePacket;
+    private _parseError;
+    private _unsubscribe;
     unsubscribe(id: string): void;
     response(id: string, res: any | Observable, err?: Error): void;
     request(path: string | Path[], params: any, headers: ScompHeader): Promise<unknown>;
-    _waitForResponse(id: string, resolve: (data?: any) => void, reject: (error: any) => void): void;
-    _getObservable(id: string): Observable<any, Error>;
+    private _waitForResponse;
+    getObservable(id: string): Observable<any, Error>;
     client<ServerApiInterface = any>(headers?: ScompHeader): ServerApiInterface;
 }

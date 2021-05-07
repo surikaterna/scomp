@@ -63,7 +63,7 @@ var ScompServer = /** @class */ (function () {
         return new Proxy(function () {
         }, {
             get: function (target, name) {
-                var o = _this._scomp._getObservable(String(name));
+                var o = _this._scomp.getObservable(String(name));
                 if (o) {
                     return o.controller;
                 }

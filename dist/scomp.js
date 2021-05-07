@@ -169,7 +169,7 @@ var Scomp = /** @class */ (function (_super) {
         LOG.info('Waiting for response %d.', id);
         this._requests["" + id] = { resolve: resolve, reject: reject };
     };
-    Scomp.prototype._getObservable = function (id) {
+    Scomp.prototype.getObservable = function (id) {
         return this._responses[id];
     };
     // on req

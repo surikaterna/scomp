@@ -20,11 +20,11 @@ export class ScompServer {
     this.use('_server', this._serverHandler());
   }
 
-  _controllerProxy() {
+  private _controllerProxy() {
     return new Proxy(function () {
     }, {
       get: (target, name) => {
-        const o = this._scomp._getObservable(String(name));
+        const o = this._scomp.getObservable(String(name));
         if (o) {
           return o.controller;
         }
@@ -33,7 +33,7 @@ export class ScompServer {
     });
   }
 
-  _serverHandler() {
+  private _serverHandler() {
     return {
       unsubscribe: (packet: ResponsePacket) => {
         this._scomp.unsubscribe(packet.id);
@@ -48,7 +48,7 @@ export class ScompServer {
    *  , {path: '/c/d' params: [ param2 ]
    * ]
    */
-  async _onRequestPacket(packet: RequestPacket) {
+  private async _onRequestPacket(packet: RequestPacket) {
     LOG.info('Incoming request %d %j', packet.id, JSON.stringify(packet));
     let targetService;
     let commands = packet.paths ?? [];
@@ -93,7 +93,7 @@ export class ScompServer {
     }
   }
 
-  _handleError(packet: RequestPacket, message: string, ...params: any[]) {
+  private _handleError(packet: RequestPacket, message: string, ...params: any[]) {
     let m;
     try {
       m = sprintf.sprintf(message, ...params);
@@ -106,7 +106,7 @@ export class ScompServer {
     throw error;
   }
 
-  _observableUnsubscribe(packet: ResponsePacket) {
+  private _observableUnsubscribe(packet: ResponsePacket) {
     if (packet.sub?.id) {
       this._scomp.unsubscribe(packet.sub.id);
     }
