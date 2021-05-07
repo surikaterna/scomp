@@ -8,10 +8,7 @@
     "allowSyntheticDefaultImports": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
-    "declarationDir": "dist/types",
-    "typeRoots": [
-      "node_modules/@types"
-    ]
+    "declarationDir": "dist"
   },
   "include": [
     "src/**/*"
