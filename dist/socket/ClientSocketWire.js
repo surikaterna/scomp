@@ -12,9 +12,12 @@ var __extends = (this && this.__extends) || (function () {
         d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
     };
 })();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 exports.__esModule = true;
 var eventemitter2_1 = require("eventemitter2");
-var socket_io_client_1 = require("socket.io-client");
+var socket_io_client_1 = __importDefault(require("socket.io-client"));
 var WireInterface_1 = require("../WireInterface");
 var Utils_1 = require("./Utils");
 var ClientSocketWire = /** @class */ (function (_super) {

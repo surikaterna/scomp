@@ -8,7 +8,8 @@
     "allowSyntheticDefaultImports": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
-    "declarationDir": "dist"
+    "declarationDir": "dist",
+    "esModuleInterop": true
   },
   "include": [
     "src/**/*"

@@ -12,8 +12,11 @@ var __extends = (this && this.__extends) || (function () {
         d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
     };
 })();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 exports.__esModule = true;
-var Observable_1 = require("./Observable");
+var Observable_1 = __importDefault(require("./Observable"));
 /**
  * new ControlledObservable(function(), function(function onNext, function onError, function onComplete) observable) -> Observable
  */

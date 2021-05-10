@@ -19,13 +19,16 @@ var __createBinding = (this && this.__createBinding) || (Object.create ? (functi
     if (k2 === undefined) k2 = k;
     o[k2] = m[k];
 }));
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 exports.__esModule = true;
 exports.Scomp = void 0;
 var slf_1 = require("slf");
-var null_1 = require("./null");
+var null_1 = __importDefault(require("./null"));
 var events_1 = require("events");
-var Observable_1 = require("./Observable");
-var PathProxyFactory_1 = require("./util/PathProxyFactory");
+var Observable_1 = __importDefault(require("./Observable"));
+var PathProxyFactory_1 = __importDefault(require("./util/PathProxyFactory"));
 var uuid_1 = require("uuid");
 var WireInterface_1 = require("./WireInterface");
 var ScompServer_1 = require("./server/ScompServer");

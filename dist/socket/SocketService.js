@@ -12,9 +12,12 @@ var __extends = (this && this.__extends) || (function () {
         d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
     };
 })();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 exports.__esModule = true;
 exports.SocketService = void 0;
-var events_1 = require("events");
+var events_1 = __importDefault(require("events"));
 var SocketService = /** @class */ (function (_super) {
     __extends(SocketService, _super);
     function SocketService(io) {

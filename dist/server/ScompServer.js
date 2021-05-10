@@ -42,10 +42,13 @@ var __spreadArrays = (this && this.__spreadArrays) || function () {
             r[k] = a[j];
     return r;
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 exports.__esModule = true;
 exports.ScompServer = void 0;
 var slf_1 = require("slf");
-var sprintf_js_1 = require("sprintf-js");
+var sprintf_js_1 = __importDefault(require("sprintf-js"));
 var WireInterface_1 = require("../WireInterface");
 var LOG = slf_1.LoggerFactory.getLogger('scomp:server');
 var reflectionHandler = function (obj, path) { return obj[path]; };

@@ -1,7 +1,10 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 exports.__esModule = true;
-var ServerSocketWire_1 = require("./socket/ServerSocketWire");
-var Observable_1 = require("./Observable");
+var ServerSocketWire_1 = __importDefault(require("./socket/ServerSocketWire"));
+var Observable_1 = __importDefault(require("./Observable"));
 var slf_1 = require("slf");
 var ScompServer_1 = require("./server/ScompServer");
 var scomp_1 = require("./scomp");

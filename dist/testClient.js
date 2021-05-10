@@ -1,6 +1,9 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 exports.__esModule = true;
-var ClientSocketWire_1 = require("./socket/ClientSocketWire");
+var ClientSocketWire_1 = __importDefault(require("./socket/ClientSocketWire"));
 var scomp_1 = require("./scomp");
 var slf_1 = require("slf");
 slf_1.LoggerFactory.setFactory(function (e) { return console.log(e.name, e.params.join(' ')); });
