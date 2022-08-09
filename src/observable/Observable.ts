@@ -1,16 +1,27 @@
+import { DefaultSubscriber, Subscriber } from './Subscriber';
+
+import { Observer, Subscribable, Unsubscribable } from './types';
+
+interface Subscription {}
+
 /**
- * new Observable(function(function onNext, function onError, function onComplete) observable) -> Observable
+ *
  */
-export default class Observable {
-  constructor(fn) {
-    fn(
-      this._onNext.bind(this),
-      this._onError.bind(this),
-      this._onComplete.bind(this)
-    );
+export default class Observable<T> implements Subscribable<T> {
+  private _subscribe: (this: Observable<T>, subscriber: Subscriber<T>) => void;
+
+  constructor(subscribe?: (this: Observable<T>, subscriber: Subscriber<T>) => void) {
+    if (subscribe) {
+      this._subscribe = subscribe;
+    }
+  }
+  subscribe(observer: Partial<Observer<T>>): Unsubscribable {
+    const subscriber = new DefaultSubscriber(observer);
+    this._subscribe(subscriber);
+    return subscriber;
   }
 
-  unsubscribe() {
+  /*  unsubscribe() {
     if (this._onUnsubscribe) {
       this._onUnsubscribe();
     }
@@ -57,4 +68,6 @@ export default class Observable {
     this._onUnsubscribe = fn;
     return this;
   }
+  */
 }
+

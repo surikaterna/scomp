@@ -40,7 +40,7 @@ service()
 
 ```json
 {
-  "id": 123123121,
+  "id": 123123121, //communication "channel" id, needs to be unique
   "req": {
     "s": "saft",
     "p":[ "eh", "oh"]
