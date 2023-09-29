@@ -1,6 +1,7 @@
 import { LoggerFactory } from 'slf';
 import sprintf from 'sprintf-js';
-import { Scomp, ResponsePacket, RequestPacket } from '../scomp';
+import ControlledObservable from '../ControlledObservable';
+import { Scomp, ResponsePacket, RequestPacket } from '../Scomp';
 import { WireEvent } from '../WireInterface';
 const LOG = LoggerFactory.getLogger('scomp:server');
 
@@ -24,9 +25,9 @@ export class ScompServer {
     return new Proxy(function () {
     }, {
       get: (target, name) => {
-        const o = this._scomp.getObservable(String(name));
+        const o = this._scomp.getObservable(String(name)) as ControlledObservable;
         if (o) {
-          return o.controller;
+          return o.getController();
         }
         return undefined;
       }
@@ -53,7 +54,7 @@ export class ScompServer {
     let targetService;
     let commands = packet.paths ?? [];
     if (!packet.paths && packet.path) {
-      commands = [{ path: packet.path, params: packet.params }];
+      commands = [{ path: packet.path, params: packet.params ?? [] }];
     }
     for (let i = 0; i < commands.length; i++) {
       const command = commands[i];

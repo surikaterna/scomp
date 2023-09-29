@@ -1,6 +1,7 @@
 import { EventEmitter2 } from 'eventemitter2';
-import { RequestPacket, ResponsePacket, ScompHeader } from '../scomp';
-import { WireEvent } from '../WireInterface';
+import socketioJwt from 'socketio-jwt';
+import { RequestPacket, ResponsePacket, ScompHeader } from '../Scomp';
+import { WireEvent, WireInterface } from '../WireInterface';
 import { SocketService } from './SocketService';
 import { getActualIds } from './Utils';
 
@@ -8,11 +9,15 @@ export interface ServerSocketWireConfig {
   server?: any;
   io?: any;
   bidirectional: boolean;
+  authentication?: {
+    secret: string,
+    timeout?: number
+  }
 }
 
 type Socket = any;
 
-export default class ServerSocketWire extends EventEmitter2 {
+export default class ServerSocketWire extends EventEmitter2 implements WireInterface {
   private io: any;
   private server: any;
   private nsp: any;
@@ -38,11 +43,20 @@ export default class ServerSocketWire extends EventEmitter2 {
     this.socketService = new SocketService(this.io);
     this._sockets = {};
 
-    this.nsp.on('connection', (socket: Socket) => {
-      // TODO: Do authentication before register socket.
-      console.log(socket.id);
-      this.socketService.register(socket);
-    });
+    if (settings.authentication) {
+      this.nsp.on('connection', socketioJwt.authorize({
+        secret: settings.authentication.secret
+      })).on('authenticated', (socket: Socket) => {
+        console.log(socket.decoded_token);
+        this.socketService.register(socket, socket.decoded_token);
+      });
+    } else {
+      this.nsp.on('connection', (socket: Socket) => {
+        // TODO: Do authentication before register socket.
+        console.log(socket.id);
+        this.socketService.register(socket);
+      });
+    }
 
     this.socketService.on('connected', socket => {
       this._sockets[socket.id] = socket;
@@ -63,6 +77,8 @@ export default class ServerSocketWire extends EventEmitter2 {
       if (settings.bidirectional) {
         socket.on(WireEvent.Response, (packet: ResponsePacket) =>  this._handleResponsePacket(packet));
       }
+
+      this.emit(WireEvent.Connected, { socket });
     });
   }
 
@@ -85,7 +101,8 @@ export default class ServerSocketWire extends EventEmitter2 {
     if (event === WireEvent.Request) {
       const socketId = headers ? headers.socketId : null;
       if (socketId) {
-        this.io.to(socketId).emit(WireEvent.Request, packet);
+        console.log('**** emit to this socketId ???', socketId);
+        this.io.of('/scomp').to(socketId).emit(WireEvent.Request, packet);
       } else {
         this.io.of('/scomp').emit(WireEvent.Request, packet);
         // this.io.emit(SOCKET_EVENTS.Request, packet);
@@ -100,5 +117,9 @@ export default class ServerSocketWire extends EventEmitter2 {
         throw Error(`Socket has been disconnected ${socketId} for packet ${packetId}.`);
       }
     }
+  }
+
+  getConnections() {
+    return this.socketService.connections;
   }
 }

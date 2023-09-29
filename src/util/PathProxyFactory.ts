@@ -1,5 +1,5 @@
 import { LoggerFactory } from 'slf';
-import { Scomp, ScompHeader } from '../scomp';
+import { Scomp, ScompHeader } from '../Scomp';
 
 const LOG = LoggerFactory.getLogger('scomp:proxy');
 
@@ -23,13 +23,13 @@ export interface Path {
 const pathProxyFactory = (path: string, scomp: Scomp, paths: Path[], headers: ScompHeader = {}): any =>
   new Proxy(() => {}, {
     get: (target, name) => {
-      LOG.info('get::', path, name);
+      // LOG.info('get::', path, name);
       return pathProxyFactory(`${path}/${String(name)}`, scomp, paths, headers);
     },
     apply: (target, thisArg, argumentsList) => {
       if (path === '/then') {
         return new Promise((resolve, reject) => {
-          LOG.info('calling', JSON.stringify(paths));
+          LOG.info('calling', paths);
           scomp.request(paths, null, headers).then((res) => {
             LOG.info('Proxy response', res);
             if (argumentsList && argumentsList.length > 0) {
@@ -41,7 +41,7 @@ const pathProxyFactory = (path: string, scomp: Scomp, paths: Path[], headers: Sc
           });
         });
       } else {
-        LOG.info('else calling', argumentsList, path);
+        // LOG.info('else calling', argumentsList, path);
         paths.push({ path, params: argumentsList });
         return pathProxyFactory('', scomp, paths, headers);
       }

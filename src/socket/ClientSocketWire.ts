@@ -1,16 +1,20 @@
 import { EventEmitter2 } from 'eventemitter2';
 import io from 'socket.io-client';
-import { RequestPacket, ResponsePacket } from '../scomp';
-import { WireEvent } from '../WireInterface';
+import { RequestPacket, ResponsePacket } from '../Scomp';
+import { WireEvent, WireInterface } from '../WireInterface';
 import { getActualIds } from './Utils';
 
 export interface ClientSocketWireConfig {
   socket?: SocketIOClient.Socket;
   address: string;
   bidirectional: boolean;
+  authentication?: {
+    token: string;
+    extra?: any;
+  }
 }
 
-export default class ClientSocketWire extends EventEmitter2 {
+export default class ClientSocketWire extends EventEmitter2 implements WireInterface {
   private socket: SocketIOClient.Socket;
 
   constructor(config: ClientSocketWireConfig) {
@@ -33,6 +37,12 @@ export default class ClientSocketWire extends EventEmitter2 {
     });
 
     this.socket.on('res', this._handleResponsePacket.bind(this));
+
+    if (config.authentication) {
+      this.socket.emit('authenticate', { ...config.authentication });
+    }
+
+    this.socket.on('authenticated', () => this.emit(WireEvent.Authenticated));
 
     if (config.bidirectional) {
       this.socket.on('req', (packet: RequestPacket) => {
@@ -65,5 +75,9 @@ export default class ClientSocketWire extends EventEmitter2 {
     } else {
       throw new Error('Socket has been disconnected.');
     }
+  }
+
+  getConnections() {
+    return [];
   }
 }

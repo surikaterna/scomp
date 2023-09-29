@@ -4,7 +4,7 @@ import { EventEmitter } from 'events';
 import Observable from './Observable';
 import pathProxyFactory, { Path } from './util/PathProxyFactory';
 import { v4 as uuidv4 } from 'uuid';
-import WireInterface, { WireEvent } from './WireInterface';
+import { WireEvent, WireInterface } from './WireInterface';
 
 export { ScompServer } from './server/ScompServer';
 const LOG = LoggerFactory.getLogger('scomp:core');
@@ -17,7 +17,7 @@ export interface RequestPacket {
   id: string;
   paths?: Path[]
   path?: string;
-  params: Array<any>
+  params?: Array<any>
 }
 
 export interface ResponsePacket<T = any> {
@@ -39,6 +39,7 @@ interface ScompRequest {
 export class Scomp extends EventEmitter {
   private _requests: Record<string, ScompRequest>;
   private _responses: Record<string, Observable>;
+  private _onAuthenticate?: Function;
   
   public wire: WireInterface;
 
@@ -47,8 +48,19 @@ export class Scomp extends EventEmitter {
     this._requests = {};
     this._responses = {};
     this.wire = wire || new NullWire();
-    this.wire.on('res', (packet) => {
-      this._onResponsePacket(packet);
+    this.wire.on(WireEvent.Response, (packet) => {
+      try {
+        this._onResponsePacket(packet);
+      } catch (e) {
+        console.log(e.message);
+        // package error;
+      }
+    });
+    this.wire.on(WireEvent.Connected, (data) => {
+      console.log('*** Received connected event', data?.socket?.id);
+    });
+    this.wire.on(WireEvent.Authenticated, (data) => {
+      this._onAuthenticate?.();
     });
   }
 
@@ -67,6 +79,7 @@ export class Scomp extends EventEmitter {
         delete this._requests[packetId];
       }
     } else {
+      // TODO: Do something here ...
       throw new Error(`No request handler found for ${packet.id}`);
     }
   }
@@ -154,8 +167,7 @@ export class Scomp extends EventEmitter {
       if (path instanceof Array) {
         this.wire.send<RequestPacket>(WireEvent.Request, {
           id: requestId,
-          paths: path,
-          params: []
+          paths: path
         }, headers);
       } else {
         this.wire.send<RequestPacket>(WireEvent.Request, {
@@ -185,35 +197,22 @@ export class Scomp extends EventEmitter {
   // on error
 
   client<ServerApiInterface = any>(headers: ScompHeader = {}) {
-    // LOG.info('client builder');
-    // return new Client(this, headers).path;
+    LOG.info('client builder');
     return pathProxyFactory('', this, [], headers) as ServerApiInterface;
   }
 
+  // TODO: 
+  // client can be broadcast or send to specific ... so broadcast we omit
+
+  getConnections() {
+    return this.wire.getConnections();
+  }
+
+  onAuthenticate(callback: Function) {
+    this._onAuthenticate = callback;
+  }
+
+  onConnection() {
+
+  }
 }
-
-// export class Client {
-//   private scomp: Scomp;
-//   private headers?: ScompHeader;
-//   public path: any;
-//   constructor(scomp: Scomp, headers: ScompHeader) {
-//     this.scomp = scomp;
-//     this.headers = headers;
-//     this.path = pathProxyFactory('', this.scomp, [], this.headers);
-//   }
-
-//   build() {
-//     return 
-//   }
-
-//   // service(serviceType: keyof ServerApiInterface) {
-
-//   // }
-
-//   then() {
-    
-//   }
-// }
-
-
-// scomp.client().

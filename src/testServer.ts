@@ -2,7 +2,7 @@ import ServerSocketWire from './socket/ServerSocketWire';
 import Observable from './Observable';
 import { LoggerFactory } from 'slf';
 import { ScompServer } from './server/ScompServer';
-import { Scomp } from './scomp';
+import { Scomp } from './Scomp';
 
 LoggerFactory.setFactory((e) => console.log(e.name, e.params.join(' ')));
 

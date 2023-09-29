@@ -1,6 +1,6 @@
 import ClientSocketWire from './socket/ClientSocketWire';
 import Observable from './Observable';
-import { Scomp} from './scomp';
+import { Scomp } from './Scomp';
 import { LoggerFactory } from 'slf';
 
 LoggerFactory.setFactory((e) => console.log(e.name, e.params.join(' ')));
