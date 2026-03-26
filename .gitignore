@@ -28,7 +28,16 @@ build/Release
 
 # Dependency directories
 node_modules
+**/node_modules
 jspm_packages
+
+# Build outputs
+dist
+**/dist
+
+# Turborepo
+.turbo
+**/.turbo
 
 # Optional npm cache directory
 .npm
