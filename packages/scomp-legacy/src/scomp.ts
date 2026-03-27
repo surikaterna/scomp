@@ -36,9 +36,27 @@ interface ScompRequest {
   observable?: Observable;
 }
 
+interface SubscriptionHandle {
+  unsubscribe: () => unknown;
+}
+
+interface ObservableLike {
+  onNext: (fn: (res: any) => void) => ObservableLike;
+  onError?: (fn: (err: any) => void) => ObservableLike;
+  onComplete?: (fn: (res: any) => void) => ObservableLike;
+  unsubscribe?: () => unknown;
+}
+
+type StreamResponse =
+  | ObservableLike
+  | AsyncIterable<any>
+  | Iterable<any>;
+
+type StoredResponse = ObservableLike | SubscriptionHandle;
+
 export class Scomp extends EventEmitter {
   private _requests: Record<string, ScompRequest>;
-  private _responses: Record<string, Observable>;
+  private _responses: Record<string, StoredResponse>;
   private _onAuthenticate?: Function;
   
   public wire: WireInterface;
@@ -129,27 +147,12 @@ export class Scomp extends EventEmitter {
     }
   }
 
-  response(id: string, res: any | Observable, err?: Error) {
+  response(id: string, res: any | StreamResponse, err?: Error) {
     LOG.info('Response ', id, res);
-    if (res && (res instanceof Observable) && res.onNext) {
-      // TODO remake response id, make safe
-      const responseId = uuidv4();
-      this._responses[responseId] = res;
-      res.onNext((next) => {
-        this.wire.send(WireEvent.Response, {
-          id,
-          res: next,
-          sub: { id: responseId, type: 'observable' }
-        });
-      });
-      res.onError((error: any) => {
-        this.wire.send(WireEvent.Response, {
-          id,
-          res: null,
-          err: this._parseError(error),
-          sub: { id: responseId, type: 'observable' }
-        });
-      });
+    if (this._isObservableLike(res)) {
+      this._responseObservableLike(id, res);
+    } else if (this._isIterableLike(res)) {
+      this._responseIterable(id, res);
     } else {
       this.wire.send(WireEvent.Response, {
         id,
@@ -157,6 +160,70 @@ export class Scomp extends EventEmitter {
         err: this._parseError(err)
       });
     }
+  }
+
+  private _isObservableLike(res: any): res is ObservableLike {
+    return !!res && typeof res.onNext === 'function';
+  }
+
+  private _isIterableLike(res: any): res is AsyncIterable<any> | Iterable<any> {
+    return !!res
+      && (typeof res[Symbol.asyncIterator] === 'function' || typeof res[Symbol.iterator] === 'function');
+  }
+
+  private _responseObservableLike(id: string, res: ObservableLike) {
+    const responseId = uuidv4();
+    this._responses[responseId] = res;
+
+    res.onNext((next: any) => {
+      this.wire.send(WireEvent.Response, {
+        id,
+        res: next,
+        sub: { id: responseId, type: 'observable' }
+      });
+    });
+
+    res.onError?.((error: any) => {
+      this.wire.send(WireEvent.Response, {
+        id,
+        res: null,
+        err: this._parseError(error),
+        sub: { id: responseId, type: 'observable' }
+      });
+    });
+  }
+
+  private _responseIterable(id: string, res: AsyncIterable<any> | Iterable<any>) {
+    const responseId = uuidv4();
+    let isUnsubscribed = false;
+
+    this._responses[responseId] = {
+      unsubscribe: () => {
+        isUnsubscribed = true;
+      }
+    };
+
+    void (async () => {
+      try {
+        for await (const next of res) {
+          if (isUnsubscribed) {
+            break;
+          }
+          this.wire.send(WireEvent.Response, {
+            id,
+            res: next,
+            sub: { id: responseId, type: 'observable' }
+          });
+        }
+      } catch (error) {
+        this.wire.send(WireEvent.Response, {
+          id,
+          res: null,
+          err: this._parseError(error as Error),
+          sub: { id: responseId, type: 'observable' }
+        });
+      }
+    })();
   }
 
   request(path: string | Path[], params: any, headers: ScompHeader) {

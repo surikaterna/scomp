@@ -104,7 +104,7 @@ export class ScompServer {
     const error = new Error(m);
     LOG.error(message, ...params);
     this._scomp.response(packet.id, null, error);
-    throw error;
+    return error;
   }
 
   private _observableUnsubscribe(packet: ResponsePacket) {

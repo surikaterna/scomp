@@ -12,8 +12,8 @@
     "prebuild": "rimraf dist",
     "build": "tsc",
     "start": "rollup -c rollup.config.ts -w",
-    "test": "set TS_NODE_COMPILER_OPTIONS={\"module\": \"commonjs\" } && mocha -r ts-node/register test/**/*.spec.ts",
-    "test.watch": "mocha --watch -r ts-node/register test/**/*.spec.ts"
+    "test": "jest --config jest.config.cjs",
+    "test.watch": "jest --config jest.config.cjs --watch"
   },
   "keywords": [
     "RPC",

@@ -8,6 +8,7 @@
     "test": "echo \"No tests configured for @scomp/demo\""
   },
   "dependencies": {
-    "@scomp/core": "workspace:*"
+    "@scomp/core": "workspace:*",
+    "@scomp/transport-inprocess": "workspace:*"
   }
 }

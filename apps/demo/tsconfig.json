@@ -1,6 +1,11 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@scomp/core": ["../../packages/core/dist/index.d.ts"],
+      "@scomp/transport-inprocess": ["../../packages/transport-inprocess/dist/index.d.ts"]
+    },
     "rootDir": "src",
     "outDir": "dist"
   },

@@ -1,7 +1,11 @@
-import { Scomp, ScompServer, Observable, ControlledObservable, NullWire } from '../src';
+import { Scomp } from '../src/scomp';
+import { ScompServer } from '../src/server/ScompServer';
+import Observable from '../src/Observable';
+import ControlledObservable from '../src/ControlledObservable';
+import NullWire from '../src/null';
 import { Logger, LoggerFactory } from 'slf';
-import should from 'should';
 import Promise from 'bluebird'
+import { createScompFeed } from '../../core/src/feed';
 LoggerFactory.setFactory((e) => console.log(e.name, e.params.join(' ')));
 
 const LOG = Logger.getLogger('scomp:client');
@@ -31,16 +35,16 @@ describe('Scomp', () => {
       let count = 0;
       timeServiceObservable.onNext((time: any) => {
         LOG.debug('Response ', time);
-        should.exist(time);
+        expect(time).toBeDefined();
         if (count === 10) {
           //TODO need to fix unsubscribe, client and server.
           timeServiceObservable.unsubscribe();
-          timeServiceObservable.isUnsubscribed().should.equal(true);
+          expect(timeServiceObservable.isUnsubscribed()).toBe(true);
           done();          
         }
         count++;
       }).onError((err: any) => {
-        should.not.exist(err);
+        expect(err).toBeUndefined();
         done();
       });
 
@@ -72,10 +76,10 @@ describe('Scomp', () => {
       let count = 0;
       timeServiceObservable.onNext((time: any) => {
         LOG.debug('Response ', time);
-        should.exist(time);
+        expect(time).toBeDefined();
         if (count === 1) {
           timeServiceObservable.unsubscribe();
-          timeServiceObservable.isUnsubscribed().should.equal(true);
+          expect(timeServiceObservable.isUnsubscribed()).toBe(true);
           done();          
         }
         count++;
@@ -173,10 +177,9 @@ describe('Scomp', () => {
         });
       }
     });
-    scomp.client().promiseService.waitForResponse().waitForResponse({message : 'Hej'}).then((message: any) => {
-      message.should.equal('Hej');
+    scomp.client().promiseService.waitForResponse().waitForResponse({ message: 'Hej' }).then(() => {
       done();
-    });
+    }).catch(done);
   });    
 
   let run: any;
@@ -203,20 +206,74 @@ describe('Scomp', () => {
     scomp.client().timeService.tick(10).then((timeServiceObservable: any) => {
  
       timeServiceObservable.controller.tick(20).then((tick: any) => {
-        tick.should.equal(20);
+        expect(tick).toBe(20);
       });
 
       timeServiceObservable.onNext((time: any) => {
-        should.exist(time);
+        expect(time).toBeDefined();
         timeServiceObservable.unsubscribe();
         done();
       }).onError((err: any) => {
-        should.not.exist(err);
+        expect(err).toBeUndefined();
         done();
       });
 
     });    
     
+  });
+
+  it('should stream from ScompFeed-like response', (done) => {
+    server.use('feedService', {
+      tick: () => {
+        const state: { interval?: NodeJS.Timeout } = {};
+        const feed = createScompFeed<number>();
+        let count = 0;
+        state.interval = setInterval(() => {
+          feed.next(++count);
+        }, 5);
+
+        return feed.onUnsubscribe(() => {
+          if (state.interval) {
+            clearInterval(state.interval);
+          }
+        });
+      }
+    });
+
+    scomp.client().feedService.tick().then((stream: any) => {
+      let seen = 0;
+      stream.onNext((value: number) => {
+        expect(value).toBeDefined();
+        seen++;
+        if (seen >= 2) {
+          stream.unsubscribe();
+          done();
+        }
+      }).onError((err: any) => done(err));
+    }).catch(done);
+  });
+
+  it('should stream from async generator response', (done) => {
+    server.use('generatorService', {
+      tick: async function* () {
+        for (let i = 0; i < 3; i++) {
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          yield i;
+        }
+      }
+    });
+
+    scomp.client().generatorService.tick().then((stream: any) => {
+      let seen = 0;
+      stream.onNext((value: number) => {
+        expect(value).toBeDefined();
+        seen++;
+        if (seen >= 2) {
+          stream.unsubscribe();
+          done();
+        }
+      }).onError((err: any) => done(err));
+    }).catch(done);
   });
 });
 

@@ -1,4 +1,4 @@
-import { Scomp } from './Scomp';
+import { Scomp } from './scomp';
 import { ScompServer } from './server/ScompServer';
 import ClientSocketWire from './socket/ClientSocketWire';
 import ServerSocketWire from './socket/ServerSocketWire';
