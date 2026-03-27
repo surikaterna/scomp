@@ -5,10 +5,13 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "lint": "echo \"No lint configured for @scomp/demo\"",
-    "test": "echo \"No tests configured for @scomp/demo\""
+    "test": "echo \"No tests configured for @scomp/demo\"",
+    "start": "ts-node run.ts"
   },
   "dependencies": {
     "@scomp/core": "workspace:*",
-    "@scomp/transport-inprocess": "workspace:*"
+    "@scomp/client": "workspace:*",
+    "@scomp/transport-rabbitmq": "workspace:*",
+    "@scomp/types": "workspace:*"
   }
 }

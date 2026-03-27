@@ -1,27 +1,12 @@
-/**
- * Push-based stream abstraction used by scomp feed methods.
- *
- * @typeParam ResponseType - Type emitted by {@link ScompFeed.next} and async iteration.
- * @typeParam ErrorType - Type emitted by {@link ScompFeed.error}.
- */
-export interface ScompFeed<ResponseType = unknown, ErrorType = Error> extends AsyncIterable<ResponseType> {
-  /** Registers a listener for next values. */
+export interface ScompFeedLike<ResponseType = unknown, ErrorType = Error> extends AsyncIterable<ResponseType> {
   onNext(fn: (res: ResponseType) => void): this;
-  /** Registers a listener for terminal errors. */
   onError(fn: (err: ErrorType) => void): this;
-  /** Registers a listener for completion. */
   onComplete(fn: (res: unknown) => void): this;
-  /** Registers a listener for unsubscribe notifications. */
   onUnsubscribe(fn: () => void): this;
-  /** Emits a next value to listeners and async iterators. */
   next(nextResponse: ResponseType): this;
-  /** Emits an error and closes the feed. */
   error(errorResponse: ErrorType): this;
-  /** Completes the feed and closes all pending iterators. */
   complete(completeResponse?: unknown): this;
-  /** Stops the feed and invokes unsubscribe listeners. */
   unsubscribe(): this;
-  /** Returns whether the feed has already been unsubscribed. */
   isUnsubscribed(): boolean;
 }
 
@@ -51,16 +36,25 @@ export interface LegacyObservableLike<ResponseType = unknown, ErrorType = Error>
  * @typeParam ResponseType - Type emitted through next values.
  * @typeParam ErrorType - Type emitted through terminal errors.
  */
-export class ScompFeedSubject<ResponseType = unknown, ErrorType = Error>
-implements ScompFeed<ResponseType, ErrorType> {
-  private _onNextListener?: (res: ResponseType) => void;
-  private _onErrorListener?: (error: ErrorType) => void;
-  private _onCompleteListener?: (res: unknown) => void;
-  private _onUnsubscribe?: () => void;
+export class ScompFeed<ResponseType = unknown, ErrorType = Error>
+implements ScompFeedLike<ResponseType, ErrorType> {
+  private readonly _onNextListeners: Array<(res: ResponseType) => void> = [];
+  private readonly _onErrorListeners: Array<(error: ErrorType) => void> = [];
+  private readonly _onCompleteListeners: Array<(res: unknown) => void> = [];
+  private readonly _onUnsubscribeListeners: Array<() => void> = [];
   private _eventQueue: Array<FeedEvent<ResponseType, ErrorType>> = [];
   private _pendingPulls: Array<PendingPull<ResponseType>> = [];
   private _isClosed = false;
   private _isUnsubscribed = false;
+
+  constructor(source?: AsyncIterable<ResponseType> | (() => AsyncIterable<ResponseType>)) {
+    if (!source) {
+      return;
+    }
+
+    const iterable = typeof source === 'function' ? source() : source;
+    void this._consumeSource(iterable);
+  }
 
   [Symbol.asyncIterator](): AsyncIterator<ResponseType> {
     return {
@@ -83,7 +77,9 @@ implements ScompFeed<ResponseType, ErrorType> {
     }
 
     this._isUnsubscribed = true;
-    this._onUnsubscribe?.();
+    for (const listener of this._onUnsubscribeListeners) {
+      listener();
+    }
     this.complete();
     return this;
   }
@@ -99,7 +95,9 @@ implements ScompFeed<ResponseType, ErrorType> {
       return this;
     }
 
-    this._onNextListener?.(nextResponse);
+    for (const listener of this._onNextListeners) {
+      listener(nextResponse);
+    }
 
     const pendingPull = this._pendingPulls.shift();
     if (pendingPull) {
@@ -117,7 +115,9 @@ implements ScompFeed<ResponseType, ErrorType> {
       return this;
     }
 
-    this._onErrorListener?.(errorResponse);
+    for (const listener of this._onErrorListeners) {
+      listener(errorResponse);
+    }
     this._isClosed = true;
 
     const pendingPulls = this._pendingPulls.splice(0);
@@ -136,7 +136,9 @@ implements ScompFeed<ResponseType, ErrorType> {
       return this;
     }
 
-    this._onCompleteListener?.(completeResponse);
+    for (const listener of this._onCompleteListeners) {
+      listener(completeResponse);
+    }
     this._isClosed = true;
 
     const pendingPulls = this._pendingPulls.splice(0);
@@ -151,25 +153,25 @@ implements ScompFeed<ResponseType, ErrorType> {
 
   /** @inheritdoc */
   onNext(fn: (res: ResponseType) => void) {
-    this._onNextListener = fn;
+    this._onNextListeners.push(fn);
     return this;
   }
 
   /** @inheritdoc */
   onError(fn: (err: ErrorType) => void) {
-    this._onErrorListener = fn;
+    this._onErrorListeners.push(fn);
     return this;
   }
 
   /** @inheritdoc */
   onComplete(fn: (res: unknown) => void) {
-    this._onCompleteListener = fn;
+    this._onCompleteListeners.push(fn);
     return this;
   }
 
   /** @inheritdoc */
   onUnsubscribe(fn: () => void) {
-    this._onUnsubscribe = fn;
+    this._onUnsubscribeListeners.push(fn);
     return this;
   }
 
@@ -199,13 +201,27 @@ implements ScompFeed<ResponseType, ErrorType> {
 
     return Promise.resolve({ value: undefined, done: true });
   }
+
+  private async _consumeSource(iterable: AsyncIterable<ResponseType>): Promise<void> {
+    try {
+      for await (const value of iterable) {
+        if (this._isUnsubscribed) {
+          return;
+        }
+        this.next(value);
+      }
+      this.complete();
+    } catch (error) {
+      this.error(error as ErrorType);
+    }
+  }
 }
 
 /**
  * Creates a new mutable feed subject.
  */
 export function createScompFeed<ResponseType = unknown, ErrorType = Error>() {
-  return new ScompFeedSubject<ResponseType, ErrorType>();
+  return new ScompFeed<ResponseType, ErrorType>();
 }
 
 /**
