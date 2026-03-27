@@ -4,10 +4,12 @@
     "baseUrl": ".",
     "paths": {
       "@scomp/core": ["../../packages/core/dist/index.d.ts"],
-      "@scomp/transport-inprocess": ["../../packages/transport-inprocess/dist/index.d.ts"]
+      "@scomp/client": ["../../packages/client/dist/index.d.ts"],
+      "@scomp/types": ["../../packages/types/dist/index.d.ts"],
+      "@scomp/transport-rabbitmq": ["../../packages/transport-rabbitmq/dist/index.d.ts"]
     },
-    "rootDir": "src",
+    "rootDir": ".",
     "outDir": "dist"
   },
-  "include": ["src/**/*"]
+  "include": ["run.ts", "backend/**/*", "frontend/**/*", "shared/**/*"]
 }

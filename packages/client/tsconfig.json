@@ -3,6 +3,7 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
+      "@scomp/core": ["../core/dist/index.d.ts"],
       "@scomp/types": ["../types/dist/index.d.ts"]
     },
     "rootDir": "src",
