@@ -11,7 +11,14 @@ type AnyServiceDefinition = ScompServiceDefinition<
   Record<string, (...args: Array<any>) => any>
 >;
 
+/**
+ * Configuration for {@link createInprocessTransport}.
+ */
 export interface InprocessTransportOptions {
+  /**
+   * Optional error sink for command failures.
+   * If omitted, asynchronous command failures are re-thrown in a microtask.
+   */
   onFireAndForgetError?: (error: unknown, methodName: string, args: ReadonlyArray<unknown>) => void;
 }
 
@@ -53,6 +60,9 @@ function isIterableLike(value: unknown): value is AsyncIterable<unknown> | Itera
     || typeof maybeIterable[Symbol.asyncIterator] === 'function';
 }
 
+/**
+ * Creates an in-process transport that directly invokes service handlers.
+ */
 export function createInprocessTransport(
   service: AnyServiceDefinition,
   options: InprocessTransportOptions = {}

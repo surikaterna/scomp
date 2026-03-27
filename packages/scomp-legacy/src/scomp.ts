@@ -9,10 +9,16 @@ import { WireEvent, WireInterface } from './WireInterface';
 export { ScompServer } from './server/ScompServer';
 const LOG = LoggerFactory.getLogger('scomp:core');
 
+/**
+ * Optional transport metadata attached to requests.
+ */
 export interface ScompHeader {
   socketId?: string;
 }
 
+/**
+ * Request payload transmitted over a {@link WireInterface}.
+ */
 export interface RequestPacket {
   id: string;
   paths?: Path[]
@@ -20,6 +26,9 @@ export interface RequestPacket {
   params?: Array<any>
 }
 
+/**
+ * Response payload transmitted over a {@link WireInterface}.
+ */
 export interface ResponsePacket<T = any> {
   id: string;
   res: T;
@@ -54,6 +63,9 @@ type StreamResponse =
 
 type StoredResponse = ObservableLike | SubscriptionHandle;
 
+/**
+ * Core legacy client runtime that manages request/response and stream subscriptions.
+ */
 export class Scomp extends EventEmitter {
   private _requests: Record<string, ScompRequest>;
   private _responses: Record<string, StoredResponse>;
@@ -61,6 +73,9 @@ export class Scomp extends EventEmitter {
   
   public wire: WireInterface;
 
+  /**
+   * Creates a runtime bound to the provided transport wire.
+   */
   constructor(wire: WireInterface) {
     super();
     this._requests = {};
@@ -137,6 +152,9 @@ export class Scomp extends EventEmitter {
     }
   }
 
+  /**
+   * Cancels a previously created subscription by response id.
+   */
   unsubscribe(id: string) {
     LOG.info('Unsubscribe ', id);
     if (this._responses[id]) {
@@ -147,6 +165,9 @@ export class Scomp extends EventEmitter {
     }
   }
 
+  /**
+   * Sends a response packet for a request id.
+   */
   response(id: string, res: any | StreamResponse, err?: Error) {
     LOG.info('Response ', id, res);
     if (this._isObservableLike(res)) {
@@ -226,6 +247,9 @@ export class Scomp extends EventEmitter {
     })();
   }
 
+  /**
+   * Sends a request packet and resolves with the response payload.
+   */
   request(path: string | Path[], params: any, headers: ScompHeader) {
     const requestId = uuidv4();
     return new Promise((resolve, reject) => {
@@ -251,6 +275,9 @@ export class Scomp extends EventEmitter {
     this._requests[`${id}`] = { resolve, reject };
   }
 
+  /**
+   * Returns a stored observable/subscription by id.
+   */
   getObservable(id: string) {
     return this._responses[id];
   }
@@ -263,6 +290,9 @@ export class Scomp extends EventEmitter {
   // on reconnect
   // on error
 
+  /**
+   * Creates a proxied API client for remote method invocation.
+   */
   client<ServerApiInterface = any>(headers: ScompHeader = {}) {
     LOG.info('client builder');
     return pathProxyFactory('', this, [], headers) as ServerApiInterface;
@@ -271,10 +301,16 @@ export class Scomp extends EventEmitter {
   // TODO: 
   // client can be broadcast or send to specific ... so broadcast we omit
 
+  /**
+   * Returns active connections as reported by the current wire.
+   */
   getConnections() {
     return this.wire.getConnections();
   }
 
+  /**
+   * Registers a callback that fires after successful wire authentication.
+   */
   onAuthenticate(callback: Function) {
     this._onAuthenticate = callback;
   }

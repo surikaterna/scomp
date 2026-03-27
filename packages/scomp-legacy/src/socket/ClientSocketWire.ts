@@ -4,6 +4,9 @@ import { RequestPacket, ResponsePacket } from '../Scomp';
 import { WireEvent, WireInterface } from '../WireInterface';
 import { getActualIds } from './Utils';
 
+/**
+ * Configuration for creating a client-side socket wire.
+ */
 export interface ClientSocketWireConfig {
   socket?: SocketIOClient.Socket;
   address: string;
@@ -14,9 +17,15 @@ export interface ClientSocketWireConfig {
   }
 }
 
+/**
+ * Socket.IO based client transport for legacy scomp runtime.
+ */
 export default class ClientSocketWire extends EventEmitter2 implements WireInterface {
   private socket: SocketIOClient.Socket;
 
+  /**
+   * Creates a client wire and binds socket event listeners.
+   */
   constructor(config: ClientSocketWireConfig) {
     super();
 
@@ -55,15 +64,18 @@ export default class ClientSocketWire extends EventEmitter2 implements WireInter
     }
   }
 
+  /** Handles inbound request packets in bidirectional mode. */
   _handleRequestPacket(packet: RequestPacket) {
     console.log('Receiving request packet', packet);
     this.emit('req', packet);
   }
 
+  /** Handles inbound response packets. */
   _handleResponsePacket(packet: ResponsePacket) {
     this.emit('res', packet);
   }
 
+  /** @inheritdoc */
   send(event: WireEvent, packet: RequestPacket | ResponsePacket) {
     const data = packet;
     if (event === WireEvent.Response) {
@@ -77,6 +89,7 @@ export default class ClientSocketWire extends EventEmitter2 implements WireInter
     }
   }
 
+  /** @inheritdoc */
   getConnections() {
     return [];
   }

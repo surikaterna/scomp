@@ -5,6 +5,9 @@ import {
 } from '@scomp/core';
 import { createInprocessTransport } from '@scomp/transport-inprocess';
 
+/**
+ * Runs a local demo showcasing request, feed, and command service methods.
+ */
 async function main() {
 	const service = createScompService()
 		.request('sum', async (left: number, right: number) => left + right)

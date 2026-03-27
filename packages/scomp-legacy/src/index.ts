@@ -7,6 +7,12 @@ import WireInterface from './WireInterface';
 import Observable from './Observable';
 import ControlledObservable from './ControlledObservable';
 
+/**
+ * Legacy scomp package entrypoint.
+ *
+ * @remarks
+ * These exports preserve the original API surface for backward compatibility.
+ */
 export { 
   Scomp,
   ScompServer,

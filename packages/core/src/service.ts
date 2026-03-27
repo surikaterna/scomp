@@ -14,20 +14,34 @@ type ServiceMethods<
   Commands extends CommandHandlers
 > = Requests & Feeds & Commands;
 
+/**
+ * Runtime method category used by service definitions.
+ */
 export type ScompServiceMethodKind = 'request' | 'feed' | 'command';
 
+/**
+ * Canonical, executable shape of a scomp service.
+ */
 export interface ScompServiceDefinition<
   Requests extends RequestHandlers,
   Feeds extends FeedHandlers,
   Commands extends CommandHandlers
 > {
+  /** Request/response handlers that return one value. */
   readonly requests: Requests;
+  /** Feed handlers that return streams. */
   readonly feeds: Feeds;
+  /** Fire-and-forget handlers. */
   readonly commands: Commands;
+  /** Method kind lookup by method name. */
   readonly kinds: Readonly<Record<string, ScompServiceMethodKind>>;
+  /** Invokes a service method with positional arguments. */
   invoke(methodName: string, args: ReadonlyArray<unknown>): unknown;
 }
 
+/**
+ * Descriptor accepted by {@link createScompService}.
+ */
 export interface ScompServiceDescriptor<
   Requests extends RequestHandlers,
   Feeds extends FeedHandlers,
@@ -38,12 +52,18 @@ export interface ScompServiceDescriptor<
   commands?: Commands;
 }
 
+/**
+ * Client/server transport abstraction.
+ */
 export interface ScompTransport {
+  /** Performs a unary request/response call. */
   request<ResponseType = unknown>(methodName: string, args: ReadonlyArray<unknown>): Promise<ResponseType>;
+  /** Starts observing values from a feed method. */
   observe<ResponseType = unknown, ErrorType = Error>(
     methodName: string,
     args: ReadonlyArray<unknown>
   ): ScompFeed<ResponseType, ErrorType>;
+  /** Invokes a command method with no response contract. */
   fireAndForget(methodName: string, args: ReadonlyArray<unknown>): void;
 }
 
@@ -70,6 +90,9 @@ type ClientCommandMethods<Commands extends CommandHandlers> = {
   [MethodName in keyof Commands]: (...args: Parameters<Commands[MethodName]>) => void;
 };
 
+/**
+ * Type-safe client API inferred from a service definition.
+ */
 export type ScompClientForService<
   Service extends ScompServiceDefinition<RequestHandlers, FeedHandlers, CommandHandlers>
 > = ClientRequestMethods<Service['requests']>
@@ -120,6 +143,9 @@ function buildServiceDefinition<
   };
 }
 
+/**
+ * Fluent builder for creating type-safe service definitions.
+ */
 export class ScompServiceBuilder<
   Requests extends RequestHandlers,
   Feeds extends FeedHandlers,
@@ -129,12 +155,18 @@ export class ScompServiceBuilder<
   private readonly _feeds: Feeds;
   private readonly _commands: Commands;
 
+  /**
+   * Creates a builder with existing handler maps.
+   */
   constructor(requests: Requests, feeds: Feeds, commands: Commands) {
     this._requests = requests;
     this._feeds = feeds;
     this._commands = commands;
   }
 
+  /**
+   * Adds a request/response method.
+   */
   request<
     MethodName extends string,
     Handler extends RequestHandler
@@ -152,6 +184,9 @@ export class ScompServiceBuilder<
     );
   }
 
+  /**
+   * Adds a feed method.
+   */
   feed<
     MethodName extends string,
     Handler extends FeedHandler
@@ -169,6 +204,9 @@ export class ScompServiceBuilder<
     );
   }
 
+  /**
+   * Adds a fire-and-forget command method.
+   */
   command<
     MethodName extends string,
     Handler extends CommandHandler
@@ -186,12 +224,21 @@ export class ScompServiceBuilder<
     );
   }
 
+  /**
+   * Finalizes and returns an executable service definition.
+   */
   build() {
     return buildServiceDefinition(this._requests, this._feeds, this._commands);
   }
 }
 
+/**
+ * Creates an empty fluent service builder.
+ */
 export function createScompService(): ScompServiceBuilder<EmptyMethods, EmptyMethods, EmptyMethods>;
+/**
+ * Creates a service definition from plain handler maps.
+ */
 export function createScompService<
   Requests extends RequestHandlers,
   Feeds extends FeedHandlers,
@@ -216,6 +263,9 @@ export function createScompService<
   return buildServiceDefinition(requests, feeds, commands);
 }
 
+/**
+ * Creates a transport-backed client from a service definition.
+ */
 export function createScompClient<
   Service extends ScompServiceDefinition<RequestHandlers, FeedHandlers, CommandHandlers>
 >(

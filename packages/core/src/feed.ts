@@ -1,12 +1,27 @@
+/**
+ * Push-based stream abstraction used by scomp feed methods.
+ *
+ * @typeParam ResponseType - Type emitted by {@link ScompFeed.next} and async iteration.
+ * @typeParam ErrorType - Type emitted by {@link ScompFeed.error}.
+ */
 export interface ScompFeed<ResponseType = unknown, ErrorType = Error> extends AsyncIterable<ResponseType> {
+  /** Registers a listener for next values. */
   onNext(fn: (res: ResponseType) => void): this;
+  /** Registers a listener for terminal errors. */
   onError(fn: (err: ErrorType) => void): this;
+  /** Registers a listener for completion. */
   onComplete(fn: (res: unknown) => void): this;
+  /** Registers a listener for unsubscribe notifications. */
   onUnsubscribe(fn: () => void): this;
+  /** Emits a next value to listeners and async iterators. */
   next(nextResponse: ResponseType): this;
+  /** Emits an error and closes the feed. */
   error(errorResponse: ErrorType): this;
+  /** Completes the feed and closes all pending iterators. */
   complete(completeResponse?: unknown): this;
+  /** Stops the feed and invokes unsubscribe listeners. */
   unsubscribe(): this;
+  /** Returns whether the feed has already been unsubscribed. */
   isUnsubscribed(): boolean;
 }
 
@@ -20,6 +35,9 @@ type PendingPull<ResponseType> = {
   reject: (reason?: unknown) => void;
 };
 
+/**
+ * Compatibility shape for adapting legacy observable implementations.
+ */
 export interface LegacyObservableLike<ResponseType = unknown, ErrorType = Error> {
   onNext?: (fn: (res: ResponseType) => void) => LegacyObservableLike<ResponseType, ErrorType>;
   onError?: (fn: (err: ErrorType) => void) => LegacyObservableLike<ResponseType, ErrorType>;
@@ -27,6 +45,12 @@ export interface LegacyObservableLike<ResponseType = unknown, ErrorType = Error>
   unsubscribe?: () => void;
 }
 
+/**
+ * Concrete feed implementation that supports both callback and async-iterator consumption.
+ *
+ * @typeParam ResponseType - Type emitted through next values.
+ * @typeParam ErrorType - Type emitted through terminal errors.
+ */
 export class ScompFeedSubject<ResponseType = unknown, ErrorType = Error>
 implements ScompFeed<ResponseType, ErrorType> {
   private _onNextListener?: (res: ResponseType) => void;
@@ -52,6 +76,7 @@ implements ScompFeed<ResponseType, ErrorType> {
     };
   }
 
+  /** @inheritdoc */
   unsubscribe() {
     if (this._isUnsubscribed) {
       return this;
@@ -63,10 +88,12 @@ implements ScompFeed<ResponseType, ErrorType> {
     return this;
   }
 
+  /** @inheritdoc */
   isUnsubscribed() {
     return this._isUnsubscribed;
   }
 
+  /** @inheritdoc */
   next(nextResponse: ResponseType) {
     if (this._isClosed) {
       return this;
@@ -84,6 +111,7 @@ implements ScompFeed<ResponseType, ErrorType> {
     return this;
   }
 
+  /** @inheritdoc */
   error(errorResponse: ErrorType) {
     if (this._isClosed) {
       return this;
@@ -102,6 +130,7 @@ implements ScompFeed<ResponseType, ErrorType> {
     return this;
   }
 
+  /** @inheritdoc */
   complete(completeResponse?: unknown) {
     if (this._isClosed) {
       return this;
@@ -120,21 +149,25 @@ implements ScompFeed<ResponseType, ErrorType> {
     return this;
   }
 
+  /** @inheritdoc */
   onNext(fn: (res: ResponseType) => void) {
     this._onNextListener = fn;
     return this;
   }
 
+  /** @inheritdoc */
   onError(fn: (err: ErrorType) => void) {
     this._onErrorListener = fn;
     return this;
   }
 
+  /** @inheritdoc */
   onComplete(fn: (res: unknown) => void) {
     this._onCompleteListener = fn;
     return this;
   }
 
+  /** @inheritdoc */
   onUnsubscribe(fn: () => void) {
     this._onUnsubscribe = fn;
     return this;
@@ -168,10 +201,16 @@ implements ScompFeed<ResponseType, ErrorType> {
   }
 }
 
+/**
+ * Creates a new mutable feed subject.
+ */
 export function createScompFeed<ResponseType = unknown, ErrorType = Error>() {
   return new ScompFeedSubject<ResponseType, ErrorType>();
 }
 
+/**
+ * Adapts an async or sync iterable into a {@link ScompFeed}.
+ */
 export function fromAsyncIterable<ResponseType>(
   iterable: AsyncIterable<ResponseType> | Iterable<ResponseType>
 ) {
@@ -194,12 +233,18 @@ export function fromAsyncIterable<ResponseType>(
   return feed;
 }
 
+/**
+ * Adapts a generator factory into a {@link ScompFeed}.
+ */
 export function fromGenerator<ResponseType>(
   generator: (() => AsyncGenerator<ResponseType>) | (() => Generator<ResponseType>)
 ) {
   return fromAsyncIterable(generator());
 }
 
+/**
+ * Adapts a legacy observable-like source into a {@link ScompFeed}.
+ */
 export function fromLegacyObservable<ResponseType = unknown, ErrorType = Error>(
   source: LegacyObservableLike<ResponseType, ErrorType>
 ) {

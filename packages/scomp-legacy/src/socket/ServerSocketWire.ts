@@ -5,6 +5,9 @@ import { WireEvent, WireInterface } from '../WireInterface';
 import { SocketService } from './SocketService';
 import { getActualIds } from './Utils';
 
+/**
+ * Configuration for creating a server-side socket wire.
+ */
 export interface ServerSocketWireConfig {
   server?: any;
   io?: any;
@@ -17,6 +20,9 @@ export interface ServerSocketWireConfig {
 
 type Socket = any;
 
+/**
+ * Socket.IO based server transport for legacy scomp runtime.
+ */
 export default class ServerSocketWire extends EventEmitter2 implements WireInterface {
   private io: any;
   private server: any;
@@ -24,6 +30,9 @@ export default class ServerSocketWire extends EventEmitter2 implements WireInter
   private socketService: SocketService;
   private _sockets: Record<string, Socket>;
 
+  /**
+   * Creates a server wire and binds namespace-level socket listeners.
+   */
   constructor(settings: ServerSocketWireConfig) {
     super();
     
@@ -82,21 +91,25 @@ export default class ServerSocketWire extends EventEmitter2 implements WireInter
     });
   }
 
+  /** Handles inbound request packets from connected clients. */
   _handleRequestPacket(packet: RequestPacket) {
     // emit 'req' event which ScompServer will handle
     this.emit(WireEvent.Request, packet);
   }
 
+  /** Handles inbound response packets in bidirectional mode. */
   _handleResponsePacket(packet: ResponsePacket) {
     // emit 'res' event' which Scomp will handle
     console.log('_handleResponsePacket', packet);
     this.emit(WireEvent.Response, packet);
   }
 
+  /** Starts listening on the configured HTTP server. */
   listen() {
     this.socketService.io.listen(this.server);
   }
 
+  /** @inheritdoc */
   send(event: WireEvent, packet: ResponsePacket | RequestPacket, headers: ScompHeader) {
     if (event === WireEvent.Request) {
       const socketId = headers ? headers.socketId : null;
@@ -119,6 +132,7 @@ export default class ServerSocketWire extends EventEmitter2 implements WireInter
     }
   }
 
+  /** @inheritdoc */
   getConnections() {
     return this.socketService.connections;
   }

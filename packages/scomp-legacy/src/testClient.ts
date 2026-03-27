@@ -3,6 +3,9 @@ import Observable from './Observable';
 import { Scomp } from './Scomp';
 import { LoggerFactory } from 'slf';
 
+/**
+ * Legacy manual test client used for socket interoperability verification.
+ */
 LoggerFactory.setFactory((e) => console.log(e.name, e.params.join(' ')));
 
 const clientWire = new ClientSocketWire({ address: 'http://127.0.0.1/3001', bidirectional: false });

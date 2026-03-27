@@ -24,14 +24,16 @@ class Observable {
 */
 
 /**
- * Wire responsible for transferring data，should keep connection alive or reconnect if necessary
+ * In-memory wire used mainly for local testing and debugging.
  */
 export default class NullWire extends EventEmitter2 implements WireInterface {
+  /** Emits packets locally instead of sending them over a network transport. */
   send<T = any>(event: string, packet: T) {
     LOG.info('send %j', packet);
     console.log('send %j', packet);
     this._fromClient(event, packet);
   }
+  /** Internal client-side packet bridge used by {@link send}. */
   _fromClient(event: string, packet: any) {
     this.emit(event, packet);
   }

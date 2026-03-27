@@ -4,6 +4,9 @@ import { LoggerFactory } from 'slf';
 import { ScompServer } from './server/ScompServer';
 import { Scomp } from './Scomp';
 
+/**
+ * Legacy manual test server used for socket interoperability verification.
+ */
 LoggerFactory.setFactory((e) => console.log(e.name, e.params.join(' ')));
 
 const serverWire = new ServerSocketWire({ bidirectional: false });
