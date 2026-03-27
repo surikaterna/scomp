@@ -37,5 +37,9 @@
     "turbo": "^2.8.20",
     "typedoc": "^0.28.18",
     "typescript": "^6.0.2"
-  }
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ]
 }
