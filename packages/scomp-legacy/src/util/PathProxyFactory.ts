@@ -3,22 +3,19 @@ import { Scomp, ScompHeader } from '../Scomp';
 
 const LOG = LoggerFactory.getLogger('scomp:proxy');
 
+/**
+ * One method call segment represented as path plus argument list.
+ */
 export interface Path {
   path: string;
   params: Array<any>
 }
 
 /**
- * Uses proxy class to create paths
+ * Creates a promise-like proxy that records chained property access and calls.
  *
- * Example
- * a.b(param1).c.d(param2).then(...)
- *
- * Paths used for request:
- * [
- *  {path: '/a/b', params: [ param1 ]}
- *  , {path: '/c/d' params: [ param2 ]
- * ]
+ * @remarks
+ * Calling .then triggers a remote request using all accumulated path segments.
  */
 const pathProxyFactory = (path: string, scomp: Scomp, paths: Path[], headers: ScompHeader = {}): any =>
   new Proxy(() => {}, {

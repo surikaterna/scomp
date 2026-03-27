@@ -1,3 +1,6 @@
+/**
+ * Core package entrypoint for service and feed primitives.
+ */
 export const createCore = () => ({
   status: 'ok'
 })

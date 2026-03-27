@@ -2,6 +2,9 @@ import { RequestPacket, ResponsePacket } from '../Scomp';
 
 const DELIMETER = '$$';
 
+/**
+ * Splits compound packet ids into socket and packet ids.
+ */
 const getActualIds = (packet: ResponsePacket | RequestPacket) => {
   let packetId = packet.id;
   let socketId;

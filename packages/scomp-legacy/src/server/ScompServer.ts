@@ -8,10 +8,16 @@ const LOG = LoggerFactory.getLogger('scomp:server');
 const reflectionHandler = (obj: any, path: string) => obj[path];
 const isLastIndex = (array: any[], index: number) => array.length - 1 === index;
 
+/**
+ * Legacy request router that binds object services to path-based calls.
+ */
 export class ScompServer {
   private _scomp: Scomp;
   private _servicePaths: any;
 
+  /**
+   * Creates a server attached to the provided {@link Scomp} runtime.
+   */
   constructor(scomp: Scomp) {
     this._servicePaths = {};
     this._scomp = scomp;
@@ -113,6 +119,9 @@ export class ScompServer {
     }
   }
 
+  /**
+   * Registers a service object under a root path.
+   */
   use<ServiceType = any>(path: string, obj: ServiceType, handler = reflectionHandler) {
     this._servicePaths[path] = { obj, handler };
   }
