@@ -1,23 +1,23 @@
-import assert from 'node:assert/strict';
+import assert from "node:assert/strict";
 import {
   createJsonSerializer,
   RabbitMQTransport,
-  StreamClosedError
-} from '../src';
+  StreamClosedError,
+} from "../src";
 
 const mockConnect = jest.fn();
 const mockRandomUUID = jest.fn();
 
-jest.mock('node:crypto', () => ({
-  randomUUID: (...args: Array<unknown>) => mockRandomUUID(...args)
+jest.mock("node:crypto", () => ({
+  randomUUID: (...args: Array<unknown>) => mockRandomUUID(...args),
 }));
 
-jest.mock('amqplib', () => ({
+jest.mock("amqplib", () => ({
   __esModule: true,
   default: {
-    connect: (...args: Array<unknown>) => mockConnect(...args)
+    connect: (...args: Array<unknown>) => mockConnect(...args),
   },
-  connect: (...args: Array<unknown>) => mockConnect(...args)
+  connect: (...args: Array<unknown>) => mockConnect(...args),
 }));
 
 type QueueConsumer = (message: unknown) => void | Promise<void>;
@@ -64,19 +64,19 @@ function createFakeChannel() {
     on: jest.fn((eventName: string, handler: (message: unknown) => void) => {
       eventHandlers.set(eventName, handler);
       return channel;
-    })
+    }),
   };
 
   const connection = {
     createChannel: jest.fn().mockResolvedValue(channel),
-    on: jest.fn()
+    on: jest.fn(),
   };
 
   return {
     channel,
     connection,
     queueConsumers,
-    eventHandlers
+    eventHandlers,
   };
 }
 
@@ -84,13 +84,13 @@ function createMessage(payload: unknown, overrides: TestMessageOverride = {}) {
   return {
     content: Buffer.from(JSON.stringify(payload)),
     properties: {
-      correlationId: overrides.properties?.correlationId ?? 'corr-default',
-      replyTo: overrides.properties?.replyTo ?? 'reply-queue'
+      correlationId: overrides.properties?.correlationId ?? "corr-default",
+      replyTo: overrides.properties?.replyTo ?? "reply-queue",
     },
     fields: {
-      exchange: overrides.fields?.exchange ?? ''
+      exchange: overrides.fields?.exchange ?? "",
     },
-    ...overrides
+    ...overrides,
   };
 }
 
@@ -103,10 +103,10 @@ async function waitFor(predicate: () => boolean, attempts = 50): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
 
-  throw new Error('Timed out waiting for condition.');
+  throw new Error("Timed out waiting for condition.");
 }
 
-describe('RabbitMQTransport NFR behavior', () => {
+describe("RabbitMQTransport NFR behavior", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     let idCounter = 0;
@@ -116,128 +116,232 @@ describe('RabbitMQTransport NFR behavior', () => {
     });
   });
 
-  it('supports feed fanout strategy with abort on basic.return', async () => {
+  it("supports feed fanout strategy with abort on basic.return", async () => {
     const fake = createFakeChannel();
     mockConnect.mockResolvedValue(fake.connection);
 
     const route = {
-      route: 'users.liveTicker',
-      kind: 'feed',
-      strategy: 'fanout',
-      hashKey: () => 'room-x',
+      route: "users.liveTicker",
+      kind: "feed",
+      strategy: "fanout",
+      hashKey: () => "room-x",
       handler: async function* () {
         await new Promise<void>(() => {
           return;
         });
         yield { seq: 1 };
-      }
+      },
     };
 
-    const transport = new RabbitMQTransport({ url: 'amqp://test' });
-    await transport.listen({ 'users.liveTicker': route } as unknown as Record<string, unknown>);
+    const transport = new RabbitMQTransport({ url: "amqp://test" });
+    await transport.listen({ "users.liveTicker": route } as unknown as Record<
+      string,
+      unknown
+    >);
 
-    const rpcConsumer = fake.queueConsumers.get('scomp.rpc.users');
-    await rpcConsumer?.(createMessage({
-      route: 'users.liveTicker',
-      op: 'feed_start',
-      payload: { room: 'room-x' }
-    }));
+    const rpcConsumer = fake.queueConsumers.get("scomp.rpc.users");
+    await rpcConsumer?.(
+      createMessage({
+        route: "users.liveTicker",
+        op: "feed_start",
+        payload: { room: "room-x" },
+      }),
+    );
 
-    const running = (transport as unknown as { runningFeeds: Map<string, { abortController: AbortController }> }).runningFeeds.get('room-x');
+    const running = (
+      transport as unknown as {
+        runningFeeds: Map<string, { abortController: AbortController }>;
+      }
+    ).runningFeeds.get("room-x");
     assert.equal(Boolean(running), true);
 
-    const returnHandler = fake.eventHandlers.get('return');
-    returnHandler?.({ fields: { exchange: 'scomp.live.room-x' } });
+    const returnHandler = fake.eventHandlers.get("return");
+    returnHandler?.({ fields: { exchange: "scomp.live.room-x" } });
 
     assert.equal(running.abortController.signal.aborted, true);
-    assert.equal(running.abortController.signal.reason instanceof StreamClosedError, true);
+    assert.equal(
+      running.abortController.signal.reason instanceof StreamClosedError,
+      true,
+    );
   });
 
-  it('supports pluggable serializer and custom content type', async () => {
+  it("supports pluggable serializer and custom content type", async () => {
     const fake = createFakeChannel();
     mockConnect.mockResolvedValue(fake.connection);
 
     const serializer = createJsonSerializer({
-      contentType: 'application/x-scomp-json+v1',
+      contentType: "application/x-scomp-json+v1",
       replacer: (_key, value) => {
-        if (typeof value === 'bigint') {
-          return { __type: 'bigint', value: value.toString() };
+        if (typeof value === "bigint") {
+          return { __type: "bigint", value: value.toString() };
         }
         return value;
       },
       reviver: (_key, value) => {
         const maybeTyped = value as { __type?: string; value?: string } | null;
-        if (maybeTyped && typeof maybeTyped === 'object' && maybeTyped.__type === 'bigint' && typeof maybeTyped.value === 'string') {
+        if (
+          maybeTyped &&
+          typeof maybeTyped === "object" &&
+          maybeTyped.__type === "bigint" &&
+          typeof maybeTyped.value === "string"
+        ) {
           return BigInt(maybeTyped.value);
         }
         return value;
-      }
+      },
     });
 
     const transport = new RabbitMQTransport({
-      url: 'amqp://test',
-      serializer
+      url: "amqp://test",
+      serializer,
     });
 
-    const pending = transport.request('users.getUser', { id: 9n });
+    const pending = transport.request("users.getUser", { id: 9n });
     await waitFor(() => fake.channel.sendToQueue.mock.calls.length > 0);
 
     const [, body, options] = fake.channel.sendToQueue.mock.calls[0];
-    assert.equal(options.contentType, 'application/x-scomp-json+v1');
+    assert.equal(options.contentType, "application/x-scomp-json+v1");
 
-    const parsedBody = JSON.parse(Buffer.from(body).toString('utf8'));
-    assert.deepEqual(parsedBody.payload.id, { __type: 'bigint', value: '9' });
+    const parsedBody = JSON.parse(Buffer.from(body).toString("utf8"));
+    assert.deepEqual(parsedBody.payload.id, { __type: "bigint", value: "9" });
 
-    const replyConsumer = fake.queueConsumers.get('generated-1');
-    await replyConsumer?.(createMessage({ payload: { id: { __type: 'bigint', value: '9' } } }, {
-      properties: { correlationId: 'id-1', replyTo: 'generated-1' }
-    }));
+    const replyConsumer = fake.queueConsumers.get("generated-1");
+    await replyConsumer?.(
+      createMessage(
+        { payload: { id: { __type: "bigint", value: "9" } } },
+        {
+          properties: { correlationId: "id-1", replyTo: "generated-1" },
+        },
+      ),
+    );
 
     const resolved = await pending;
-    assert.equal(typeof resolved.id, 'bigint');
+    assert.equal(typeof resolved.id, "bigint");
     assert.equal(resolved.id, 9n);
   });
 
-  it('enforces security policy and max payload limits', async () => {
+  it("enforces security policy and max payload limits", async () => {
     const fake = createFakeChannel();
     mockConnect.mockResolvedValue(fake.connection);
 
     const events: Array<string> = [];
     const transport = new RabbitMQTransport({
-      url: 'amqp://test',
+      url: "amqp://test",
       security: {
         maxPayloadBytes: 40,
-        authorize: ({ route }) => route !== 'blocked.route'
+        authorize: ({ route }) => route !== "blocked.route",
       },
       observability: {
         onEvent: (event) => {
           events.push(event.type);
-        }
-      }
+        },
+      },
     });
 
-    await assert.rejects(() => transport.request('blocked.route', { ok: true }), /not authorized/i);
-    await assert.rejects(() => transport.request('users.getUser', { huge: 'x'.repeat(100) }), /Payload exceeds maxPayloadBytes/i);
+    await assert.rejects(
+      () => transport.request("blocked.route", { ok: true }),
+      /not authorized/i,
+    );
+    await assert.rejects(
+      () => transport.request("users.getUser", { huge: "x".repeat(100) }),
+      /Payload exceeds maxPayloadBytes/i,
+    );
 
-    assert.equal(events.includes('security_denied'), true);
+    assert.equal(events.includes("security_denied"), true);
   });
 
-  it('enforces max in-flight requests and request timeout', async () => {
+  it("uses shared security policy context with optional message meta", async () => {
+    const fake = createFakeChannel();
+    mockConnect.mockResolvedValue(fake.connection);
+
+    const seen: Array<{
+      route: string;
+      operation: string;
+      direction: string;
+      hasMeta: boolean;
+    }> = [];
+    const transport = new RabbitMQTransport({
+      url: "amqp://test",
+      security: {
+        policy: {
+          authenticate: ({ route }) => ({
+            subject: `subject:${route}`,
+            scopes: ["rpc:invoke"],
+          }),
+          authorize: (ctx) => {
+            seen.push({
+              route: ctx.route,
+              operation: ctx.operation,
+              direction: ctx.direction,
+              hasMeta: Boolean(ctx.meta),
+            });
+            return ctx.route !== "blocked.route";
+          },
+        },
+      },
+    });
+
+    await assert.rejects(
+      () => transport.request("blocked.route", { ok: true }),
+      /not authorized/i,
+    );
+
+    const pending = transport.request("users.getUser", { id: 3 });
+    await waitFor(() => fake.channel.sendToQueue.mock.calls.length > 0);
+
+    const [, body, options] = fake.channel.sendToQueue.mock.calls[0];
+    const parsedBody = JSON.parse(Buffer.from(body).toString("utf8"));
+    assert.equal(typeof parsedBody.meta, "object");
+    assert.equal(parsedBody.meta.auth.subject, "subject:users.getUser");
+
+    const replyConsumer = fake.queueConsumers.get("generated-1");
+    await replyConsumer?.(
+      createMessage(
+        { payload: { ok: true } },
+        {
+          properties: {
+            correlationId: options.correlationId,
+            replyTo: options.replyTo,
+          },
+        },
+      ),
+    );
+    await pending;
+
+    assert.equal(
+      seen.some(
+        (entry) =>
+          entry.route === "blocked.route" && entry.direction === "outbound",
+      ),
+      true,
+    );
+    assert.equal(
+      seen.some(
+        (entry) => entry.route === "users.getUser" && entry.hasMeta === false,
+      ),
+      true,
+    );
+  });
+
+  it("enforces max in-flight requests and request timeout", async () => {
     const fake = createFakeChannel();
     mockConnect.mockResolvedValue(fake.connection);
 
     const transport = new RabbitMQTransport({
-      url: 'amqp://test',
+      url: "amqp://test",
       performance: {
         maxInFlightRequests: 1,
-        requestTimeoutMs: 5
-      }
+        requestTimeoutMs: 5,
+      },
     });
 
-    const first = transport.request('users.getUser', { id: 1 });
+    const first = transport.request("users.getUser", { id: 1 });
     await waitFor(() => fake.channel.sendToQueue.mock.calls.length > 0);
 
-    await assert.rejects(() => transport.request('users.getUser', { id: 2 }), /In-flight request limit/);
+    await assert.rejects(
+      () => transport.request("users.getUser", { id: 2 }),
+      /In-flight request limit/,
+    );
     await assert.rejects(() => first, /timed out/);
   });
 });

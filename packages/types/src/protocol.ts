@@ -1,16 +1,53 @@
-import { createHash } from 'node:crypto';
+import { createHash } from "node:crypto";
 
 export type ScompTransportOperation =
-  | 'request'
-  | 'signal'
-  | 'feed_start'
-  | 'feed_stop';
+  | "request"
+  | "signal"
+  | "feed_start"
+  | "feed_stop";
+
+export interface ScompTransportMessageMeta {
+  auth?: unknown;
+  traceId?: string;
+  tenantId?: string;
+  tags?: Record<string, string>;
+}
+
+export interface ScompTransportPrincipal {
+  subject: string;
+  tenantId?: string;
+  scopes?: Array<string>;
+  claims?: Record<string, unknown>;
+  issuedAt?: number;
+  expiresAt?: number;
+  authType?: string;
+}
+
+export interface ScompTransportSecurityContext {
+  direction: "inbound" | "outbound";
+  transport: string;
+  route: string;
+  operation: ScompTransportOperation;
+  payload: unknown;
+  meta?: ScompTransportMessageMeta;
+  principal?: ScompTransportPrincipal;
+}
+
+export interface ScompTransportSecurityPolicy {
+  authenticate?: (
+    context: Omit<ScompTransportSecurityContext, "principal">,
+  ) => ScompTransportPrincipal | null | Promise<ScompTransportPrincipal | null>;
+  authorize?: (
+    context: ScompTransportSecurityContext,
+  ) => boolean | Promise<boolean>;
+}
 
 export interface ScompTransportRequestEnvelope {
   id?: string;
   route: string;
   op: ScompTransportOperation;
   payload?: unknown;
+  meta?: ScompTransportMessageMeta;
 }
 
 export type ScompTransportRequest = ScompTransportRequestEnvelope;
@@ -18,29 +55,35 @@ export type ScompTransportRequest = ScompTransportRequestEnvelope;
 export interface ScompTransportSuccessResponseEnvelope {
   id?: string;
   payload?: unknown;
+  meta?: ScompTransportMessageMeta;
 }
 
 export interface ScompTransportErrorResponseEnvelope {
   id?: string;
   error: string;
+  meta?: ScompTransportMessageMeta;
 }
 
-export type ScompTransportSuccessResponse = ScompTransportSuccessResponseEnvelope;
+export type ScompTransportSuccessResponse =
+  ScompTransportSuccessResponseEnvelope;
 
 export type ScompTransportErrorResponse = ScompTransportErrorResponseEnvelope;
 
-export type ScompTransportResponseEnvelope = ScompTransportSuccessResponseEnvelope | ScompTransportErrorResponseEnvelope;
+export type ScompTransportResponseEnvelope =
+  | ScompTransportSuccessResponseEnvelope
+  | ScompTransportErrorResponseEnvelope;
 
 export type ScompTransportResponse = ScompTransportResponseEnvelope;
 
-export type ScompFeedChunkType = 'next' | 'done' | 'error';
+export type ScompFeedChunkType = "next" | "done" | "error";
 
 export interface ScompFeedChunkEnvelope {
-  channel: 'feed';
+  channel: "feed";
   hash: string;
   type: ScompFeedChunkType;
   payload?: unknown;
   message?: string;
+  meta?: ScompTransportMessageMeta;
 }
 
 export type ScompFeedChunk = ScompFeedChunkEnvelope;
@@ -50,14 +93,21 @@ export interface FeedHashOptions {
   stringify?: (value: unknown) => string;
 }
 
-export function createFeedHash(route: string, payload: unknown, options: FeedHashOptions = {}): string {
+export function createFeedHash(
+  route: string,
+  payload: unknown,
+  options: FeedHashOptions = {},
+): string {
   if (options.hashKey) {
     return options.hashKey(payload);
   }
 
   const stringify = options.stringify ?? JSON.stringify;
   const serialized = stringify(payload ?? {});
-  return createHash('sha256').update(`${route}:${serialized}`).digest('hex').slice(0, 32);
+  return createHash("sha256")
+    .update(`${route}:${serialized}`)
+    .digest("hex")
+    .slice(0, 32);
 }
 
 export interface ScompSerializer {

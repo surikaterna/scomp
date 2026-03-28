@@ -1,22 +1,26 @@
-import type { Server as HttpServer } from 'node:http';
-import type { Server as HttpsServer } from 'node:https';
-import type { CompiledRoute, ITransport } from '@scomp/core';
+import type { Server as HttpServer } from "node:http";
+import type { Server as HttpsServer } from "node:https";
+import type { CompiledRoute, ITransport } from "@scomp/core";
 import {
   createFeedHash,
   type ScompFeedChunkEnvelope,
+  type ScompTransportMessageMeta,
+  type ScompTransportPrincipal,
+  type ScompTransportSecurityContext,
+  type ScompTransportSecurityPolicy,
   type ScompTransportRequestEnvelope,
-  type ScompTransportResponseEnvelope
-} from '@scomp/types';
+  type ScompTransportResponseEnvelope,
+} from "@scomp/types";
 import {
   WebSocketClientTransport,
-  type WebSocketClientTransportConfig
-} from '@scomp/transport-websocket-client';
-import WebSocket, { type RawData, WebSocketServer } from 'ws';
+  type WebSocketClientTransportConfig,
+} from "@scomp/transport-websocket-client";
+import WebSocket, { type RawData, WebSocketServer } from "ws";
 
 export class StreamClosedError extends Error {
   constructor(streamHash: string) {
     super(`Feed stream closed for hash: ${streamHash}`);
-    this.name = 'StreamClosedError';
+    this.name = "StreamClosedError";
   }
 }
 
@@ -35,6 +39,11 @@ export interface WebSocketServerTransportConfig {
   path?: string;
   server?: HttpServer | HttpsServer;
   outbound?: WebSocketClientTransportConfig | WebSocketClientTransport;
+  security?: ScompTransportSecurityPolicy;
+}
+
+interface SocketWithPrincipal extends WebSocket {
+  scompPrincipal?: ScompTransportPrincipal;
 }
 
 type RouterTable = Record<string, CompiledRoute>;
@@ -48,19 +57,19 @@ function safeJsonParse(text: string): any {
 }
 
 function toText(data: RawData): string {
-  if (typeof data === 'string') {
+  if (typeof data === "string") {
     return data;
   }
 
   if (Buffer.isBuffer(data)) {
-    return data.toString('utf8');
+    return data.toString("utf8");
   }
 
   if (Array.isArray(data)) {
-    return Buffer.concat(data).toString('utf8');
+    return Buffer.concat(data).toString("utf8");
   }
 
-  return Buffer.from(data).toString('utf8');
+  return Buffer.from(data).toString("utf8");
 }
 
 function toFeedExchange(hash: string): string {
@@ -68,11 +77,15 @@ function toFeedExchange(hash: string): string {
 }
 
 function ensureFeedIterable(value: unknown): AsyncIterable<unknown> {
-  if (value && typeof (value as AsyncIterable<unknown>)[Symbol.asyncIterator] === 'function') {
+  if (
+    value &&
+    typeof (value as AsyncIterable<unknown>)[Symbol.asyncIterator] ===
+      "function"
+  ) {
     return value as AsyncIterable<unknown>;
   }
 
-  throw new Error('Feed route handler did not return an AsyncIterable.');
+  throw new Error("Feed route handler did not return an AsyncIterable.");
 }
 
 export class WebSocketServerTransport implements ITransport {
@@ -91,24 +104,24 @@ export class WebSocketServerTransport implements ITransport {
     this.router = router;
     const server = this.getServer();
 
-    if (server.listenerCount('connection') > 0) {
+    if (server.listenerCount("connection") > 0) {
       return;
     }
 
-    server.on('connection', (socket: WebSocket) => {
+    server.on("connection", (socket: WebSocket) => {
       this.sockets.add(socket);
 
-      socket.on('message', async (data: RawData) => {
+      socket.on("message", async (data: RawData) => {
         const body = safeJsonParse(toText(data)) as TransportMessage;
-        await this.handleIncoming(socket, body);
+        await this.handleIncoming(socket as SocketWithPrincipal, body);
       });
 
-      socket.on('close', () => {
+      socket.on("close", () => {
         this.detachSocketFromFeeds(socket);
         this.sockets.delete(socket);
       });
 
-      socket.on('error', () => {
+      socket.on("error", () => {
         this.detachSocketFromFeeds(socket);
         this.sockets.delete(socket);
       });
@@ -138,13 +151,14 @@ export class WebSocketServerTransport implements ITransport {
     const outboundConfig = this.config.outbound;
     if (!outboundConfig) {
       throw new Error(
-        'WebSocketServerTransport outbound is not configured. Provide config.outbound to use request/signal/feed.'
+        "WebSocketServerTransport outbound is not configured. Provide config.outbound to use request/signal/feed.",
       );
     }
 
-    this.outboundTransport = outboundConfig instanceof WebSocketClientTransport
-      ? outboundConfig
-      : new WebSocketClientTransport(outboundConfig);
+    this.outboundTransport =
+      outboundConfig instanceof WebSocketClientTransport
+        ? outboundConfig
+        : new WebSocketClientTransport(outboundConfig);
 
     return this.outboundTransport;
   }
@@ -157,42 +171,73 @@ export class WebSocketServerTransport implements ITransport {
     if (this.config.server) {
       this.server = new WebSocketServer({
         server: this.config.server,
-        path: this.config.path
+        path: this.config.path,
       });
       return this.server;
     }
 
     if (!this.config.port) {
-      throw new Error('WebSocketServerTransport requires either a port or an existing HTTP server.');
+      throw new Error(
+        "WebSocketServerTransport requires either a port or an existing HTTP server.",
+      );
     }
 
     this.server = new WebSocketServer({
       port: this.config.port,
       host: this.config.host,
-      path: this.config.path
+      path: this.config.path,
     });
 
     return this.server;
   }
 
-  private async handleIncoming(socket: WebSocket, body: TransportMessage): Promise<void> {
-    const routeName = String(body.route ?? '');
+  private async handleIncoming(
+    socket: SocketWithPrincipal,
+    body: TransportMessage,
+  ): Promise<void> {
+    const routeName = String(body.route ?? "");
     const routeEntry = this.router?.[routeName];
-    const op = body.op ?? 'request';
+    const op = body.op ?? "request";
 
-    if (!routeEntry) {
+    const { allowed, principal } = await this.checkSecurity(socket, {
+      direction: "inbound",
+      transport: "websocket",
+      route: routeName,
+      operation: op,
+      payload: body.payload,
+      meta: body.meta,
+    });
+
+    if (!allowed) {
       if (body.id) {
-        this.replyWithError(socket, body.id, `Route not found: ${routeName}`);
+        this.replyWithError(
+          socket,
+          body.id,
+          `Inbound operation not authorized for route: ${routeName}`,
+          this.toPrincipalMeta(principal),
+        );
       }
       return;
     }
 
-    if (routeEntry.kind === 'feed') {
+    if (!routeEntry) {
+      if (body.id) {
+        this.replyWithError(
+          socket,
+          body.id,
+          `Route not found: ${routeName}`,
+          this.toPrincipalMeta(principal),
+        );
+      }
+      return;
+    }
+
+    if (routeEntry.kind === "feed") {
       await this.handleFeedRpc(socket, routeEntry, body, op);
       return;
     }
 
-    if (op === 'signal' || routeEntry.kind === 'signal') {
+    if (op === "signal" || routeEntry.kind === "signal") {
       try {
         await this.invokeRoute(routeEntry, body);
       } catch {
@@ -203,9 +248,19 @@ export class WebSocketServerTransport implements ITransport {
 
     try {
       const result = await this.invokeRoute(routeEntry, body);
-      this.replyWithPayload(socket, body.id, result);
+      this.replyWithPayload(
+        socket,
+        body.id,
+        result,
+        this.toPrincipalMeta(principal),
+      );
     } catch (error) {
-      this.replyWithError(socket, body.id, error);
+      this.replyWithError(
+        socket,
+        body.id,
+        error,
+        this.toPrincipalMeta(principal),
+      );
     }
   }
 
@@ -213,16 +268,20 @@ export class WebSocketServerTransport implements ITransport {
     socket: WebSocket,
     route: CompiledRoute,
     body: TransportMessage,
-    op: string
+    op: string,
   ): Promise<void> {
     const rawPayload = body.payload;
     const parsedPayload = route.parser ? route.parser(rawPayload) : rawPayload;
-    const payloadRecord = body.payload && typeof body.payload === 'object'
-      ? body.payload as { hash?: unknown }
-      : undefined;
-    const hash = String(payloadRecord?.hash ?? createFeedHash(route.route, parsedPayload, { hashKey: route.hashKey }));
+    const payloadRecord =
+      body.payload && typeof body.payload === "object"
+        ? (body.payload as { hash?: unknown })
+        : undefined;
+    const hash = String(
+      payloadRecord?.hash ??
+        createFeedHash(route.route, parsedPayload, { hashKey: route.hashKey }),
+    );
 
-    if (op === 'feed_stop') {
+    if (op === "feed_stop") {
       const running = this.runningFeeds.get(hash);
       if (running) {
         running.subscribers.delete(socket);
@@ -238,7 +297,10 @@ export class WebSocketServerTransport implements ITransport {
     const existing = this.runningFeeds.get(hash);
     if (existing) {
       existing.subscribers.add(socket);
-      this.replyWithPayload(socket, body.id, { exchange: existing.exchange, hash });
+      this.replyWithPayload(socket, body.id, {
+        exchange: existing.exchange,
+        hash,
+      });
       return;
     }
 
@@ -246,13 +308,13 @@ export class WebSocketServerTransport implements ITransport {
       key: hash,
       exchange: toFeedExchange(hash),
       subscribers: new Set([socket]),
-      abortController: new AbortController()
+      abortController: new AbortController(),
     };
 
     this.runningFeeds.set(hash, runningFeed);
     this.replyWithPayload(socket, body.id, {
       exchange: runningFeed.exchange,
-      hash
+      hash,
     });
 
     const iterable = ensureFeedIterable(route.handler(parsedPayload));
@@ -261,7 +323,10 @@ export class WebSocketServerTransport implements ITransport {
     });
   }
 
-  private async publishFeed(runningFeed: RunningFeed, iterable: AsyncIterable<unknown>): Promise<void> {
+  private async publishFeed(
+    runningFeed: RunningFeed,
+    iterable: AsyncIterable<unknown>,
+  ): Promise<void> {
     try {
       for await (const chunk of iterable) {
         if (runningFeed.abortController.signal.aborted) {
@@ -270,30 +335,38 @@ export class WebSocketServerTransport implements ITransport {
 
         this.broadcastFeedChunk(runningFeed, {
           hash: runningFeed.key,
-          type: 'next',
-          payload: chunk
+          type: "next",
+          payload: chunk,
         });
       }
 
       this.broadcastFeedChunk(runningFeed, {
         hash: runningFeed.key,
-        type: 'done'
+        type: "done",
       });
     } catch (error) {
       this.broadcastFeedChunk(runningFeed, {
         hash: runningFeed.key,
-        type: 'error',
-        message: error instanceof Error ? error.message : String(error)
+        type: "error",
+        message: error instanceof Error ? error.message : String(error),
       });
     } finally {
       this.runningFeeds.delete(runningFeed.key);
     }
   }
 
-  private broadcastFeedChunk(runningFeed: RunningFeed, chunk: { hash: string; type: 'next' | 'done' | 'error'; payload?: unknown; message?: string }): void {
+  private broadcastFeedChunk(
+    runningFeed: RunningFeed,
+    chunk: {
+      hash: string;
+      type: "next" | "done" | "error";
+      payload?: unknown;
+      message?: string;
+    },
+  ): void {
     const payload = JSON.stringify({
-      channel: 'feed',
-      ...chunk
+      channel: "feed",
+      ...chunk,
     } satisfies ScompFeedChunkEnvelope);
 
     for (const socket of runningFeed.subscribers) {
@@ -313,26 +386,28 @@ export class WebSocketServerTransport implements ITransport {
 
       runningFeed.subscribers.delete(socket);
       if (runningFeed.subscribers.size === 0) {
-        runningFeed.abortController.abort(new StreamClosedError(runningFeed.key));
+        runningFeed.abortController.abort(
+          new StreamClosedError(runningFeed.key),
+        );
       }
     }
   }
 
-  private async invokeRoute(route: CompiledRoute, message: TransportMessage): Promise<unknown> {
+  private async invokeRoute(
+    route: CompiledRoute,
+    message: TransportMessage,
+  ): Promise<unknown> {
     const rawPayload = message.payload;
     const payload = route.parser ? route.parser(rawPayload) : rawPayload;
     return route.handler(payload);
   }
 
-  private replyWithPayload(socket: WebSocket, id: string | undefined, payload: unknown): void {
-    if (!id || socket.readyState !== WebSocket.OPEN) {
-      return;
-    }
-
-    socket.send(JSON.stringify({ id, payload } satisfies ScompTransportResponseEnvelope));
-  }
-
-  private replyWithError(socket: WebSocket, id: string | undefined, error: unknown): void {
+  private replyWithPayload(
+    socket: WebSocket,
+    id: string | undefined,
+    payload: unknown,
+    meta?: ScompTransportMessageMeta,
+  ): void {
     if (!id || socket.readyState !== WebSocket.OPEN) {
       return;
     }
@@ -340,12 +415,86 @@ export class WebSocketServerTransport implements ITransport {
     socket.send(
       JSON.stringify({
         id,
-        error: error instanceof Error ? error.message : String(error)
-      } satisfies ScompTransportResponseEnvelope)
+        payload,
+        meta,
+      } satisfies ScompTransportResponseEnvelope),
     );
+  }
+
+  private replyWithError(
+    socket: WebSocket,
+    id: string | undefined,
+    error: unknown,
+    meta?: ScompTransportMessageMeta,
+  ): void {
+    if (!id || socket.readyState !== WebSocket.OPEN) {
+      return;
+    }
+
+    socket.send(
+      JSON.stringify({
+        id,
+        error: error instanceof Error ? error.message : String(error),
+        meta,
+      } satisfies ScompTransportResponseEnvelope),
+    );
+  }
+
+  private toPrincipalMeta(
+    principal: ScompTransportPrincipal | undefined,
+  ): ScompTransportMessageMeta | undefined {
+    if (!principal) {
+      return undefined;
+    }
+
+    return {
+      auth: {
+        subject: principal.subject,
+        tenantId: principal.tenantId,
+        scopes: principal.scopes,
+        claims: principal.claims,
+        issuedAt: principal.issuedAt,
+        expiresAt: principal.expiresAt,
+        authType: principal.authType,
+      },
+      tenantId: principal.tenantId,
+    };
+  }
+
+  private async checkSecurity(
+    socket: SocketWithPrincipal,
+    ctx: Omit<ScompTransportSecurityContext, "principal">,
+  ): Promise<{ allowed: boolean; principal?: ScompTransportPrincipal }> {
+    const policy = this.config.security;
+    if (!policy) {
+      return { allowed: true, principal: socket.scompPrincipal };
+    }
+
+    const principal = policy.authenticate
+      ? await policy.authenticate(ctx)
+      : (socket.scompPrincipal ?? undefined);
+
+    if (principal) {
+      socket.scompPrincipal = principal;
+    }
+
+    if (!policy.authorize) {
+      return { allowed: true, principal: principal ?? undefined };
+    }
+
+    const allowed = Boolean(
+      await policy.authorize({
+        ...ctx,
+        principal: principal ?? undefined,
+      }),
+    );
+
+    return { allowed, principal: principal ?? undefined };
   }
 }
 
-export function createWebSocketServerTransport(config: WebSocketServerTransportConfig): WebSocketServerTransport {
+export function createWebSocketServerTransport(
+  config: WebSocketServerTransportConfig,
+): WebSocketServerTransport {
   return new WebSocketServerTransport(config);
 }
