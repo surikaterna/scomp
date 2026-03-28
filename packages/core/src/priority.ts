@@ -1,7 +1,11 @@
 import type {
+  ScompPriorityClass as TransportPriorityClass,
+  ScompPriorityHint,
   ScompTransportMessageMeta,
   ScompTransportOperation,
 } from '@scomp/types'
+
+export type ScompPriorityClass = TransportPriorityClass
 
 const PRIORITY_INDEX_TO_CLASS = ['P0', 'P1', 'P2', 'P3', 'P4'] as const
 
@@ -15,13 +19,7 @@ const PRIORITY_CLASS_TO_INDEX: Record<ScompPriorityClass, PriorityIndex> = {
   P4: 4
 }
 
-export type ScompPriorityClass = (typeof PRIORITY_INDEX_TO_CLASS)[number]
-
-export type ScompPriorityValue =
-  | ScompPriorityClass
-  | Lowercase<ScompPriorityClass>
-  | PriorityIndex
-  | `${PriorityIndex}`
+export type ScompPriorityValue = ScompPriorityHint
 
 export interface ScompPriorityResolutionContext {
   route: string

@@ -2,7 +2,8 @@ import assert from 'node:assert/strict'
 import {
   SCOMP_DEFAULT_OPERATION_PRIORITIES,
   normalizeScompPriority,
-  resolveScompPriority
+  resolveScompPriority,
+  type ScompPriorityResolutionContext
 } from '../src'
 
 describe('priority policy resolution', () => {
@@ -57,6 +58,22 @@ describe('priority policy resolution', () => {
     assert.equal(decision.source, 'metadata_hint')
     assert.equal(decision.requested, 'P1')
     assert.equal(decision.effective, 'P1')
+  })
+
+  it('accepts typed metadata priorityClass and deadline hints without breaking resolution', () => {
+    const decision = resolveScompPriority({
+      route: 'users.get',
+      operation: 'request',
+      meta: {
+        priorityClass: 'P0',
+        deadlineAtMs: Date.now() + 1_000,
+        targetLatencyMs: 25
+      }
+    })
+
+    assert.equal(decision.source, 'metadata_hint')
+    assert.equal(decision.requested, 'P0')
+    assert.equal(decision.effective, 'P0')
   })
 
   it('disables metadata hints when policy forbids them', () => {
@@ -163,7 +180,7 @@ describe('priority policy resolution', () => {
       {
         metadataHintSelector: ({ meta }) => meta?.tags?.qos,
         routeOverrides: {
-          'feeds.live': (context) =>
+          'feeds.live': (context: ScompPriorityResolutionContext) =>
             context.operation === 'feed_start' ? 'P1' : 'P2'
         }
       }
