@@ -28,6 +28,10 @@ Fields:
 - payload: Operation input payload.
 - meta (optional): Transport metadata for cross-cutting concerns.
 
+Reserved route namespace:
+
+- `__scomp.*` is reserved for SCOMP control-plane request routes and MUST NOT be used by application routes.
+
 Example metadata:
 
 ```json
