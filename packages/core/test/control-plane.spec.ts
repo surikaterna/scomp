@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {
   SCOMP_CONTROL_PLANE_ROUTE_NAMES,
   createNodeLocalDiscoverHandler,
+  createNodeLocalHealthHandler,
   createNodeLocalResolveHandler,
   composeRouterWithControlPlaneRoutes,
   createControlPlaneRouter,
@@ -223,5 +224,83 @@ describe('control-plane router composition', () => {
     });
 
     assert.throws(() => resolve({ route: '   ' }), /requires a route string/);
+  });
+
+  it('provides shallow and deep health responses with aggregated status', async () => {
+    const appRouter: CompiledRouter = {
+      'users.getUser': {
+        route: 'users.getUser',
+        kind: 'request',
+        handler: async () => ({ id: 1 })
+      },
+      'orders.list': {
+        route: 'orders.list',
+        kind: 'request',
+        handler: async () => ([])
+      }
+    };
+
+    const health = createNodeLocalHealthHandler(appRouter, {
+      nodeId: 'node-health',
+      now: () => new Date('2026-03-28T16:00:00.000Z'),
+      checks: [
+        async () => ({ name: 'users.db', status: 'ok' }),
+        async () => ({ name: 'orders.replica', status: 'degraded', message: 'replica lag' })
+      ]
+    });
+
+    const shallow = await health({ mode: 'shallow' });
+    assert.deepEqual(shallow, {
+      status: 'ok',
+      checks: undefined,
+      node: { id: 'node-health' },
+      timestamp: '2026-03-28T16:00:00.000Z'
+    });
+
+    const deepVerbose = await health({ mode: 'deep', verbose: true });
+    assert.equal(deepVerbose.status, 'degraded');
+    assert.deepEqual(deepVerbose.checks, [
+      {
+        name: 'node.router',
+        status: 'ok',
+        message: 'Compiled routes available: 2'
+      },
+      {
+        name: 'users.db',
+        status: 'ok'
+      },
+      {
+        name: 'orders.replica',
+        status: 'degraded',
+        message: 'replica lag'
+      }
+    ]);
+  });
+
+  it('filters deep health checks by target service when requested', async () => {
+    const appRouter: CompiledRouter = {
+      'users.getUser': {
+        route: 'users.getUser',
+        kind: 'request',
+        handler: async () => ({ id: 1 })
+      }
+    };
+
+    const health = createNodeLocalHealthHandler(appRouter, {
+      nodeId: 'node-health',
+      checks: [
+        async () => ({ name: 'users.db', status: 'ok' }),
+        async () => ({ name: 'orders.db', status: 'down' })
+      ]
+    });
+
+    const usersOnly = await health({ mode: 'deep', verbose: true, service: 'users' });
+    assert.equal(usersOnly.status, 'ok');
+    assert.deepEqual(usersOnly.checks, [
+      {
+        name: 'users.db',
+        status: 'ok'
+      }
+    ]);
   });
 });

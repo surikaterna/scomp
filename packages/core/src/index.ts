@@ -20,9 +20,13 @@ export {
 
 export {
   createNodeLocalDiscoverHandler,
+  createNodeLocalHealthHandler,
   createNodeLocalResolveHandler,
   composeRouterWithControlPlaneRoutes,
   createControlPlaneRouter,
+  type NodeLocalHealthCheckResult,
+  type NodeLocalHealthHandlerContext,
+  type NodeLocalHealthHandlerOptions,
   SCOMP_CONTROL_PLANE_ROUTE_NAMES,
   type NodeLocalDiscoverHandlerOptions,
   type NodeLocalResolveHandlerOptions,

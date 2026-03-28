@@ -40,6 +40,23 @@ export interface NodeLocalResolveHandlerOptions {
   includeReservedRoutes?: boolean;
 }
 
+export interface NodeLocalHealthCheckResult {
+  name: string;
+  status: 'ok' | 'degraded' | 'down';
+  message?: string;
+}
+
+export interface NodeLocalHealthHandlerContext {
+  router: CompiledRouter;
+  request: ScompControlPlaneHealthRequest;
+}
+
+export interface NodeLocalHealthHandlerOptions {
+  nodeId: string;
+  now?: () => Date;
+  checks?: Array<(context: NodeLocalHealthHandlerContext) => NodeLocalHealthCheckResult | Promise<NodeLocalHealthCheckResult>>;
+}
+
 interface ServiceInventory {
   name: string;
   routes: Array<string>;
@@ -155,6 +172,79 @@ function buildCandidateChannels(requestedChannel?: string): Array<string> {
   }
 
   return [normalizedRequestedChannel, 'current-channel'];
+}
+
+function aggregateHealthStatus(
+  checks: Array<NodeLocalHealthCheckResult>,
+): 'ok' | 'degraded' | 'down' {
+  if (checks.some((check) => check.status === 'down')) {
+    return 'down';
+  }
+
+  if (checks.some((check) => check.status === 'degraded')) {
+    return 'degraded';
+  }
+
+  return 'ok';
+}
+
+function isCheckRelevantForService(checkName: string, serviceName?: string): boolean {
+  if (!serviceName) {
+    return true;
+  }
+
+  return checkName === serviceName || checkName.startsWith(`${serviceName}.`);
+}
+
+function createDefaultHealthChecks(router: CompiledRouter): Array<NodeLocalHealthCheckResult> {
+  const routeCount = Object.keys(router).length;
+  return [
+    {
+      name: 'node.router',
+      status: routeCount > 0 ? 'ok' : 'degraded',
+      message: routeCount > 0
+        ? `Compiled routes available: ${routeCount}`
+        : 'No compiled routes were found on this node.'
+    }
+  ];
+}
+
+export function createNodeLocalHealthHandler(
+  appRouter: CompiledRouter,
+  options: NodeLocalHealthHandlerOptions,
+): (request: ScompControlPlaneHealthRequest) => Promise<ScompControlPlaneHealthResponse> {
+  const {
+    nodeId,
+    now = () => new Date(),
+    checks = []
+  } = options;
+
+  return async (request) => {
+    const mode = request.mode ?? 'shallow';
+    const shouldIncludeChecks = request.verbose === true;
+    const baseChecks = createDefaultHealthChecks(appRouter);
+
+    let executedChecks = baseChecks;
+    if (mode === 'deep' && checks.length > 0) {
+      const customChecks = await Promise.all(
+        checks.map((runCheck) => runCheck({
+          router: appRouter,
+          request
+        }))
+      );
+      executedChecks = [...baseChecks, ...customChecks];
+    }
+
+    const filteredChecks = executedChecks.filter((check) => isCheckRelevantForService(check.name, request.service));
+    const status = aggregateHealthStatus(filteredChecks);
+
+    return {
+      status,
+      checks: shouldIncludeChecks ? filteredChecks : undefined,
+      node: { id: nodeId },
+      timestamp: now().toISOString()
+    };
+  };
 }
 
 export function createNodeLocalResolveHandler(
