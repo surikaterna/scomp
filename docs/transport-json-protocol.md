@@ -136,6 +136,131 @@ Stream error:
 - Leaves a feed stream.
 - Client sends request envelope with op=feed_stop and payload/hash metadata.
 
+## Control-Plane Routes (`__scomp.*`)
+
+Control-plane operations are implemented as ordinary `op: request` routes and therefore reuse the same envelope contract.
+
+### `__scomp.discover`
+
+Purpose:
+
+- Return node-local service inventory and route capabilities.
+
+Request payload:
+
+```json
+{
+  "servicePrefix": "users",
+  "includeRoutes": true
+}
+```
+
+Response payload:
+
+```json
+{
+  "services": [
+    {
+      "name": "users",
+      "routes": ["users.getUser", "users.list"]
+    }
+  ],
+  "node": {
+    "id": "node-a"
+  },
+  "generatedAt": "2026-03-28T15:00:00.000Z",
+  "ttlMs": 1500
+}
+```
+
+### `__scomp.resolve`
+
+Purpose:
+
+- Resolve a target application route and return endpoint/channel selection data.
+
+Request payload:
+
+```json
+{
+  "route": "users.getUser",
+  "channel": "ws:alternate"
+}
+```
+
+Response payload (current-channel fallback example):
+
+```json
+{
+  "resolved": true,
+  "fallbackUsed": true,
+  "endpoint": {
+    "route": "users.getUser",
+    "channel": "current-channel",
+    "transport": "websocket"
+  },
+  "candidates": [
+    {
+      "route": "users.getUser",
+      "channel": "ws:alternate",
+      "transport": "websocket"
+    },
+    {
+      "route": "users.getUser",
+      "channel": "current-channel",
+      "transport": "websocket"
+    }
+  ]
+}
+```
+
+### `__scomp.health`
+
+Purpose:
+
+- Return node-local health status with shallow/deep modes.
+
+Request payload:
+
+```json
+{
+  "mode": "deep",
+  "verbose": true,
+  "service": "users"
+}
+```
+
+Response payload:
+
+```json
+{
+  "status": "ok",
+  "checks": [
+    {
+      "name": "users.db",
+      "status": "ok"
+    }
+  ],
+  "node": {
+    "id": "node-health"
+  },
+  "timestamp": "2026-03-28T16:00:00.000Z"
+}
+```
+
+### Security posture
+
+- Treat all `__scomp.*` routes as privileged and internal-only by default.
+- Require explicit authorization policy per control-plane route before external exposure.
+- Keep discover/resolve responses minimal and avoid leaking internal topology details unless explicitly needed.
+- Keep non-verbose health responses lightweight; expose detailed checks only to authorized callers.
+
+### Compatibility notes
+
+- No transport protocol operation changes are required for control-plane support.
+- Existing clients can call control-plane routes using standard request envelopes.
+- Clients that do not call `__scomp.*` routes are unaffected.
+
 ## RabbitMQ Mapping
 
 - request: message to scomp.rpc.<service>, with reply_to + correlation_id.
