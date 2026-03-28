@@ -8,9 +8,11 @@ export {
 } from "./network";
 
 export {
+  createRuntimeNeutralFeedHasher,
   createFeedHash,
   SCOMP_CONTROL_PLANE_NAMESPACE,
   type FeedHashOptions,
+  type ScompFeedHashFunction,
   type ScompControlPlaneDiscoverRequest,
   type ScompControlPlaneDiscoveredService,
   type ScompControlPlaneDiscoverResponse,
