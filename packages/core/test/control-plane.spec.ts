@@ -6,6 +6,7 @@ import {
   createNodeLocalResolveHandler,
   composeRouterWithControlPlaneRoutes,
   createControlPlaneRouter,
+  getControlPlaneRouteSecurityAdvice,
   type CompiledRouter,
   type ScompControlPlaneRouteHandlers
 } from '../src';
@@ -300,6 +301,34 @@ describe('control-plane router composition', () => {
       {
         name: 'users.db',
         status: 'ok'
+      }
+    ]);
+  });
+
+  it('returns explicit security posture guidance for control-plane routes', () => {
+    const securityAdvice = getControlPlaneRouteSecurityAdvice();
+
+    assert.deepEqual(securityAdvice, [
+      {
+        route: '__scomp.discover',
+        defaultExposure: 'internal-only',
+        requiredAuthorization: 'explicit-policy',
+        recommendedScopes: ['scomp:control:discover'],
+        notes: 'Discovery should be filtered to avoid leaking sensitive service topology.'
+      },
+      {
+        route: '__scomp.resolve',
+        defaultExposure: 'internal-only',
+        requiredAuthorization: 'explicit-policy',
+        recommendedScopes: ['scomp:control:resolve'],
+        notes: 'Resolve responses should only include endpoint metadata required by the caller.'
+      },
+      {
+        route: '__scomp.health',
+        defaultExposure: 'internal-only',
+        requiredAuthorization: 'explicit-policy',
+        recommendedScopes: ['scomp:control:health'],
+        notes: 'Default health output should remain minimal unless verbose checks are authorized.'
       }
     ]);
   });

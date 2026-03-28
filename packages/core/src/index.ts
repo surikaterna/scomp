@@ -24,6 +24,8 @@ export {
   createNodeLocalResolveHandler,
   composeRouterWithControlPlaneRoutes,
   createControlPlaneRouter,
+  getControlPlaneRouteSecurityAdvice,
+  type ControlPlaneRouteSecurityAdvice,
   type NodeLocalHealthCheckResult,
   type NodeLocalHealthHandlerContext,
   type NodeLocalHealthHandlerOptions,

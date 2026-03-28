@@ -57,6 +57,14 @@ export interface NodeLocalHealthHandlerOptions {
   checks?: Array<(context: NodeLocalHealthHandlerContext) => NodeLocalHealthCheckResult | Promise<NodeLocalHealthCheckResult>>;
 }
 
+export interface ControlPlaneRouteSecurityAdvice {
+  route: ScompControlPlaneRoute;
+  defaultExposure: 'internal-only';
+  requiredAuthorization: 'explicit-policy';
+  recommendedScopes: Array<string>;
+  notes: string;
+}
+
 interface ServiceInventory {
   name: string;
   routes: Array<string>;
@@ -340,6 +348,32 @@ export function composeRouterWithControlPlaneRoutes(
   }
 
   return composed;
+}
+
+export function getControlPlaneRouteSecurityAdvice(): Array<ControlPlaneRouteSecurityAdvice> {
+  return [
+    {
+      route: CONTROL_PLANE_ROUTE_NAMES.discover,
+      defaultExposure: 'internal-only',
+      requiredAuthorization: 'explicit-policy',
+      recommendedScopes: ['scomp:control:discover'],
+      notes: 'Discovery should be filtered to avoid leaking sensitive service topology.'
+    },
+    {
+      route: CONTROL_PLANE_ROUTE_NAMES.resolve,
+      defaultExposure: 'internal-only',
+      requiredAuthorization: 'explicit-policy',
+      recommendedScopes: ['scomp:control:resolve'],
+      notes: 'Resolve responses should only include endpoint metadata required by the caller.'
+    },
+    {
+      route: CONTROL_PLANE_ROUTE_NAMES.health,
+      defaultExposure: 'internal-only',
+      requiredAuthorization: 'explicit-policy',
+      recommendedScopes: ['scomp:control:health'],
+      notes: 'Default health output should remain minimal unless verbose checks are authorized.'
+    }
+  ];
 }
 
 export {
