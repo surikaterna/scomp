@@ -76,6 +76,24 @@ describe('priority policy resolution', () => {
     assert.equal(decision.effective, 'P0')
   })
 
+  it('prefers meta.priority when metadata hints conflict', () => {
+    const decision = resolveScompPriority({
+      route: 'users.get',
+      operation: 'request',
+      meta: {
+        priority: 'P3',
+        priorityClass: 'P1',
+        tags: {
+          priority: 'P0'
+        }
+      }
+    })
+
+    assert.equal(decision.source, 'metadata_hint')
+    assert.equal(decision.requested, 'P3')
+    assert.equal(decision.effective, 'P3')
+  })
+
   it('disables metadata hints when policy forbids them', () => {
     const decision = resolveScompPriority(
       {
