@@ -1,21 +1,8 @@
-module.exports = {
-  testEnvironment: 'node',
-  roots: ['<rootDir>/test'],
-  testMatch: ['**/*.spec.ts'],
-  transform: {
-    '^.+\\.[tj]sx?$': ['babel-jest', {
-      babelrc: false,
-      configFile: false,
-      presets: [
-        ['@babel/preset-env', { targets: { node: 'current' } }],
-        '@babel/preset-typescript'
-      ]
-    }]
-  },
-  transformIgnorePatterns: [
-    '/node_modules/(?!uuid/)'
-  ],
+const { createJestConfig } = require('../../jest.base.cjs')
+
+module.exports = createJestConfig({
+  rootDir: __dirname,
+  transformPattern: '^.+\\.[tj]sx?$',
+  transformIgnorePatterns: ['/node_modules/(?!\\.pnpm/uuid@|uuid/)'],
   testTimeout: 15000,
-  moduleFileExtensions: ['ts', 'js', 'json'],
-  modulePathIgnorePatterns: ['<rootDir>/dist']
-};
+})
