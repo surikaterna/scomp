@@ -686,6 +686,285 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
     assert.deepEqual(await pending, { ok: true });
   });
 
+  it("encodes feed start and stop envelopes consistently across transports", async () => {
+    const rabbitFake = createFakeChannel();
+    mockConnect.mockResolvedValue(rabbitFake.connection);
+
+    const rabbit = new RabbitMQTransport({ url: "amqp://test" });
+    const websocket = createPatchedWebSocketClient();
+
+    const rabbitIterator = rabbit
+      .feed("users.live", { room: "alpha" })
+      [Symbol.asyncIterator]();
+    const websocketIterator = websocket.client
+      .feed("users.live", { room: "alpha" })
+      [Symbol.asyncIterator]();
+
+    const rabbitNext = rabbitIterator.next();
+    const websocketNext = websocketIterator.next();
+
+    await waitFor(() => rabbitFake.channel.sendToQueue.mock.calls.length > 0);
+    await waitFor(() => websocket.sentPayloads.length > 0);
+
+    const rabbitFeedStartCall = rabbitFake.channel.sendToQueue.mock.calls[0];
+    const rabbitFeedStartEnvelope = JSON.parse(
+      Buffer.from(rabbitFeedStartCall[1]).toString("utf8"),
+    ) as Record<string, unknown>;
+    const websocketFeedStartEnvelope = JSON.parse(websocket.sentPayloads[0]) as Record<
+      string,
+      unknown
+    >;
+
+    assert.deepEqual(
+      stripId(websocketFeedStartEnvelope),
+      rabbitFeedStartEnvelope,
+    );
+
+    const rabbitFeedStartOptions = rabbitFeedStartCall[2] as {
+      correlationId: string;
+      replyTo: string;
+    };
+    const rabbitReplyConsumer = rabbitFake.queueConsumers.get("generated-1");
+    const feedHash = "feed-alpha";
+    const feedExchange = `scomp.live.${feedHash}`;
+
+    await rabbitReplyConsumer?.(
+      createMessage(
+        {
+          payload: {
+            exchange: feedExchange,
+            hash: feedHash,
+          },
+        },
+        {
+          properties: {
+            correlationId: rabbitFeedStartOptions.correlationId,
+            replyTo: rabbitFeedStartOptions.replyTo,
+          },
+        },
+      ),
+    );
+    (
+      websocket.client as unknown as {
+        handleIncoming: (message: unknown) => void;
+      }
+    ).handleIncoming({
+      id: String(websocketFeedStartEnvelope.id),
+      payload: {
+        exchange: feedExchange,
+        hash: feedHash,
+      },
+    });
+
+    await waitFor(() => rabbitFake.queueConsumers.has("generated-2"));
+
+    const rabbitFeedConsumer = rabbitFake.queueConsumers.get("generated-2");
+    await rabbitFeedConsumer?.(
+      createMessage({
+        channel: "feed",
+        hash: feedHash,
+        type: "next",
+        payload: { seq: 1 },
+      }),
+    );
+    (
+      websocket.client as unknown as {
+        handleIncoming: (message: unknown) => void;
+      }
+    ).handleIncoming({
+      channel: "feed",
+      hash: feedHash,
+      type: "next",
+      payload: { seq: 1 },
+    });
+
+    const [rabbitFirst, websocketFirst] = await Promise.all([
+      rabbitNext,
+      websocketNext,
+    ]);
+    assert.deepEqual(rabbitFirst.value, { seq: 1 });
+    assert.equal(rabbitFirst.done, false);
+    assert.deepEqual(websocketFirst.value, { seq: 1 });
+    assert.equal(websocketFirst.done, false);
+
+    const rabbitReturnPromise = rabbitIterator.return?.(undefined);
+    const websocketReturnPromise = websocketIterator.return?.(undefined);
+
+    if (!rabbitReturnPromise || !websocketReturnPromise) {
+      throw new Error("Feed iterators do not support return().");
+    }
+
+    await waitFor(() => rabbitFake.channel.sendToQueue.mock.calls.length > 1);
+    await waitFor(() => websocket.sentPayloads.length > 1);
+
+    const rabbitFeedStopCall = rabbitFake.channel.sendToQueue.mock.calls[1];
+    const rabbitFeedStopEnvelope = JSON.parse(
+      Buffer.from(rabbitFeedStopCall[1]).toString("utf8"),
+    ) as Record<string, unknown>;
+    const websocketFeedStopEnvelope = JSON.parse(websocket.sentPayloads[1]) as Record<
+      string,
+      unknown
+    >;
+
+    assert.deepEqual(
+      stripId(websocketFeedStopEnvelope),
+      rabbitFeedStopEnvelope,
+    );
+    assert.deepEqual(rabbitFeedStopEnvelope.payload, { hash: feedHash });
+    assert.deepEqual(websocketFeedStopEnvelope.payload, { hash: feedHash });
+
+    const rabbitFeedStopOptions = rabbitFeedStopCall[2] as {
+      correlationId: string;
+      replyTo: string;
+    };
+    await rabbitReplyConsumer?.(
+      createMessage(
+        { payload: { ok: true } },
+        {
+          properties: {
+            correlationId: rabbitFeedStopOptions.correlationId,
+            replyTo: rabbitFeedStopOptions.replyTo,
+          },
+        },
+      ),
+    );
+    (
+      websocket.client as unknown as {
+        handleIncoming: (message: unknown) => void;
+      }
+    ).handleIncoming({
+      id: String(websocketFeedStopEnvelope.id),
+      payload: { ok: true },
+    });
+
+    const [rabbitReturn, websocketReturn] = await Promise.all([
+      rabbitReturnPromise,
+      websocketReturnPromise,
+    ]);
+
+    assert.equal(rabbitReturn.done, true);
+    assert.equal(websocketReturn.done, true);
+  });
+
+  it("propagates feed error chunks with consistent rejections", async () => {
+    const rabbitFake = createFakeChannel();
+    mockConnect.mockResolvedValue(rabbitFake.connection);
+
+    const rabbit = new RabbitMQTransport({ url: "amqp://test" });
+    const websocket = createPatchedWebSocketClient();
+
+    const rabbitIterator = rabbit
+      .feed("users.live", { room: "alpha" })
+      [Symbol.asyncIterator]();
+    const websocketIterator = websocket.client
+      .feed("users.live", { room: "alpha" })
+      [Symbol.asyncIterator]();
+
+    const rabbitNext = rabbitIterator.next();
+    const websocketNext = websocketIterator.next();
+
+    await waitFor(() => rabbitFake.channel.sendToQueue.mock.calls.length > 0);
+    await waitFor(() => websocket.sentPayloads.length > 0);
+
+    const rabbitFeedStartCall = rabbitFake.channel.sendToQueue.mock.calls[0];
+    const rabbitFeedStartOptions = rabbitFeedStartCall[2] as {
+      correlationId: string;
+      replyTo: string;
+    };
+    const websocketFeedStartEnvelope = JSON.parse(websocket.sentPayloads[0]) as {
+      id: string;
+    };
+
+    const rabbitReplyConsumer = rabbitFake.queueConsumers.get("generated-1");
+    const feedHash = "feed-error";
+    const feedExchange = `scomp.live.${feedHash}`;
+
+    await rabbitReplyConsumer?.(
+      createMessage(
+        {
+          payload: {
+            exchange: feedExchange,
+            hash: feedHash,
+          },
+        },
+        {
+          properties: {
+            correlationId: rabbitFeedStartOptions.correlationId,
+            replyTo: rabbitFeedStartOptions.replyTo,
+          },
+        },
+      ),
+    );
+    (
+      websocket.client as unknown as {
+        handleIncoming: (message: unknown) => void;
+      }
+    ).handleIncoming({
+      id: websocketFeedStartEnvelope.id,
+      payload: {
+        exchange: feedExchange,
+        hash: feedHash,
+      },
+    });
+
+    await waitFor(() => rabbitFake.queueConsumers.has("generated-2"));
+    const rabbitFeedConsumer = rabbitFake.queueConsumers.get("generated-2");
+
+    await rabbitFeedConsumer?.(
+      createMessage({
+        channel: "feed",
+        hash: feedHash,
+        type: "error",
+        message: "feed exploded",
+      }),
+    );
+    (
+      websocket.client as unknown as {
+        handleIncoming: (message: unknown) => void;
+      }
+    ).handleIncoming({
+      channel: "feed",
+      hash: feedHash,
+      type: "error",
+      message: "feed exploded",
+    });
+
+    await waitFor(() => rabbitFake.channel.sendToQueue.mock.calls.length > 1);
+    await waitFor(() => websocket.sentPayloads.length > 1);
+
+    const rabbitFeedStopCall = rabbitFake.channel.sendToQueue.mock.calls[1];
+    const rabbitFeedStopOptions = rabbitFeedStopCall[2] as {
+      correlationId: string;
+      replyTo: string;
+    };
+    const websocketFeedStopEnvelope = JSON.parse(websocket.sentPayloads[1]) as {
+      id: string;
+    };
+
+    await rabbitReplyConsumer?.(
+      createMessage(
+        { payload: { ok: true } },
+        {
+          properties: {
+            correlationId: rabbitFeedStopOptions.correlationId,
+            replyTo: rabbitFeedStopOptions.replyTo,
+          },
+        },
+      ),
+    );
+    (
+      websocket.client as unknown as {
+        handleIncoming: (message: unknown) => void;
+      }
+    ).handleIncoming({
+      id: websocketFeedStopEnvelope.id,
+      payload: { ok: true },
+    });
+
+    await assert.rejects(() => rabbitNext, /feed exploded/);
+    await assert.rejects(() => websocketNext, /feed exploded/);
+  });
+
   it("produces rabbit feed chunks that websocket feed decoder accepts", async () => {
     const rabbitFake = createFakeChannel();
     mockConnect.mockResolvedValue(rabbitFake.connection);
