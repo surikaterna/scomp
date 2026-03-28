@@ -1,8 +1,14 @@
-# SCOMP Transport JSON Protocol
+# SCOMP JSON Transport Protocol
 
-This protocol is transport-agnostic and is used by RabbitMQ and WebSocket transports.
+This document defines the JSON message envelopes used by SCOMP transports.
 
-## Request envelope
+The same logical schema is used for both RabbitMQ and WebSocket transports.
+- RabbitMQ: JSON is carried in AMQP message bodies.
+- WebSocket: JSON is carried in text frames.
+
+## Core Envelope Types
+
+### Request Envelope (Client -> Server)
 
 ```json
 {
@@ -14,15 +20,14 @@ This protocol is transport-agnostic and is used by RabbitMQ and WebSocket transp
 }
 ```
 
-op values:
-- request
-- signal
-- feed_start
-- feed_stop
+Fields:
+- route: Dot-path route (service.method).
+- op: One of request, signal, feed_start, feed_stop.
+- payload: Operation input payload.
 
-## Response envelope
+### Response Envelope (Server -> Client)
 
-Success:
+Success response:
 
 ```json
 {
@@ -33,17 +38,17 @@ Success:
 }
 ```
 
-Error:
+Error response:
 
 ```json
 {
-  "error": "Route not found"
+  "error": "Route not found: users.getUser"
 }
 ```
 
-## Feed chunk envelope
+### Feed Chunk Envelope (Server -> Client stream)
 
-Next chunk:
+Next item:
 
 ```json
 {
@@ -54,7 +59,7 @@ Next chunk:
 }
 ```
 
-Done:
+Completed stream:
 
 ```json
 {
@@ -62,7 +67,7 @@ Done:
 }
 ```
 
-Error:
+Stream error:
 
 ```json
 {
@@ -71,22 +76,49 @@ Error:
 }
 ```
 
-## RabbitMQ mapping
+## Operation Semantics
 
-- request: queue scomp.rpc.<service>
-- signal: topic exchange scomp.signals with route key
-- feed fanout: exchange scomp.live.<hash>
+### request
+- Unary RPC call.
+- Client sends request envelope with op=request.
+- Server replies with success or error response envelope.
 
-## WebSocket mapping
+### signal
+- Fire-and-forget event.
+- Client sends request envelope with op=signal.
+- No response expected.
 
-Use the exact same envelopes in websocket text frames.
-Only frame transport differs; payload schema is identical.
+### feed_start
+- Starts or joins a feed stream.
+- Client sends request envelope with op=feed_start and payload=input.
+- Server replies with stream bind metadata in payload (exchange/hash for RabbitMQ).
 
-## Pluggable serialization
+### feed_stop
+- Leaves a feed stream.
+- Client sends request envelope with op=feed_stop and payload/hash metadata.
 
-Serializer contract:
+## RabbitMQ Mapping
+
+- request: message to scomp.rpc.<service>, with reply_to + correlation_id.
+- signal: publish to exchange scomp.signals with route as routing key.
+- feed chunks: publish to fanout exchange scomp.live.<hash>.
+
+## WebSocket Mapping
+
+The WebSocket transport should use the same envelopes:
+- Client sends request envelopes as text JSON frames.
+- Server sends response envelopes and feed chunk envelopes as text JSON frames.
+
+No schema changes are needed between RabbitMQ and WebSocket transports; only framing and routing differ.
+
+## Pluggable Serialization
+
+SCOMP supports pluggable serializers by interface:
+
 - stringify(value): string
 - parse(text): value
 - optional contentType
 
-Default is JSON serializer. Custom replacer/reviver serializers can preserve BigInt and Date.
+Default serializer is JSON.stringify/JSON.parse with contentType application/json.
+
+Custom serializers can be used to preserve non-JSON-native values such as BigInt and Date.

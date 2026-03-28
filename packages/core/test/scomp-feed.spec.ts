@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {
+  ScompFeed,
   createScompFeed,
   fromGenerator,
   fromLegacyObservable,
@@ -112,5 +113,45 @@ describe('ScompFeed', () => {
     await consume;
     assert.deepEqual(received, [1, 2]);
     assert.equal(legacy.unsubscribed, true);
+  });
+
+  it('unifies teardown when async iteration is broken early', async () => {
+    const feed = createScompFeed<number>();
+    let unsubscribed = false;
+    feed.onUnsubscribe(() => {
+      unsubscribed = true;
+    });
+
+    const consume = (async () => {
+      const values: Array<number> = [];
+      for await (const value of feed) {
+        values.push(value);
+        break;
+      }
+      return values;
+    })();
+
+    feed.next(10).next(20);
+    const values = await consume;
+
+    assert.deepEqual(values, [10]);
+    assert.equal(unsubscribed, true);
+    assert.equal(feed.isUnsubscribed(), true);
+  });
+
+  it('bridges an async source iterable via constructor', async () => {
+    const source = (async function* () {
+      yield 3;
+      yield 4;
+    })();
+
+    const feed = new ScompFeed<number>(source);
+    const values: Array<number> = [];
+
+    for await (const value of feed) {
+      values.push(value);
+    }
+
+    assert.deepEqual(values, [3, 4]);
   });
 });

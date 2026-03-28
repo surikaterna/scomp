@@ -1,4 +1,8 @@
-export type ScompTransportOperation = 'request' | 'signal' | 'feed_start' | 'feed_stop';
+export type ScompTransportOperation =
+  | 'request'
+  | 'signal'
+  | 'feed_start'
+  | 'feed_stop';
 
 export interface ScompTransportRequest {
   route: string;
