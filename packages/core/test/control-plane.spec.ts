@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {
   SCOMP_CONTROL_PLANE_ROUTE_NAMES,
   createNodeLocalDiscoverHandler,
+  createNodeLocalResolveHandler,
   composeRouterWithControlPlaneRoutes,
   createControlPlaneRouter,
   type CompiledRouter,
@@ -144,5 +145,83 @@ describe('control-plane router composition', () => {
       { name: 'orders', routes: ['orders.list'] },
       { name: 'users', routes: ['users.getUser', 'users.list'] }
     ]);
+  });
+
+  it('resolves local routes and applies current-channel fallback', () => {
+    const appRouter: CompiledRouter = {
+      'users.getUser': {
+        route: 'users.getUser',
+        kind: 'request',
+        handler: async () => ({ id: 1 })
+      }
+    };
+
+    const resolve = createNodeLocalResolveHandler(appRouter, {
+      defaultTransport: 'websocket'
+    });
+
+    const direct = resolve({ route: 'users.getUser' });
+    assert.deepEqual(direct, {
+      resolved: true,
+      fallbackUsed: false,
+      endpoint: {
+        route: 'users.getUser',
+        channel: 'current-channel',
+        transport: 'websocket'
+      },
+      candidates: [
+        {
+          route: 'users.getUser',
+          channel: 'current-channel',
+          transport: 'websocket'
+        }
+      ]
+    });
+
+    const withChannelHint = resolve({
+      route: 'users.getUser',
+      channel: 'ws:alternate'
+    });
+    assert.deepEqual(withChannelHint, {
+      resolved: true,
+      fallbackUsed: true,
+      endpoint: {
+        route: 'users.getUser',
+        channel: 'current-channel',
+        transport: 'websocket'
+      },
+      candidates: [
+        {
+          route: 'users.getUser',
+          channel: 'ws:alternate',
+          transport: 'websocket'
+        },
+        {
+          route: 'users.getUser',
+          channel: 'current-channel',
+          transport: 'websocket'
+        }
+      ]
+    });
+  });
+
+  it('returns unresolved for unknown routes and rejects invalid resolve input', () => {
+    const appRouter: CompiledRouter = {
+      'users.getUser': {
+        route: 'users.getUser',
+        kind: 'request',
+        handler: async () => ({ id: 1 })
+      }
+    };
+
+    const resolve = createNodeLocalResolveHandler(appRouter);
+
+    assert.deepEqual(resolve({ route: 'users.missing' }), {
+      resolved: false,
+      fallbackUsed: false,
+      candidates: []
+    });
+
+    assert.throws(() => resolve({ route: '   ' }), /requires a route string/);
   });
 });

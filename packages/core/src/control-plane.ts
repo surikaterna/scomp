@@ -35,6 +35,11 @@ export interface NodeLocalDiscoverHandlerOptions {
   includeReservedRoutes?: boolean;
 }
 
+export interface NodeLocalResolveHandlerOptions {
+  defaultTransport?: string;
+  includeReservedRoutes?: boolean;
+}
+
 interface ServiceInventory {
   name: string;
   routes: Array<string>;
@@ -126,6 +131,71 @@ export function createNodeLocalDiscoverHandler(
       node: { id: nodeId },
       generatedAt: now().toISOString(),
       ttlMs
+    };
+  };
+}
+
+function hasRoute(router: CompiledRouter, routeName: string, includeReservedRoutes: boolean): boolean {
+  const route = router[routeName];
+  if (!route) {
+    return false;
+  }
+
+  if (!includeReservedRoutes && isReservedControlPlaneRoute(route.route)) {
+    return false;
+  }
+
+  return true;
+}
+
+function buildCandidateChannels(requestedChannel?: string): Array<string> {
+  const normalizedRequestedChannel = requestedChannel?.trim();
+  if (!normalizedRequestedChannel) {
+    return ['current-channel'];
+  }
+
+  return [normalizedRequestedChannel, 'current-channel'];
+}
+
+export function createNodeLocalResolveHandler(
+  appRouter: CompiledRouter,
+  options: NodeLocalResolveHandlerOptions = {},
+): (request: ScompControlPlaneResolveRequest) => ScompControlPlaneResolveResponse {
+  const {
+    defaultTransport,
+    includeReservedRoutes = false
+  } = options;
+
+  return (request) => {
+    const routeName = request.route?.trim();
+    if (!routeName) {
+      throw new Error('Resolve request requires a route string.');
+    }
+
+    if (!hasRoute(appRouter, routeName, includeReservedRoutes)) {
+      return {
+        resolved: false,
+        fallbackUsed: false,
+        candidates: []
+      };
+    }
+
+    const channelCandidates = buildCandidateChannels(request.channel);
+    const candidates = channelCandidates.map((channelName) => ({
+      route: routeName,
+      channel: channelName,
+      transport: defaultTransport
+    }));
+
+    const preferred = candidates[0];
+    const fallback = candidates.find((candidate) => candidate.channel === 'current-channel') ?? preferred;
+    const fallbackUsed = Boolean(request.channel?.trim()) && fallback.channel === 'current-channel';
+
+    return {
+      resolved: true,
+      fallbackUsed,
+      endpoint: fallbackUsed ? fallback : preferred,
+      candidates
     };
   };
 }

@@ -20,10 +20,12 @@ export {
 
 export {
   createNodeLocalDiscoverHandler,
+  createNodeLocalResolveHandler,
   composeRouterWithControlPlaneRoutes,
   createControlPlaneRouter,
   SCOMP_CONTROL_PLANE_ROUTE_NAMES,
   type NodeLocalDiscoverHandlerOptions,
+  type NodeLocalResolveHandlerOptions,
   type ScompControlPlaneRouteHandlers
 } from './control-plane'
 
