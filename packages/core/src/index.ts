@@ -19,6 +19,13 @@ export {
 } from './builder'
 
 export {
+  composeRouterWithControlPlaneRoutes,
+  createControlPlaneRouter,
+  SCOMP_CONTROL_PLANE_ROUTE_NAMES,
+  type ScompControlPlaneRouteHandlers
+} from './control-plane'
+
+export {
   type ITransport
 } from './transport'
 
