@@ -1,4 +1,5 @@
-﻿import assert from "node:assert/strict";
+import assert from "node:assert/strict";
+import type { CompiledRoute } from "@scomp/core";
 import { RabbitMQTransport } from "../src";
 import { createScompClient } from "../../client/src";
 import { WebSocketClientTransport } from "../../transport-websocket-client/src";
@@ -120,6 +121,94 @@ function createPatchedWebSocketClient() {
   return { client, sentPayloads };
 }
 
+interface CapturedUnaryRequest {
+  rabbitFake: ReturnType<typeof createFakeChannel>;
+  rabbitPending: Promise<unknown>;
+  websocketPending: Promise<unknown>;
+  websocketClient: WebSocketClientTransport;
+  websocketRequest: Record<string, unknown>;
+  rabbitRequest: Record<string, unknown>;
+  rabbitRequestOptions: {
+    correlationId: string;
+    replyTo: string;
+  };
+}
+
+async function captureUnaryRequest(
+  route: string,
+  payload: unknown,
+): Promise<CapturedUnaryRequest> {
+  const rabbitFake = createFakeChannel();
+  mockConnect.mockResolvedValue(rabbitFake.connection);
+
+  const rabbit = new RabbitMQTransport({ url: "amqp://test" });
+  const websocket = createPatchedWebSocketClient();
+
+  const rabbitPending = rabbit.request(route, payload);
+  const websocketPending = websocket.client.request(route, payload);
+
+  await waitFor(() => rabbitFake.channel.sendToQueue.mock.calls.length > 0);
+  const rabbitRequestCall = rabbitFake.channel.sendToQueue.mock.calls[0];
+  const rabbitRequest = JSON.parse(
+    Buffer.from(rabbitRequestCall[1]).toString("utf8"),
+  ) as Record<string, unknown>;
+  const rabbitRequestOptions = rabbitRequestCall[2] as {
+    correlationId: string;
+    replyTo: string;
+  };
+
+  await waitFor(() => websocket.sentPayloads.length > 0);
+  const websocketRequest = JSON.parse(websocket.sentPayloads[0]) as Record<
+    string,
+    unknown
+  >;
+
+  return {
+    rabbitFake,
+    rabbitPending,
+    websocketPending,
+    websocketClient: websocket.client,
+    websocketRequest,
+    rabbitRequest,
+    rabbitRequestOptions,
+  };
+}
+
+async function resolveCapturedUnaryRequest(
+  captured: CapturedUnaryRequest,
+  payload: unknown,
+): Promise<{ websocket: unknown; rabbit: unknown }> {
+  const websocketRequestId = String(captured.websocketRequest.id);
+  (
+    captured.websocketClient as unknown as {
+      handleIncoming: (message: unknown) => void;
+    }
+  ).handleIncoming({
+    id: websocketRequestId,
+    payload,
+  });
+
+  const rabbitReplyConsumer = captured.rabbitFake.queueConsumers.get(
+    "generated-1",
+  );
+  await rabbitReplyConsumer?.(
+    createMessage(
+      { payload },
+      {
+        properties: {
+          correlationId: captured.rabbitRequestOptions.correlationId,
+          replyTo: captured.rabbitRequestOptions.replyTo,
+        },
+      },
+    ),
+  );
+
+  return {
+    websocket: await captured.websocketPending,
+    rabbit: await captured.rabbitPending,
+  };
+}
+
 describe("Protocol conformance across websocket and rabbitmq", () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -210,58 +299,101 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
   });
 
   it("encodes request envelopes with equivalent shape after transport metadata normalization", async () => {
-    const rabbitFake = createFakeChannel();
-    mockConnect.mockResolvedValue(rabbitFake.connection);
+    const captured = await captureUnaryRequest("users.get", { id: 9 });
 
-    const rabbit = new RabbitMQTransport({ url: "amqp://test" });
-    const websocket = createPatchedWebSocketClient();
+    assert.deepEqual(stripId(captured.websocketRequest), captured.rabbitRequest);
 
-    const rabbitPending = rabbit.request("users.get", { id: 9 });
-    const websocketPending = websocket.client.request("users.get", { id: 9 });
+    const result = await resolveCapturedUnaryRequest(captured, { ok: true });
+    assert.deepEqual(result.websocket, { ok: true });
+    assert.deepEqual(result.rabbit, { ok: true });
+  });
 
-    await waitFor(() => rabbitFake.channel.sendToQueue.mock.calls.length > 0);
-    const rabbitRequestCall = rabbitFake.channel.sendToQueue.mock.calls[0];
-    const rabbitRequest = JSON.parse(
-      Buffer.from(rabbitRequestCall[1]).toString("utf8"),
-    ) as Record<string, unknown>;
-    const rabbitRequestOptions = rabbitRequestCall[2] as {
-      correlationId: string;
-      replyTo: string;
-    };
-
-    await waitFor(() => websocket.sentPayloads.length > 0);
-    const websocketRequest = JSON.parse(websocket.sentPayloads[0]) as Record<
-      string,
-      unknown
-    >;
-
-    assert.deepEqual(stripId(websocketRequest), rabbitRequest);
-
-    const websocketRequestId = String(websocketRequest.id);
-    (
-      websocket.client as unknown as {
-        handleIncoming: (message: unknown) => void;
-      }
-    ).handleIncoming({
-      id: websocketRequestId,
-      payload: { ok: true },
+  it("encodes discover control-plane requests consistently across transports", async () => {
+    const captured = await captureUnaryRequest("__scomp.discover", {
+      servicePrefix: "users",
+      includeRoutes: true,
     });
 
-    const rabbitReplyConsumer = rabbitFake.queueConsumers.get("generated-1");
-    await rabbitReplyConsumer?.(
-      createMessage(
-        { payload: { ok: true } },
-        {
-          properties: {
-            correlationId: rabbitRequestOptions.correlationId,
-            replyTo: rabbitRequestOptions.replyTo,
-          },
-        },
-      ),
-    );
+    assert.deepEqual(stripId(captured.websocketRequest), captured.rabbitRequest);
 
-    assert.deepEqual(await websocketPending, { ok: true });
-    assert.deepEqual(await rabbitPending, { ok: true });
+    const discoverResponse = {
+      services: [
+        {
+          name: "users",
+          routes: ["users.getUser", "users.list"],
+        },
+      ],
+      node: { id: "node-a" },
+      generatedAt: "2026-03-28T15:00:00.000Z",
+      ttlMs: 1500,
+    };
+    const result = await resolveCapturedUnaryRequest(captured, discoverResponse);
+
+    assert.deepEqual(result.websocket, discoverResponse);
+    assert.deepEqual(result.rabbit, discoverResponse);
+  });
+
+  it("encodes resolve control-plane requests with fallback semantics consistently", async () => {
+    const captured = await captureUnaryRequest("__scomp.resolve", {
+      route: "users.getUser",
+      channel: "ws:alternate",
+    });
+
+    assert.deepEqual(stripId(captured.websocketRequest), captured.rabbitRequest);
+
+    const resolveResponse = {
+      resolved: true,
+      fallbackUsed: true,
+      endpoint: {
+        route: "users.getUser",
+        channel: "current-channel",
+        transport: "websocket",
+      },
+      candidates: [
+        {
+          route: "users.getUser",
+          channel: "ws:alternate",
+          transport: "websocket",
+        },
+        {
+          route: "users.getUser",
+          channel: "current-channel",
+          transport: "websocket",
+        },
+      ],
+    };
+    const result = await resolveCapturedUnaryRequest(captured, resolveResponse);
+
+    assert.deepEqual(result.websocket, resolveResponse);
+    assert.deepEqual(result.rabbit, resolveResponse);
+    assert.equal((result.websocket as { fallbackUsed: boolean }).fallbackUsed, true);
+    assert.equal((result.rabbit as { fallbackUsed: boolean }).fallbackUsed, true);
+  });
+
+  it("encodes health control-plane requests consistently across transports", async () => {
+    const captured = await captureUnaryRequest("__scomp.health", {
+      mode: "deep",
+      verbose: true,
+      service: "users",
+    });
+
+    assert.deepEqual(stripId(captured.websocketRequest), captured.rabbitRequest);
+
+    const healthResponse = {
+      status: "ok",
+      checks: [
+        {
+          name: "users.db",
+          status: "ok",
+        },
+      ],
+      node: { id: "node-health" },
+      timestamp: "2026-03-28T16:00:00.000Z",
+    };
+    const result = await resolveCapturedUnaryRequest(captured, healthResponse);
+
+    assert.deepEqual(result.websocket, healthResponse);
+    assert.deepEqual(result.rabbit, healthResponse);
   });
 
   it("preserves explicit priority metadata across websocket and rabbitmq request envelopes", async () => {
@@ -568,7 +700,7 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
           yield { seq: 1 };
         },
       },
-    } as unknown as Record<string, unknown>);
+    } as Record<string, CompiledRoute>);
 
     const rpcConsumer = rabbitFake.queueConsumers.get("scomp.rpc.users");
     await rpcConsumer?.(

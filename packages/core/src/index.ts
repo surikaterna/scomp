@@ -5,8 +5,8 @@ export {
   fromGenerator,
   fromLegacyObservable,
   type LegacyObservableLike,
-  type ScompFeedLike
-} from './feed'
+  type ScompFeedLike,
+} from "./feed";
 
 export {
   createScompService,
@@ -15,13 +15,27 @@ export {
   type FeedImplementationConfig,
   type RequestImplementationConfig,
   type ServiceDefinition,
-  type SignalImplementationConfig
-} from './builder'
+  type SignalImplementationConfig,
+} from "./builder";
 
 export {
-  type ITransport,
-  type ScompClientInvokeOptions
-} from './transport'
+  createNodeLocalDiscoverHandler,
+  createNodeLocalHealthHandler,
+  createNodeLocalResolveHandler,
+  composeRouterWithControlPlaneRoutes,
+  createControlPlaneRouter,
+  getControlPlaneRouteSecurityAdvice,
+  type ControlPlaneRouteSecurityAdvice,
+  type NodeLocalHealthCheckResult,
+  type NodeLocalHealthHandlerContext,
+  type NodeLocalHealthHandlerOptions,
+  SCOMP_CONTROL_PLANE_ROUTE_NAMES,
+  type NodeLocalDiscoverHandlerOptions,
+  type NodeLocalResolveHandlerOptions,
+  type ScompControlPlaneRouteHandlers,
+} from "./control-plane";
+
+export { type ITransport, type ScompClientInvokeOptions } from "./transport";
 
 export {
   SCOMP_DEFAULT_OPERATION_PRIORITIES,
@@ -33,8 +47,8 @@ export {
   type ScompPriorityPolicy,
   type ScompPriorityResolutionContext,
   type ScompPrioritySource,
-  type ScompPriorityValue
-} from './priority'
+  type ScompPriorityValue,
+} from "./priority";
 
 export {
   // Legacy API retained for in-process transport compatibility.
@@ -45,5 +59,5 @@ export {
   type ScompServiceDefinition,
   type ScompServiceDescriptor,
   type ScompServiceMethodKind,
-  type ScompTransport
-} from './service'
+  type ScompTransport,
+} from "./service";
