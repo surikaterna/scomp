@@ -10,6 +10,10 @@ export {
 export {
   createFeedHash,
   type FeedHashOptions,
+  type ScompPriorityClass,
+  type ScompPriorityHint,
+  type ScompPriorityIndex,
+  type ScompTransportPriorityHints,
   type ScompTransportMessageMeta,
   type ScompTransportPrincipal,
   type ScompTransportSecurityContext,

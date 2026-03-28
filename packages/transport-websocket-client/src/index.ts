@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { ITransport } from "@scomp/core";
+import type { ITransport, ScompClientInvokeOptions } from "@scomp/core";
 import type {
   ScompFeedChunkEnvelope,
   ScompTransportMessageMeta,
@@ -42,6 +42,40 @@ export interface WebSocketClientTransportConfig {
     | ScompTransportMessageMeta
     | (() => ScompTransportMessageMeta | Promise<ScompTransportMessageMeta>);
   security?: ScompTransportSecurityPolicy;
+}
+
+function toPriorityMeta(
+  options?: ScompClientInvokeOptions,
+): ScompTransportMessageMeta | undefined {
+  if (!options) {
+    return undefined;
+  }
+
+  const { priority, priorityClass, deadlineAtMs, targetLatencyMs } = options;
+  if (
+    priority === undefined &&
+    priorityClass === undefined &&
+    deadlineAtMs === undefined &&
+    targetLatencyMs === undefined
+  ) {
+    return undefined;
+  }
+
+  const meta: ScompTransportMessageMeta = {};
+  if (priority !== undefined) {
+    meta.priority = priority;
+  }
+  if (priorityClass !== undefined) {
+    meta.priorityClass = priorityClass;
+  }
+  if (deadlineAtMs !== undefined) {
+    meta.deadlineAtMs = deadlineAtMs;
+  }
+  if (targetLatencyMs !== undefined) {
+    meta.targetLatencyMs = targetLatencyMs;
+  }
+
+  return meta;
 }
 
 function safeJsonParse(text: string): any {
@@ -95,20 +129,31 @@ export class WebSocketClientTransport implements ITransport {
     );
   }
 
-  async request(route: string, payload: any): Promise<any> {
-    return this.sendRpc(route, "request", payload);
+  async request(
+    route: string,
+    payload: any,
+    options?: ScompClientInvokeOptions,
+  ): Promise<any> {
+    return this.sendRpc(route, "request", payload, options);
   }
 
-  async signal(route: string, payload: any): Promise<void> {
+  async signal(
+    route: string,
+    payload: any,
+    options?: ScompClientInvokeOptions,
+  ): Promise<void> {
     const socket = await this.getSocket();
     const operation: ScompTransportOperation = "signal";
+    const priorityMeta = toPriorityMeta(options);
+    const baseMeta = this.mergeMeta(await this.resolveMeta(), options?.meta);
+    const effectiveMeta = this.mergeMeta(baseMeta, priorityMeta);
     const { allowed, principal } = await this.checkSecurity({
       direction: "outbound",
       transport: "websocket",
       route,
       operation,
       payload,
-      meta: await this.resolveMeta(),
+      meta: effectiveMeta,
     });
     if (!allowed) {
       throw new Error(`signal not authorized for route: ${route}`);
@@ -118,18 +163,27 @@ export class WebSocketClientTransport implements ITransport {
       op: "signal",
       payload,
       meta: this.mergeMeta(
-        await this.resolveMeta(),
+        effectiveMeta,
         this.toPrincipalMeta(principal),
       ),
     });
   }
 
-  feed(route: string, payload: any): AsyncIterable<any> {
+  feed(
+    route: string,
+    payload: any,
+    options?: ScompClientInvokeOptions,
+  ): AsyncIterable<any> {
     const self = this;
 
     return {
       async *[Symbol.asyncIterator]() {
-        const handshake = await self.sendRpc(route, "feed_start", payload);
+        const handshake = await self.sendRpc(
+          route,
+          "feed_start",
+          payload,
+          options,
+        );
         const feedHash = String(handshake?.hash ?? "");
 
         if (!feedHash) {
@@ -168,7 +222,12 @@ export class WebSocketClientTransport implements ITransport {
           }
         } finally {
           self.feeds.delete(feedHash);
-          await self.sendRpc(route, "feed_stop", { hash: feedHash });
+          await self.sendRpc(
+            route,
+            "feed_stop",
+            { hash: feedHash },
+            options,
+          );
         }
       },
     };
@@ -297,16 +356,19 @@ export class WebSocketClientTransport implements ITransport {
     route: string,
     op: ScompTransportOperation,
     payload: unknown,
+    options?: ScompClientInvokeOptions,
   ): Promise<any> {
     const socket = await this.getSocket();
-    const baseMeta = await this.resolveMeta();
+    const priorityMeta = toPriorityMeta(options);
+    const baseMeta = this.mergeMeta(await this.resolveMeta(), options?.meta);
+    const effectiveMeta = this.mergeMeta(baseMeta, priorityMeta);
     const { allowed, principal } = await this.checkSecurity({
       direction: "outbound",
       transport: "websocket",
       route,
       operation: op,
       payload,
-      meta: baseMeta,
+      meta: effectiveMeta,
     });
     if (!allowed) {
       throw new Error(`${op} not authorized for route: ${route}`);
@@ -322,7 +384,7 @@ export class WebSocketClientTransport implements ITransport {
       route,
       op,
       payload,
-      meta: this.mergeMeta(baseMeta, this.toPrincipalMeta(principal)),
+      meta: this.mergeMeta(effectiveMeta, this.toPrincipalMeta(principal)),
     } satisfies ScompTransportRequestEnvelope);
 
     return response;

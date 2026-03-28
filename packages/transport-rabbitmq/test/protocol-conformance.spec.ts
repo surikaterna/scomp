@@ -1,5 +1,6 @@
 ﻿import assert from "node:assert/strict";
 import { RabbitMQTransport } from "../src";
+import { createScompClient } from "../../client/src";
 import { WebSocketClientTransport } from "../../transport-websocket-client/src";
 
 const mockConnect = jest.fn();
@@ -261,6 +262,296 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
 
     assert.deepEqual(await websocketPending, { ok: true });
     assert.deepEqual(await rabbitPending, { ok: true });
+  });
+
+  it("preserves explicit priority metadata across websocket and rabbitmq request envelopes", async () => {
+    const rabbitFake = createFakeChannel();
+    mockConnect.mockResolvedValue(rabbitFake.connection);
+
+    const rabbit = new RabbitMQTransport({
+      url: "amqp://test",
+      security: {
+        policy: {
+          authenticate: () => ({
+            subject: "principal-rabbit",
+          }),
+        },
+      },
+    });
+
+    const websocketClient = new WebSocketClientTransport({
+      url: "ws://placeholder",
+      meta: {
+        traceId: "trace-priority",
+        priority: "P1",
+        priorityClass: "P2",
+        tags: {
+          priority: "P3",
+        },
+      },
+    });
+
+    const sentPayloads: Array<string> = [];
+    (
+      websocketClient as unknown as {
+        getSocket: () => Promise<{ send: (payload: string) => void }>;
+      }
+    ).getSocket = async () => ({
+      send: (payload: string) => {
+        sentPayloads.push(payload);
+      },
+    });
+
+    const rabbitPending = rabbit.request("users.get", { id: 11 });
+    const websocketPending = websocketClient.request("users.get", { id: 11 });
+
+    await waitFor(() => rabbitFake.channel.sendToQueue.mock.calls.length > 0);
+    await waitFor(() => sentPayloads.length > 0);
+
+    const rabbitRequest = JSON.parse(
+      Buffer.from(rabbitFake.channel.sendToQueue.mock.calls[0][1]).toString(
+        "utf8",
+      ),
+    ) as {
+      meta?: {
+        auth?: { subject?: string };
+      };
+    };
+
+    const websocketRequest = JSON.parse(sentPayloads[0]) as {
+      id?: string;
+      meta?: {
+        traceId?: string;
+        priority?: string;
+        priorityClass?: string;
+        tags?: { priority?: string };
+      };
+    };
+
+    assert.equal(rabbitRequest.meta?.auth?.subject, "principal-rabbit");
+    assert.equal(websocketRequest.meta?.traceId, "trace-priority");
+    assert.equal(websocketRequest.meta?.priority, "P1");
+    assert.equal(websocketRequest.meta?.priorityClass, "P2");
+    assert.equal(websocketRequest.meta?.tags?.priority, "P3");
+
+    const rabbitRequestOptions = rabbitFake.channel.sendToQueue.mock.calls[0][2] as {
+      correlationId: string;
+      replyTo: string;
+    };
+    const rabbitReplyConsumer = rabbitFake.queueConsumers.get("generated-1");
+    await rabbitReplyConsumer?.(
+      createMessage(
+        { payload: { ok: true } },
+        {
+          properties: {
+            correlationId: rabbitRequestOptions.correlationId,
+            replyTo: rabbitRequestOptions.replyTo,
+          },
+        },
+      ),
+    );
+
+    (
+      websocketClient as unknown as {
+        handleIncoming: (message: unknown) => void;
+      }
+    ).handleIncoming({
+      id: String(websocketRequest.id),
+      payload: { ok: true },
+    });
+
+    assert.deepEqual(await rabbitPending, { ok: true });
+    assert.deepEqual(await websocketPending, { ok: true });
+  });
+
+  it("keeps websocket request metadata absent when no hints are configured", async () => {
+    const websocket = createPatchedWebSocketClient();
+
+    const pending = websocket.client.request("users.get", { id: 5 });
+
+    await waitFor(() => websocket.sentPayloads.length > 0);
+    const requestEnvelope = JSON.parse(websocket.sentPayloads[0]) as {
+      id: string;
+      meta?: unknown;
+    };
+
+    assert.equal(requestEnvelope.meta, undefined);
+
+    (
+      websocket.client as unknown as {
+        handleIncoming: (message: unknown) => void;
+      }
+    ).handleIncoming({
+      id: requestEnvelope.id,
+      payload: { ok: true },
+    });
+
+    assert.deepEqual(await pending, { ok: true });
+  });
+
+  it("allows per-call priority overrides through client proxy options", async () => {
+    const websocket = createPatchedWebSocketClient();
+    const client = createScompClient<{
+      users: {
+        get: (input: { id: number }) => Promise<{ ok: boolean }>;
+      };
+    }>({
+      transport: websocket.client,
+      routeHints: {
+        "users.get": "request",
+      },
+    });
+
+    const pending = client.users.get(
+      { id: 17 },
+      {
+        priority: "P0",
+        priorityClass: "P1",
+        deadlineAtMs: 999,
+        targetLatencyMs: 25,
+        meta: {
+          traceId: "trace-proxy",
+          tags: {
+            source: "proxy",
+          },
+        },
+      },
+    );
+
+    await waitFor(() => websocket.sentPayloads.length > 0);
+    const envelope = JSON.parse(websocket.sentPayloads[0]) as {
+      id: string;
+      payload: { id: number };
+      meta?: {
+        traceId?: string;
+        priority?: string;
+        priorityClass?: string;
+        deadlineAtMs?: number;
+        targetLatencyMs?: number;
+        tags?: { source?: string };
+      };
+    };
+
+    assert.deepEqual(envelope.payload, { id: 17 });
+    assert.equal(envelope.meta?.traceId, "trace-proxy");
+    assert.equal(envelope.meta?.priority, "P0");
+    assert.equal(envelope.meta?.priorityClass, "P1");
+    assert.equal(envelope.meta?.deadlineAtMs, 999);
+    assert.equal(envelope.meta?.targetLatencyMs, 25);
+    assert.equal(envelope.meta?.tags?.source, "proxy");
+
+    (
+      websocket.client as unknown as {
+        handleIncoming: (message: unknown) => void;
+      }
+    ).handleIncoming({
+      id: envelope.id,
+      payload: { ok: true },
+    });
+
+    assert.deepEqual(await pending, { ok: true });
+  });
+
+  it("applies route default priority metadata through client route options", async () => {
+    const websocket = createPatchedWebSocketClient();
+    const client = createScompClient<{
+      users: {
+        get: (input: { id: number }) => Promise<{ ok: boolean }>;
+      };
+    }>({
+      transport: websocket.client,
+      routeHints: {
+        "users.get": "request",
+      },
+      routeOptions: {
+        "users.get": {
+          priority: "P2",
+          meta: {
+            traceId: "trace-default",
+          },
+        },
+      },
+    });
+
+    const pending = client.users.get({ id: 3 });
+
+    await waitFor(() => websocket.sentPayloads.length > 0);
+    const envelope = JSON.parse(websocket.sentPayloads[0]) as {
+      id: string;
+      meta?: {
+        traceId?: string;
+        priority?: string;
+      };
+    };
+
+    assert.equal(envelope.meta?.traceId, "trace-default");
+    assert.equal(envelope.meta?.priority, "P2");
+
+    (
+      websocket.client as unknown as {
+        handleIncoming: (message: unknown) => void;
+      }
+    ).handleIncoming({
+      id: envelope.id,
+      payload: { ok: true },
+    });
+
+    assert.deepEqual(await pending, { ok: true });
+  });
+
+  it("lets per-call options override route defaults", async () => {
+    const websocket = createPatchedWebSocketClient();
+    const client = createScompClient<{
+      users: {
+        get: (input: { id: number }) => Promise<{ ok: boolean }>;
+      };
+    }>({
+      transport: websocket.client,
+      routeHints: {
+        "users.get": "request",
+      },
+      routeOptions: {
+        "users.get": {
+          priority: "P3",
+          meta: {
+            traceId: "trace-default",
+          },
+        },
+      },
+    });
+
+    const pending = client.users.get(
+      { id: 8 },
+      {
+        priority: "P0",
+        meta: {
+          traceId: "trace-override",
+        },
+      },
+    );
+
+    await waitFor(() => websocket.sentPayloads.length > 0);
+    const envelope = JSON.parse(websocket.sentPayloads[0]) as {
+      id: string;
+      meta?: {
+        traceId?: string;
+        priority?: string;
+      };
+    };
+
+    assert.equal(envelope.meta?.traceId, "trace-override");
+    assert.equal(envelope.meta?.priority, "P0");
+
+    (
+      websocket.client as unknown as {
+        handleIncoming: (message: unknown) => void;
+      }
+    ).handleIncoming({
+      id: envelope.id,
+      payload: { ok: true },
+    });
+
+    assert.deepEqual(await pending, { ok: true });
   });
 
   it("produces rabbit feed chunks that websocket feed decoder accepts", async () => {

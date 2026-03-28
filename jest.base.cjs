@@ -30,22 +30,25 @@ function compareVersionsDesc(left, right) {
 
 function resolveJestNodeEnvironment() {
   const repoRoot = __dirname;
+  let preferredMajor;
 
-  const pnpmStore = path.join(repoRoot, "node_modules", ".pnpm");
-  if (fs.existsSync(pnpmStore)) {
-    let preferredMajor;
-    try {
-      const jestPackageJsonPath = require.resolve("jest/package.json", {
-        paths: [repoRoot],
-      });
-      const jestPackage = require(jestPackageJsonPath);
-      preferredMajor = parseMajor(jestPackage.version);
-    } catch {
-      preferredMajor = undefined;
+  try {
+    const jestPackageJsonPath = require.resolve("jest/package.json", {
+      paths: [repoRoot],
+    });
+    const jestPackage = require(jestPackageJsonPath);
+    preferredMajor = parseMajor(jestPackage.version);
+  } catch {
+    preferredMajor = undefined;
+  }
+
+  const resolveFromStore = (storePath) => {
+    if (!fs.existsSync(storePath)) {
+      return undefined;
     }
 
     const candidates = fs
-      .readdirSync(pnpmStore)
+      .readdirSync(storePath)
       .filter((entry) => entry.startsWith("jest-environment-node@"))
       .map((entry) => {
         const version = parsePackageVersionFromEntry(entry);
@@ -64,13 +67,31 @@ function resolveJestNodeEnvironment() {
         : candidates.find((candidate) => candidate.major === preferredMajor)) ||
       candidates[0];
 
-    if (preferred) {
-      return path.join(
-        pnpmStore,
-        preferred.entry,
-        "node_modules",
-        "jest-environment-node",
-      );
+    if (!preferred) {
+      return undefined;
+    }
+
+    const maybeResolved = path.join(
+      storePath,
+      preferred.entry,
+      "node_modules",
+      "jest-environment-node",
+    );
+
+    return fs.existsSync(maybeResolved) ? maybeResolved : undefined;
+  };
+
+  const bunStore = path.join(repoRoot, "node_modules", ".bun");
+  const fromBunStore = resolveFromStore(bunStore);
+  if (fromBunStore) {
+    return fromBunStore;
+  }
+
+  const pnpmStore = path.join(repoRoot, "node_modules", ".pnpm");
+  if (fs.existsSync(pnpmStore)) {
+    const fromPnpmStore = resolveFromStore(pnpmStore);
+    if (fromPnpmStore) {
+      return fromPnpmStore;
     }
   }
 

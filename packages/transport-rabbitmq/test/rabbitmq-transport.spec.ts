@@ -323,6 +323,90 @@ describe("RabbitMQTransport NFR behavior", () => {
     );
   });
 
+  it("propagates inbound priority metadata to security policy", async () => {
+    const fake = createFakeChannel();
+    mockConnect.mockResolvedValue(fake.connection);
+
+    const seenMeta: Array<unknown> = [];
+    const transport = new RabbitMQTransport({
+      url: "amqp://test",
+      security: {
+        policy: {
+          authorize: (ctx) => {
+            seenMeta.push(ctx.meta);
+            return true;
+          },
+        },
+      },
+    });
+
+    await transport.listen({
+      "users.getUser": {
+        route: "users.getUser",
+        kind: "request",
+        handler: async (payload: unknown) => payload,
+      },
+    } as unknown as Record<string, unknown>);
+
+    const rpcConsumer = fake.queueConsumers.get("scomp.rpc.users");
+    await rpcConsumer?.(
+      createMessage(
+        {
+          route: "users.getUser",
+          op: "request",
+          payload: { id: 1 },
+          meta: {
+            priority: "P1",
+            priorityClass: "P2",
+            tags: {
+              priority: "P3",
+            },
+          },
+        },
+        {
+          properties: {
+            correlationId: "corr-priority-1",
+            replyTo: "reply-priority",
+          },
+        },
+      ),
+    );
+
+    await rpcConsumer?.(
+      createMessage(
+        {
+          route: "users.getUser",
+          op: "request",
+          payload: { id: 2 },
+        },
+        {
+          properties: {
+            correlationId: "corr-priority-2",
+            replyTo: "reply-priority",
+          },
+        },
+      ),
+    );
+
+    const explicitMeta = seenMeta.find(
+      (entry) =>
+        entry &&
+        typeof entry === "object" &&
+        (entry as { priority?: string }).priority === "P1",
+    ) as
+      | {
+          priority?: string;
+          priorityClass?: string;
+          tags?: { priority?: string };
+        }
+      | undefined;
+
+    assert.equal(explicitMeta?.priority, "P1");
+    assert.equal(explicitMeta?.priorityClass, "P2");
+    assert.equal(explicitMeta?.tags?.priority, "P3");
+    assert.equal(seenMeta.some((entry) => entry === undefined), true);
+  });
+
   it("enforces max in-flight requests and request timeout", async () => {
     const fake = createFakeChannel();
     mockConnect.mockResolvedValue(fake.connection);

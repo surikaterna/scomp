@@ -6,11 +6,32 @@ export type ScompTransportOperation =
   | "feed_start"
   | "feed_stop";
 
+export type ScompPriorityIndex = 0 | 1 | 2 | 3 | 4;
+
+export type ScompPriorityClass = `P${ScompPriorityIndex}`;
+
+export type ScompPriorityHint =
+  | ScompPriorityClass
+  | Lowercase<ScompPriorityClass>
+  | ScompPriorityIndex
+  | `${ScompPriorityIndex}`;
+
+export interface ScompTransportPriorityHints {
+  priority?: ScompPriorityHint;
+  priorityClass?: ScompPriorityClass;
+  deadlineAtMs?: number;
+  targetLatencyMs?: number;
+}
+
 export interface ScompTransportMessageMeta {
   auth?: unknown;
   traceId?: string;
   tenantId?: string;
   tags?: Record<string, string>;
+  priority?: ScompPriorityHint;
+  priorityClass?: ScompPriorityClass;
+  deadlineAtMs?: number;
+  targetLatencyMs?: number;
 }
 
 export interface ScompTransportPrincipal {
