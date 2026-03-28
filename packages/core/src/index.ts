@@ -19,9 +19,11 @@ export {
 } from './builder'
 
 export {
+  createNodeLocalDiscoverHandler,
   composeRouterWithControlPlaneRoutes,
   createControlPlaneRouter,
   SCOMP_CONTROL_PLANE_ROUTE_NAMES,
+  type NodeLocalDiscoverHandlerOptions,
   type ScompControlPlaneRouteHandlers
 } from './control-plane'
 

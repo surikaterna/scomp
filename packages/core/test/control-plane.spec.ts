@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   SCOMP_CONTROL_PLANE_ROUTE_NAMES,
+  createNodeLocalDiscoverHandler,
   composeRouterWithControlPlaneRoutes,
   createControlPlaneRouter,
   type CompiledRouter,
@@ -98,5 +99,50 @@ describe('control-plane router composition', () => {
       () => router[SCOMP_CONTROL_PLANE_ROUTE_NAMES.resolve].parser?.('invalid'),
       /payload must be an object/
     );
+  });
+
+  it('builds node-local discover inventory with filters and metadata', () => {
+    const appRouter: CompiledRouter = {
+      'users.getUser': {
+        route: 'users.getUser',
+        kind: 'request',
+        handler: async () => ({ id: 1 })
+      },
+      'users.list': {
+        route: 'users.list',
+        kind: 'request',
+        handler: async () => ([])
+      },
+      'orders.list': {
+        route: 'orders.list',
+        kind: 'request',
+        handler: async () => ([])
+      },
+      '__scomp.health': {
+        route: '__scomp.health',
+        kind: 'request',
+        handler: async () => ({ status: 'ok' })
+      }
+    };
+
+    const discover = createNodeLocalDiscoverHandler(appRouter, {
+      nodeId: 'node-x',
+      ttlMs: 1500,
+      now: () => new Date('2026-03-28T15:00:00.000Z')
+    });
+
+    const withoutRoutes = discover({ servicePrefix: 'us' });
+    assert.deepEqual(withoutRoutes, {
+      services: [{ name: 'users' }],
+      node: { id: 'node-x' },
+      generatedAt: '2026-03-28T15:00:00.000Z',
+      ttlMs: 1500
+    });
+
+    const withRoutes = discover({ includeRoutes: true });
+    assert.deepEqual(withRoutes.services, [
+      { name: 'orders', routes: ['orders.list'] },
+      { name: 'users', routes: ['users.getUser', 'users.list'] }
+    ]);
   });
 });
