@@ -1,22 +1,24 @@
 import { ScompFeed, type ITransport } from '@scomp/core';
 import type { ContractRouteIntents } from '@scomp/types';
 
-type AsyncMethodOutput<Method> = Method extends (...args: Array<any>) => Promise<infer Output>
+type AsyncMethodOutput<Method> = Method extends (...args: Array<unknown>) => Promise<infer Output>
   ? Output
   : never;
 
-type FeedMethodOutput<Method> = Method extends (...args: Array<any>) => AsyncIterable<infer Output>
+type FeedMethodOutput<Method> = Method extends (...args: Array<unknown>) => AsyncIterable<infer Output>
   ? Output
   : never;
 
-export type ScompClientProxy<Contract extends Record<string, any>> = {
-  [Key in keyof Contract]: Contract[Key] extends (...args: Array<any>) => AsyncIterable<any>
+type UnknownFunction = (...args: Array<unknown>) => unknown;
+
+export type ScompClientProxy<Contract extends Record<string, unknown>> = {
+  [Key in keyof Contract]: Contract[Key] extends (...args: Array<unknown>) => AsyncIterable<unknown>
     ? (...args: Parameters<Contract[Key]>) => ScompFeed<FeedMethodOutput<Contract[Key]>>
-    : Contract[Key] extends (...args: Array<any>) => void | Promise<void>
+    : Contract[Key] extends (...args: Array<unknown>) => void | Promise<void>
       ? (...args: Parameters<Contract[Key]>) => Promise<void>
-      : Contract[Key] extends (...args: Array<any>) => Promise<any>
+      : Contract[Key] extends (...args: Array<unknown>) => Promise<unknown>
         ? (...args: Parameters<Contract[Key]>) => Promise<AsyncMethodOutput<Contract[Key]>>
-        : Contract[Key] extends Record<string, any>
+        : Contract[Key] extends Record<string, unknown>
           ? ScompClientProxy<Contract[Key]>
           : never;
 };
@@ -34,7 +36,11 @@ function getRouteType(route: string, routeHints?: ClientRouteHints): 'request' |
   return routeHints?.[route] ?? 'request';
 }
 
-function createProxyNode(transport: ITransport, routeHints: ClientRouteHints | undefined, segments: Array<string>): any {
+function createProxyNode(
+  transport: ITransport,
+  routeHints: ClientRouteHints | undefined,
+  segments: Array<string>
+): UnknownFunction {
   const target = () => {
     return undefined;
   };
@@ -47,7 +53,7 @@ function createProxyNode(transport: ITransport, routeHints: ClientRouteHints | u
 
       return createProxyNode(transport, routeHints, [...segments, prop]);
     },
-    apply(_target, _thisArg, argArray) {
+    apply(_target, _thisArg, argArray: Array<unknown>) {
       const route = segments.join('.');
       const payload = argArray[0];
       const routeType = getRouteType(route, routeHints);
@@ -69,10 +75,10 @@ function createProxyNode(transport: ITransport, routeHints: ClientRouteHints | u
   });
 }
 
-export function createScompClient<Contract extends Record<string, any>>(
+export function createScompClient<Contract extends Record<string, unknown>>(
   config: CreateScompClientConfig
 ): ScompClientProxy<Contract> {
-  return createProxyNode(config.transport, config.routeHints, []) as ScompClientProxy<Contract>;
+  return createProxyNode(config.transport, config.routeHints, []) as unknown as ScompClientProxy<Contract>;
 }
 
-export type ClientRouteIntentMap<Contract extends Record<string, any>> = ContractRouteIntents<Contract>;
+export type ClientRouteIntentMap<Contract extends Record<string, unknown>> = ContractRouteIntents<Contract>;

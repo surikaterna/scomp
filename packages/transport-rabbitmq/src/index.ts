@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { once } from 'node:events';
 import {
   type CompiledRoute,
   type ITransport
@@ -32,11 +33,62 @@ interface RunningFeed {
   abortController: AbortController;
 }
 
+export interface RabbitMQTransportRetryConfig {
+  maxAttempts?: number;
+  baseDelayMs?: number;
+  maxDelayMs?: number;
+}
+
+export interface RabbitMQTransportSecurityContext {
+  direction: 'inbound' | 'outbound';
+  route: string;
+  operation: string;
+  payload: unknown;
+}
+
+export interface RabbitMQTransportSecurityConfig {
+  requireTls?: boolean;
+  maxPayloadBytes?: number;
+  authorize?: (ctx: RabbitMQTransportSecurityContext) => boolean | Promise<boolean>;
+}
+
+export interface RabbitMQTransportPerformanceConfig {
+  requestTimeoutMs?: number;
+  maxInFlightRequests?: number;
+  feedBufferHighWaterMark?: number;
+}
+
+export type RabbitMQTransportEvent =
+  | { type: 'connection_opened' }
+  | { type: 'connection_reconnect'; attempt: number }
+  | { type: 'connection_closed'; reason?: string }
+  | { type: 'channel_opened' }
+  | { type: 'request_sent'; route: string; correlationId: string }
+  | { type: 'request_resolved'; route: string; correlationId: string; durationMs: number }
+  | { type: 'request_rejected'; route: string; correlationId: string; reason: string }
+  | { type: 'request_timeout'; route: string; correlationId: string; timeoutMs: number }
+  | { type: 'signal_sent'; route: string }
+  | { type: 'feed_started'; route: string; hash: string }
+  | { type: 'feed_joined'; route: string; hash: string }
+  | { type: 'feed_stopped'; route: string; hash: string }
+  | { type: 'feed_aborted'; hash: string }
+  | { type: 'publish_return'; exchange: string }
+  | { type: 'security_denied'; route: string; operation: string; direction: 'inbound' | 'outbound' };
+
+export interface RabbitMQTransportObservabilityConfig {
+  onEvent?: (event: RabbitMQTransportEvent) => void;
+  now?: () => number;
+}
+
 export interface RabbitMQTransportConfig {
   url: string;
   prefetch?: number;
   serviceName?: string;
   serializer?: ScompSerializer;
+  retry?: RabbitMQTransportRetryConfig;
+  security?: RabbitMQTransportSecurityConfig;
+  performance?: RabbitMQTransportPerformanceConfig;
+  observability?: RabbitMQTransportObservabilityConfig;
 }
 
 type RouterTable = Record<string, CompiledRoute>;
@@ -54,13 +106,13 @@ function toFeedHash(
   route: string,
   payload: unknown,
   hashKey: ((payload: unknown) => string) | undefined,
-  stringify: (value: unknown) => string
+  serialize: (value: unknown) => string
 ): string {
   if (hashKey) {
     return hashKey(payload);
   }
 
-  const serialized = stringify(payload ?? {});
+  const serialized = serialize(payload ?? {});
   return Buffer.from(`${route}:${serialized}`).toString('hex').slice(0, 32);
 }
 
@@ -70,11 +122,14 @@ function toFeedExchange(hash: string): string {
 
 export class RabbitMQTransport implements ITransport {
   private readonly config: RabbitMQTransportConfig;
+  private readonly serializer: ScompSerializer;
+  private readonly contentType: string;
   private connection?: ChannelModel;
   private channel?: Channel;
   private router?: RouterTable;
   private replyQueue = '';
-  private readonly requestResolvers = new Map<string, (value: any) => void>();
+  private readonly requestStartTime = new Map<string, number>();
+  private readonly requestResolvers = new Map<string, (value: unknown) => void>();
   private readonly requestRejecters = new Map<string, (error: unknown) => void>();
   private readonly runningFeeds = new Map<string, RunningFeed>();
   private readonly exchangeToFeedKey = new Map<string, string>();
@@ -85,6 +140,10 @@ export class RabbitMQTransport implements ITransport {
     this.config = config;
     this.serializer = config.serializer ?? defaultJsonSerializer;
     this.contentType = this.serializer.contentType ?? 'application/json';
+
+    if (config.security?.requireTls && !config.url.startsWith('amqps://')) {
+      throw new Error('RabbitMQTransport requires TLS but URL is not amqps://');
+    }
   }
 
   async listen(router: RouterTable): Promise<void> {
@@ -94,6 +153,7 @@ export class RabbitMQTransport implements ITransport {
 
     channel.on('return', (message) => {
       const exchange = message.fields.exchange;
+      this.emitEvent({ type: 'publish_return', exchange });
       const feedKey = this.exchangeToFeedKey.get(exchange);
       if (!feedKey) {
         return;
@@ -104,6 +164,7 @@ export class RabbitMQTransport implements ITransport {
         return;
       }
 
+      this.emitEvent({ type: 'feed_aborted', hash: feedKey });
       runningFeed.abortController.abort(new StreamClosedError(feedKey));
     });
 
@@ -133,19 +194,48 @@ export class RabbitMQTransport implements ITransport {
           return;
         }
 
+        const body = this.deserializeFromBuffer<ScompTransportRequest>(message.content);
+        const allowed = await this.authorize({
+          direction: 'inbound',
+          route: signalRoute.route,
+          operation: 'signal',
+          payload: body.payload
+        });
+        if (!allowed) {
+          channel.ack(message);
+          this.emitEvent({
+            type: 'security_denied',
+            route: signalRoute.route,
+            operation: 'signal',
+            direction: 'inbound'
+          });
+          return;
+        }
+
         channel.ack(message);
         await this.invokeRoute(signalRoute, message);
       });
     }
   }
 
-  async request(route: string, payload: any): Promise<any> {
+  async request(route: string, payload: unknown): Promise<unknown> {
+    const allowed = await this.authorize({ direction: 'outbound', route, operation: 'request', payload });
+    if (!allowed) {
+      this.emitEvent({ type: 'security_denied', route, operation: 'request', direction: 'outbound' });
+      throw new Error(`Request not authorized for route: ${route}`);
+    }
+
+    if (this.requestResolvers.size >= this.getMaxInFlightRequests()) {
+      throw new Error(`In-flight request limit reached: ${this.getMaxInFlightRequests()}`);
+    }
+
     const channel = await this.getChannel();
     await this.ensureReplyConsumer();
 
     const correlationId = randomUUID();
+    this.requestStartTime.set(correlationId, this.now());
 
-    const replyPromise = new Promise<any>((resolve, reject) => {
+    const replyPromise = new Promise<unknown>((resolve, reject) => {
       this.requestResolvers.set(correlationId, resolve);
       this.requestRejecters.set(correlationId, reject);
     });
@@ -163,40 +253,72 @@ export class RabbitMQTransport implements ITransport {
       contentType: this.contentType
     });
 
-    return replyPromise;
+    this.emitEvent({ type: 'request_sent', route, correlationId });
+
+    const timeoutMs = this.getRequestTimeoutMs();
+    const timeoutPromise = new Promise<never>((_resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.requestResolvers.delete(correlationId);
+        this.requestRejecters.delete(correlationId);
+        this.requestStartTime.delete(correlationId);
+        this.emitEvent({ type: 'request_timeout', route, correlationId, timeoutMs });
+        reject(new Error(`Request timed out after ${timeoutMs}ms for route: ${route}`));
+      }, timeoutMs);
+
+      void replyPromise.finally(() => clearTimeout(timer));
+    });
+
+    return Promise.race([replyPromise, timeoutPromise]);
   }
 
-  async signal(route: string, payload: any): Promise<void> {
+  async signal(route: string, payload: unknown): Promise<void> {
+    const allowed = await this.authorize({ direction: 'outbound', route, operation: 'signal', payload });
+    if (!allowed) {
+      this.emitEvent({ type: 'security_denied', route, operation: 'signal', direction: 'outbound' });
+      throw new Error(`Signal not authorized for route: ${route}`);
+    }
+
     const channel = await this.getChannel();
     await channel.assertExchange(SIGNAL_EXCHANGE, 'topic', { durable: true });
 
+    const content = this.serializeToBuffer({ route, payload, op: 'signal' });
+    this.assertPayloadSize(content);
     channel.publish(
       SIGNAL_EXCHANGE,
       route,
       this.serializeToBuffer({ route, payload, op: 'signal' } satisfies ScompTransportRequest),
       { contentType: this.contentType }
     );
+
+    this.emitEvent({ type: 'signal_sent', route });
   }
 
-  feed(route: string, payload: any): AsyncIterable<any> {
+  feed(route: string, payload: unknown): AsyncIterable<unknown> {
     const self = this;
 
     return {
       async *[Symbol.asyncIterator]() {
         const channel = await self.getChannel();
+        const allowed = await self.authorize({ direction: 'outbound', route, operation: 'feed_start', payload });
+        if (!allowed) {
+          self.emitEvent({ type: 'security_denied', route, operation: 'feed_start', direction: 'outbound' });
+          throw new Error(`Feed start not authorized for route: ${route}`);
+        }
+
         const handshake = await self.request(route, {
           op: 'feed_start',
           payload
-        });
+        }) as { exchange: string; hash: string };
 
         const exchangeName = String(handshake.exchange);
         const feedHash = String(handshake.hash);
         const queueName = (await channel.assertQueue('', { exclusive: true, durable: false })).queue;
         await channel.bindQueue(queueName, exchangeName, '');
 
-        const queueBuffer: Array<any> = [];
-        const waiters: Array<(value: any) => void> = [];
+        const queueBuffer: Array<unknown> = [];
+        const waiters: Array<() => void> = [];
         let closed = false;
+        const feedBufferLimit = self.getFeedBufferLimit();
 
         const { consumerTag } = await channel.consume(queueName, (message) => {
           if (!message) {
@@ -212,13 +334,15 @@ export class RabbitMQTransport implements ITransport {
             closed = true;
             queueBuffer.push(Promise.reject(new Error(parsed.message ?? 'Feed error')));
           } else {
+            if (queueBuffer.length >= feedBufferLimit) {
+              closed = true;
+              queueBuffer.push(Promise.reject(new Error(`Feed buffer high-water mark exceeded (${feedBufferLimit})`)));
+              return;
+            }
             queueBuffer.push(parsed.payload);
           }
 
-          const waiter = waiters.shift();
-          if (waiter) {
-            waiter(undefined);
-          }
+          waiters.shift()?.();
         });
 
         try {
@@ -244,6 +368,7 @@ export class RabbitMQTransport implements ITransport {
           await channel.cancel(consumerTag);
           await channel.unbindQueue(queueName, exchangeName, '');
           await channel.deleteQueue(queueName);
+          self.emitEvent({ type: 'feed_stopped', route, hash: feedHash });
           await self.request(route, {
             op: 'feed_stop',
             payload,
@@ -256,7 +381,16 @@ export class RabbitMQTransport implements ITransport {
 
   private async getConnection(): Promise<ChannelModel> {
     if (!this.connection) {
-      this.connection = await amqp.connect(this.config.url);
+      this.connection = await this.connectWithRetry();
+      this.emitEvent({ type: 'connection_opened' });
+      this.connection.on('close', () => {
+        this.connection = undefined;
+        this.channel = undefined;
+        this.emitEvent({ type: 'connection_closed' });
+      });
+      this.connection.on('error', (error) => {
+        this.emitEvent({ type: 'connection_closed', reason: error instanceof Error ? error.message : String(error) });
+      });
     }
     return this.connection;
   }
@@ -265,6 +399,7 @@ export class RabbitMQTransport implements ITransport {
     if (!this.channel) {
       const connection = await this.getConnection();
       this.channel = await connection.createChannel();
+      this.emitEvent({ type: 'channel_opened' });
       const channel = this.channel;
       if (this.config.prefetch && channel) {
         await channel.prefetch(this.config.prefetch);
@@ -304,8 +439,16 @@ export class RabbitMQTransport implements ITransport {
       if ('error' in body) {
         reject?.(new Error(String(body.error)));
       } else {
+        const startedAt = this.requestStartTime.get(correlationId) ?? this.now();
+        this.emitEvent({
+          type: 'request_resolved',
+          route: 'unknown',
+          correlationId,
+          durationMs: this.now() - startedAt
+        });
         resolve?.(body.payload);
       }
+      this.requestStartTime.delete(correlationId);
 
       channel.ack(message);
     });
@@ -315,6 +458,19 @@ export class RabbitMQTransport implements ITransport {
     const channel = await this.getChannel();
     const body = this.deserializeFromBuffer<ScompTransportRequest>(message.content);
     const route = String(body.route ?? '');
+    const allowed = await this.authorize({
+      direction: 'inbound',
+      route,
+      operation: String(body.op ?? 'request'),
+      payload: body.payload
+    });
+    if (!allowed) {
+      channel.ack(message);
+      this.emitEvent({ type: 'security_denied', route, operation: String(body.op ?? 'request'), direction: 'inbound' });
+      this.replyWithError(message, `Inbound operation not authorized for route: ${route}`);
+      return;
+    }
+
     const routeEntry = this.router?.[route];
 
     if (!routeEntry) {
@@ -339,9 +495,12 @@ export class RabbitMQTransport implements ITransport {
     }
   }
 
-  private async handleFeedRpc(route: CompiledRoute, message: ConsumeMessage, body: any): Promise<void> {
-    const op = String(body.payload?.op ?? body.op ?? 'request');
-    const rawPayload = body.payload?.payload ?? body.payload;
+  private async handleFeedRpc(route: CompiledRoute, message: ConsumeMessage, body: ScompTransportRequest): Promise<void> {
+    const payloadEnvelope = body.payload as Record<string, unknown> | undefined;
+    const op = String(payloadEnvelope?.op ?? body.op ?? 'request');
+    const rawPayload = payloadEnvelope && 'payload' in payloadEnvelope
+      ? payloadEnvelope.payload
+      : body.payload;
     const parsedPayload = route.parser ? route.parser(rawPayload) : rawPayload;
     const hash = String(
       body.payload?.hash
@@ -353,6 +512,7 @@ export class RabbitMQTransport implements ITransport {
       if (running) {
         running.subscribers = Math.max(0, running.subscribers - 1);
       }
+      this.emitEvent({ type: 'feed_stopped', route: route.route, hash });
       this.replyWithPayload(message, { ok: true });
       return;
     }
@@ -360,6 +520,7 @@ export class RabbitMQTransport implements ITransport {
     const existing = this.runningFeeds.get(hash);
     if (existing) {
       existing.subscribers += 1;
+      this.emitEvent({ type: 'feed_joined', route: route.route, hash });
       this.replyWithPayload(message, { exchange: existing.exchange, hash });
       return;
     }
@@ -379,14 +540,15 @@ export class RabbitMQTransport implements ITransport {
     };
     this.runningFeeds.set(hash, runningFeed);
     this.exchangeToFeedKey.set(exchange, hash);
+    this.emitEvent({ type: 'feed_started', route: route.route, hash });
 
-    const iterable = route.handler(parsedPayload) as AsyncIterable<any>;
+    const iterable = route.handler(parsedPayload) as AsyncIterable<unknown>;
     void this.publishFeed(route, runningFeed, iterable);
 
     this.replyWithPayload(message, { exchange, hash });
   }
 
-  private async publishFeed(route: CompiledRoute, runningFeed: RunningFeed, iterable: AsyncIterable<any>): Promise<void> {
+  private async publishFeed(route: CompiledRoute, runningFeed: RunningFeed, iterable: AsyncIterable<unknown>): Promise<void> {
     const channel = await this.getChannel();
 
     try {
@@ -404,6 +566,7 @@ export class RabbitMQTransport implements ITransport {
             mandatory: true
           }
         );
+        await this.waitForChannelDrainIfNeeded(channel);
       }
 
       channel.publish(
@@ -415,6 +578,7 @@ export class RabbitMQTransport implements ITransport {
           mandatory: true
         }
       );
+      await this.waitForChannelDrainIfNeeded(channel);
     } catch (error) {
       channel.publish(
         runningFeed.exchange,
@@ -428,6 +592,7 @@ export class RabbitMQTransport implements ITransport {
           mandatory: true
         }
       );
+      await this.waitForChannelDrainIfNeeded(channel);
     } finally {
       this.runningFeeds.delete(runningFeed.key);
       this.exchangeToFeedKey.delete(runningFeed.exchange);

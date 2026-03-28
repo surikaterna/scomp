@@ -11,8 +11,8 @@ export const defaultJsonSerializer: ScompSerializer = {
 };
 
 export interface ExtendedJsonSerializerOptions {
-  replacer?: (this: any, key: string, value: unknown) => unknown;
-  reviver?: (this: any, key: string, value: unknown) => unknown;
+  replacer?: (this: unknown, key: string, value: unknown) => unknown;
+  reviver?: (this: unknown, key: string, value: unknown) => unknown;
   contentType?: string;
 }
 

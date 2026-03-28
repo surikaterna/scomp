@@ -1,9 +1,9 @@
 import type { ScompServiceDefinition } from '@scomp/core';
 
 export type AnyServiceDefinition = ScompServiceDefinition<
-  Record<string, (...args: Array<any>) => any>,
-  Record<string, (...args: Array<any>) => any>,
-  Record<string, (...args: Array<any>) => any>
+  Record<string, (...args: Array<unknown>) => Promise<unknown>>,
+  Record<string, (...args: Array<unknown>) => AsyncIterable<unknown> | Iterable<unknown>>,
+  Record<string, (...args: Array<unknown>) => void | Promise<void>>
 >;
 
 export type FireAndForgetErrorHandler = (

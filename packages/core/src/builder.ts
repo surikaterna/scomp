@@ -23,21 +23,21 @@ export interface FeedImplementationConfig<Input, Output> {
   handler: (input: Input) => AsyncIterable<Output>;
 }
 
-type ContractFunctionMap = Record<string, (input: any) => any>;
+type ContractFunctionMap = Record<string, (input: unknown) => unknown>;
 
-type RequestRawHandler<Method extends (input: any) => Promise<any>> = (
-  input: ContractMethodInput<Method>
-) => ReturnType<Method>;
+type RequestRawHandler<Method> = Method extends (input: infer Input) => Promise<infer Output>
+  ? (input: Input) => Promise<Output>
+  : never;
 
-type SignalRawHandler<Method extends (input: any) => void | Promise<void>> = (
-  input: ContractMethodInput<Method>
-) => ReturnType<Method>;
+type SignalRawHandler<Method> = Method extends (input: infer Input) => void | Promise<void>
+  ? (input: Input) => void | Promise<void>
+  : never;
 
-type FeedRawHandler<Method extends (input: any) => AsyncIterable<any>> = (
-  input: ContractMethodInput<Method>
-) => ReturnType<Method>;
+type FeedRawHandler<Method> = Method extends (input: infer Input) => AsyncIterable<infer Output>
+  ? (input: Input) => AsyncIterable<Output>
+  : never;
 
-type MethodImplementation<Method extends (input: any) => any> =
+type MethodImplementation<Method extends (input: unknown) => unknown> =
   ReturnType<Method> extends AsyncIterable<infer FeedOutput>
     ? FeedRawHandler<Method> | FeedImplementationConfig<ContractMethodInput<Method>, FeedOutput>
     : ReturnType<Method> extends void | Promise<void>
