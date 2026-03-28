@@ -161,6 +161,9 @@ importers:
       '@scomp/core':
         specifier: workspace:*
         version: link:../core
+      '@scomp/types':
+        specifier: workspace:*
+        version: link:../types
       amqplib:
         specifier: ^0.10.9
         version: 0.10.9

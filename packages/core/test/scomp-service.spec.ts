@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {
   createScompClient,
   createScompFeed,
-  createScompService,
+  createLegacyScompService,
   type ScompTransport
 } from '../src';
 
@@ -10,7 +10,7 @@ describe('ScompServiceBuilder and createScompClient', () => {
   it('routes request/feed/command methods to the matching transport operation', async () => {
     const feed = createScompFeed<number>();
 
-    const service = createScompService()
+    const service = createLegacyScompService()
       .request('sum', async (left: number, right: number) => left + right)
       .feed('watchNumbers', () => feed)
       .command('log', (_message: string): void => {
@@ -58,7 +58,7 @@ describe('ScompServiceBuilder and createScompClient', () => {
   });
 
   it('supports descriptor-based service creation', async () => {
-    const service = createScompService({
+    const service = createLegacyScompService({
       requests: {
         ping: () => 'pong'
       },

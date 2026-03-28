@@ -3,11 +3,18 @@ import {
   type CompiledRoute,
   type ITransport
 } from '@scomp/core';
+import type {
+  ScompFeedChunk,
+  ScompSerializer,
+  ScompTransportRequest,
+  ScompTransportResponse
+} from '@scomp/types';
 import amqp, {
   type Channel,
   type ChannelModel,
   type ConsumeMessage
 } from 'amqplib';
+import { defaultJsonSerializer } from './serialization';
 
 const SIGNAL_EXCHANGE = 'scomp.signals';
 
@@ -29,17 +36,10 @@ export interface RabbitMQTransportConfig {
   url: string;
   prefetch?: number;
   serviceName?: string;
+  serializer?: ScompSerializer;
 }
 
 type RouterTable = Record<string, CompiledRoute>;
-
-function safeJsonParse(text: string): any {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return {};
-  }
-}
 
 function toServiceName(route: string): string {
   const parts = route.split('.');
@@ -50,12 +50,17 @@ function toRpcQueue(serviceName: string): string {
   return `scomp.rpc.${serviceName}`;
 }
 
-function toFeedHash(route: string, payload: unknown, hashKey?: (payload: unknown) => string): string {
+function toFeedHash(
+  route: string,
+  payload: unknown,
+  hashKey: ((payload: unknown) => string) | undefined,
+  stringify: (value: unknown) => string
+): string {
   if (hashKey) {
     return hashKey(payload);
   }
 
-  const serialized = JSON.stringify(payload ?? {});
+  const serialized = stringify(payload ?? {});
   return Buffer.from(`${route}:${serialized}`).toString('hex').slice(0, 32);
 }
 
@@ -73,9 +78,13 @@ export class RabbitMQTransport implements ITransport {
   private readonly requestRejecters = new Map<string, (error: unknown) => void>();
   private readonly runningFeeds = new Map<string, RunningFeed>();
   private readonly exchangeToFeedKey = new Map<string, string>();
+  private readonly serializer: ScompSerializer;
+  private readonly contentType: string;
 
   constructor(config: RabbitMQTransportConfig) {
     this.config = config;
+    this.serializer = config.serializer ?? defaultJsonSerializer;
+    this.contentType = this.serializer.contentType ?? 'application/json';
   }
 
   async listen(router: RouterTable): Promise<void> {
@@ -142,12 +151,16 @@ export class RabbitMQTransport implements ITransport {
     });
 
     const serviceName = toServiceName(route);
-    const body = Buffer.from(JSON.stringify({ route, payload, op: 'request' }));
+    const body = this.serializeToBuffer({
+      route,
+      payload,
+      op: 'request'
+    } satisfies ScompTransportRequest);
 
     channel.sendToQueue(toRpcQueue(serviceName), body, {
       correlationId,
       replyTo: this.replyQueue,
-      contentType: 'application/json'
+      contentType: this.contentType
     });
 
     return replyPromise;
@@ -160,8 +173,8 @@ export class RabbitMQTransport implements ITransport {
     channel.publish(
       SIGNAL_EXCHANGE,
       route,
-      Buffer.from(JSON.stringify({ route, payload })),
-      { contentType: 'application/json' }
+      this.serializeToBuffer({ route, payload, op: 'signal' } satisfies ScompTransportRequest),
+      { contentType: this.contentType }
     );
   }
 
@@ -190,7 +203,7 @@ export class RabbitMQTransport implements ITransport {
             return;
           }
 
-          const parsed = safeJsonParse(message.content.toString('utf8'));
+          const parsed = self.deserializeFromBuffer<ScompFeedChunk>(message.content);
           channel.ack(message);
 
           if (parsed.type === 'done') {
@@ -287,8 +300,8 @@ export class RabbitMQTransport implements ITransport {
       this.requestResolvers.delete(correlationId);
       this.requestRejecters.delete(correlationId);
 
-      const body = safeJsonParse(message.content.toString('utf8'));
-      if (body.error) {
+      const body = this.deserializeFromBuffer<ScompTransportResponse>(message.content);
+      if ('error' in body) {
         reject?.(new Error(String(body.error)));
       } else {
         resolve?.(body.payload);
@@ -300,7 +313,7 @@ export class RabbitMQTransport implements ITransport {
 
   private async handleRpcMessage(message: ConsumeMessage): Promise<void> {
     const channel = await this.getChannel();
-    const body = safeJsonParse(message.content.toString('utf8'));
+    const body = this.deserializeFromBuffer<ScompTransportRequest>(message.content);
     const route = String(body.route ?? '');
     const routeEntry = this.router?.[route];
 
@@ -330,7 +343,10 @@ export class RabbitMQTransport implements ITransport {
     const op = String(body.payload?.op ?? body.op ?? 'request');
     const rawPayload = body.payload?.payload ?? body.payload;
     const parsedPayload = route.parser ? route.parser(rawPayload) : rawPayload;
-    const hash = String(body.payload?.hash ?? toFeedHash(route.route, parsedPayload, route.hashKey));
+    const hash = String(
+      body.payload?.hash
+      ?? toFeedHash(route.route, parsedPayload, route.hashKey, (value) => this.serializer.stringify(value))
+    );
 
     if (op === 'feed_stop') {
       const running = this.runningFeeds.get(hash);
@@ -382,9 +398,9 @@ export class RabbitMQTransport implements ITransport {
         channel.publish(
           runningFeed.exchange,
           '',
-          Buffer.from(JSON.stringify({ type: 'next', payload: chunk })),
+          this.serializeToBuffer({ type: 'next', payload: chunk } satisfies ScompFeedChunk),
           {
-            contentType: 'application/json',
+            contentType: this.contentType,
             mandatory: true
           }
         );
@@ -393,9 +409,9 @@ export class RabbitMQTransport implements ITransport {
       channel.publish(
         runningFeed.exchange,
         '',
-        Buffer.from(JSON.stringify({ type: 'done' })),
+        this.serializeToBuffer({ type: 'done' } satisfies ScompFeedChunk),
         {
-          contentType: 'application/json',
+          contentType: this.contentType,
           mandatory: true
         }
       );
@@ -403,9 +419,12 @@ export class RabbitMQTransport implements ITransport {
       channel.publish(
         runningFeed.exchange,
         '',
-        Buffer.from(JSON.stringify({ type: 'error', message: error instanceof Error ? error.message : String(error) })),
+        this.serializeToBuffer({
+          type: 'error',
+          message: error instanceof Error ? error.message : String(error)
+        } satisfies ScompFeedChunk),
         {
-          contentType: 'application/json',
+          contentType: this.contentType,
           mandatory: true
         }
       );
@@ -416,8 +435,11 @@ export class RabbitMQTransport implements ITransport {
   }
 
   private async invokeRoute(route: CompiledRoute, message: ConsumeMessage): Promise<any> {
-    const body = safeJsonParse(message.content.toString('utf8'));
-    const rawPayload = body.payload?.payload ?? body.payload;
+    const body = this.deserializeFromBuffer<ScompTransportRequest>(message.content);
+    const payloadEnvelope = body.payload as Record<string, unknown> | undefined;
+    const rawPayload = payloadEnvelope && 'payload' in payloadEnvelope
+      ? payloadEnvelope.payload
+      : body.payload;
     const payload = route.parser ? route.parser(rawPayload) : rawPayload;
     return route.handler(payload);
   }
@@ -428,9 +450,9 @@ export class RabbitMQTransport implements ITransport {
       return;
     }
 
-    this.channel?.sendToQueue(replyTo, Buffer.from(JSON.stringify({ payload })), {
+    this.channel?.sendToQueue(replyTo, this.serializeToBuffer({ payload } satisfies ScompTransportResponse), {
       correlationId: message.properties.correlationId,
-      contentType: 'application/json'
+      contentType: this.contentType
     });
   }
 
@@ -442,15 +464,31 @@ export class RabbitMQTransport implements ITransport {
 
     this.channel?.sendToQueue(
       replyTo,
-      Buffer.from(JSON.stringify({ error: error instanceof Error ? error.message : String(error) })),
+      this.serializeToBuffer({
+        error: error instanceof Error ? error.message : String(error)
+      } satisfies ScompTransportResponse),
       {
         correlationId: message.properties.correlationId,
-        contentType: 'application/json'
+        contentType: this.contentType
       }
     );
+  }
+
+  private serializeToBuffer(value: unknown): Buffer {
+    return Buffer.from(this.serializer.stringify(value));
+  }
+
+  private deserializeFromBuffer<T = unknown>(value: Buffer): T {
+    return this.serializer.parse<T>(value.toString('utf8'));
   }
 }
 
 export function createRabbitMqTransport(config: RabbitMQTransportConfig): RabbitMQTransport {
   return new RabbitMQTransport(config);
 }
+
+export {
+  createJsonSerializer,
+  defaultJsonSerializer,
+  type ExtendedJsonSerializerOptions
+} from './serialization';

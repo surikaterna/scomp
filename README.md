@@ -36,6 +36,9 @@ service()
 
 ## Wire format
 
+Current protocol reference for the new transport stack:
+- See [docs/transport-json-protocol.md](docs/transport-json-protocol.md)
+
 ### Request Client -> Server
 
 ```json

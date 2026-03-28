@@ -7,10 +7,11 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "lint": "echo \"No lint configured for @scomp/transport-rabbitmq\"",
-    "test": "echo \"No tests configured for @scomp/transport-rabbitmq\""
+    "test": "jest --config jest.config.cjs"
   },
   "dependencies": {
     "@scomp/core": "workspace:*",
+    "@scomp/types": "workspace:*",
     "amqplib": "^0.10.9"
   }
 }
