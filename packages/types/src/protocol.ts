@@ -6,6 +6,97 @@ export type ScompTransportOperation =
   | "feed_start"
   | "feed_stop";
 
+export const SCOMP_CONTROL_PLANE_NAMESPACE = "__scomp";
+
+export type ScompControlPlaneRoute =
+  | "__scomp.discover"
+  | "__scomp.resolve"
+  | "__scomp.health";
+
+export interface ScompControlPlaneNodeRef {
+  id: string;
+}
+
+export interface ScompControlPlaneEndpoint {
+  route: string;
+  channel: string;
+  transport?: string;
+  nodeId?: string;
+}
+
+export interface ScompControlPlaneDiscoverRequest {
+  servicePrefix?: string;
+  includeRoutes?: boolean;
+}
+
+export interface ScompControlPlaneDiscoveredService {
+  name: string;
+  routes?: Array<string>;
+}
+
+export interface ScompControlPlaneDiscoverResponse {
+  services: Array<ScompControlPlaneDiscoveredService>;
+  node: ScompControlPlaneNodeRef;
+  generatedAt?: string;
+  ttlMs?: number;
+}
+
+export interface ScompControlPlaneResolveRequest {
+  route: string;
+  channel?: string;
+}
+
+export interface ScompControlPlaneResolveResponse {
+  resolved: boolean;
+  endpoint?: ScompControlPlaneEndpoint;
+  candidates?: Array<ScompControlPlaneEndpoint>;
+  fallbackUsed: boolean;
+}
+
+export type ScompControlPlaneHealthStatus = "ok" | "degraded" | "down";
+
+export interface ScompControlPlaneHealthCheck {
+  name: string;
+  status: ScompControlPlaneHealthStatus;
+  message?: string;
+}
+
+export interface ScompControlPlaneHealthRequest {
+  verbose?: boolean;
+  mode?: "shallow" | "deep";
+  service?: string;
+}
+
+export interface ScompControlPlaneHealthResponse {
+  status: ScompControlPlaneHealthStatus;
+  checks?: Array<ScompControlPlaneHealthCheck>;
+  node: ScompControlPlaneNodeRef;
+  timestamp?: string;
+}
+
+export interface ScompControlPlaneRouteContracts {
+  "__scomp.discover": {
+    request: ScompControlPlaneDiscoverRequest;
+    response: ScompControlPlaneDiscoverResponse;
+  };
+  "__scomp.resolve": {
+    request: ScompControlPlaneResolveRequest;
+    response: ScompControlPlaneResolveResponse;
+  };
+  "__scomp.health": {
+    request: ScompControlPlaneHealthRequest;
+    response: ScompControlPlaneHealthResponse;
+  };
+}
+
+export type ScompControlPlaneRequestPayload<
+  Route extends ScompControlPlaneRoute,
+> = ScompControlPlaneRouteContracts[Route]["request"];
+
+export type ScompControlPlaneResponsePayload<
+  Route extends ScompControlPlaneRoute,
+> = ScompControlPlaneRouteContracts[Route]["response"];
+
 export interface ScompTransportMessageMeta {
   auth?: unknown;
   traceId?: string;
@@ -74,6 +165,29 @@ export type ScompTransportResponseEnvelope =
   | ScompTransportErrorResponseEnvelope;
 
 export type ScompTransportResponse = ScompTransportResponseEnvelope;
+
+export type ScompControlPlaneRequestEnvelope<
+  Route extends ScompControlPlaneRoute = ScompControlPlaneRoute,
+> = Omit<ScompTransportRequestEnvelope, "route" | "op" | "payload"> & {
+  route: Route;
+  op: "request";
+  payload: ScompControlPlaneRequestPayload<Route>;
+};
+
+export type ScompControlPlaneSuccessResponseEnvelope<
+  Route extends ScompControlPlaneRoute = ScompControlPlaneRoute,
+> = Omit<ScompTransportSuccessResponseEnvelope, "payload"> & {
+  payload: ScompControlPlaneResponsePayload<Route>;
+};
+
+export type ScompControlPlaneRequest = {
+  [Route in ScompControlPlaneRoute]: ScompControlPlaneRequestEnvelope<Route>;
+}[ScompControlPlaneRoute];
+
+export type ScompControlPlaneSuccessResponse = {
+  [Route in ScompControlPlaneRoute]:
+    ScompControlPlaneSuccessResponseEnvelope<Route>;
+}[ScompControlPlaneRoute];
 
 export type ScompFeedChunkType = "next" | "done" | "error";
 
