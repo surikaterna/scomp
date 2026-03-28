@@ -1,5 +1,6 @@
 ﻿import assert from "node:assert/strict";
 import { RabbitMQTransport } from "../src";
+import { createScompClient } from "../../client/src";
 import { WebSocketClientTransport } from "../../transport-websocket-client/src";
 
 const mockConnect = jest.fn();
@@ -382,6 +383,171 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
       }
     ).handleIncoming({
       id: requestEnvelope.id,
+      payload: { ok: true },
+    });
+
+    assert.deepEqual(await pending, { ok: true });
+  });
+
+  it("allows per-call priority overrides through client proxy options", async () => {
+    const websocket = createPatchedWebSocketClient();
+    const client = createScompClient<{
+      users: {
+        get: (input: { id: number }) => Promise<{ ok: boolean }>;
+      };
+    }>({
+      transport: websocket.client,
+      routeHints: {
+        "users.get": "request",
+      },
+    });
+
+    const pending = client.users.get(
+      { id: 17 },
+      {
+        priority: "P0",
+        priorityClass: "P1",
+        deadlineAtMs: 999,
+        targetLatencyMs: 25,
+        meta: {
+          traceId: "trace-proxy",
+          tags: {
+            source: "proxy",
+          },
+        },
+      },
+    );
+
+    await waitFor(() => websocket.sentPayloads.length > 0);
+    const envelope = JSON.parse(websocket.sentPayloads[0]) as {
+      id: string;
+      payload: { id: number };
+      meta?: {
+        traceId?: string;
+        priority?: string;
+        priorityClass?: string;
+        deadlineAtMs?: number;
+        targetLatencyMs?: number;
+        tags?: { source?: string };
+      };
+    };
+
+    assert.deepEqual(envelope.payload, { id: 17 });
+    assert.equal(envelope.meta?.traceId, "trace-proxy");
+    assert.equal(envelope.meta?.priority, "P0");
+    assert.equal(envelope.meta?.priorityClass, "P1");
+    assert.equal(envelope.meta?.deadlineAtMs, 999);
+    assert.equal(envelope.meta?.targetLatencyMs, 25);
+    assert.equal(envelope.meta?.tags?.source, "proxy");
+
+    (
+      websocket.client as unknown as {
+        handleIncoming: (message: unknown) => void;
+      }
+    ).handleIncoming({
+      id: envelope.id,
+      payload: { ok: true },
+    });
+
+    assert.deepEqual(await pending, { ok: true });
+  });
+
+  it("applies route default priority metadata through client route options", async () => {
+    const websocket = createPatchedWebSocketClient();
+    const client = createScompClient<{
+      users: {
+        get: (input: { id: number }) => Promise<{ ok: boolean }>;
+      };
+    }>({
+      transport: websocket.client,
+      routeHints: {
+        "users.get": "request",
+      },
+      routeOptions: {
+        "users.get": {
+          priority: "P2",
+          meta: {
+            traceId: "trace-default",
+          },
+        },
+      },
+    });
+
+    const pending = client.users.get({ id: 3 });
+
+    await waitFor(() => websocket.sentPayloads.length > 0);
+    const envelope = JSON.parse(websocket.sentPayloads[0]) as {
+      id: string;
+      meta?: {
+        traceId?: string;
+        priority?: string;
+      };
+    };
+
+    assert.equal(envelope.meta?.traceId, "trace-default");
+    assert.equal(envelope.meta?.priority, "P2");
+
+    (
+      websocket.client as unknown as {
+        handleIncoming: (message: unknown) => void;
+      }
+    ).handleIncoming({
+      id: envelope.id,
+      payload: { ok: true },
+    });
+
+    assert.deepEqual(await pending, { ok: true });
+  });
+
+  it("lets per-call options override route defaults", async () => {
+    const websocket = createPatchedWebSocketClient();
+    const client = createScompClient<{
+      users: {
+        get: (input: { id: number }) => Promise<{ ok: boolean }>;
+      };
+    }>({
+      transport: websocket.client,
+      routeHints: {
+        "users.get": "request",
+      },
+      routeOptions: {
+        "users.get": {
+          priority: "P3",
+          meta: {
+            traceId: "trace-default",
+          },
+        },
+      },
+    });
+
+    const pending = client.users.get(
+      { id: 8 },
+      {
+        priority: "P0",
+        meta: {
+          traceId: "trace-override",
+        },
+      },
+    );
+
+    await waitFor(() => websocket.sentPayloads.length > 0);
+    const envelope = JSON.parse(websocket.sentPayloads[0]) as {
+      id: string;
+      meta?: {
+        traceId?: string;
+        priority?: string;
+      };
+    };
+
+    assert.equal(envelope.meta?.traceId, "trace-override");
+    assert.equal(envelope.meta?.priority, "P0");
+
+    (
+      websocket.client as unknown as {
+        handleIncoming: (message: unknown) => void;
+      }
+    ).handleIncoming({
+      id: envelope.id,
       payload: { ok: true },
     });
 

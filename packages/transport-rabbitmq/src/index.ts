@@ -1,6 +1,10 @@
 ﻿import { randomUUID } from "node:crypto";
 import { once } from "node:events";
-import { type CompiledRoute, type ITransport } from "@scomp/core";
+import {
+  type CompiledRoute,
+  type ITransport,
+  type ScompClientInvokeOptions,
+} from "@scomp/core";
 import {
   createFeedHash,
   type ScompFeedChunkEnvelope,
@@ -113,6 +117,40 @@ export interface RabbitMQTransportConfig {
 }
 
 type RouterTable = Record<string, CompiledRoute>;
+
+function toPriorityMeta(
+  options?: ScompClientInvokeOptions,
+): ScompTransportMessageMeta | undefined {
+  if (!options) {
+    return undefined;
+  }
+
+  const { priority, priorityClass, deadlineAtMs, targetLatencyMs } = options;
+  if (
+    priority === undefined &&
+    priorityClass === undefined &&
+    deadlineAtMs === undefined &&
+    targetLatencyMs === undefined
+  ) {
+    return undefined;
+  }
+
+  const meta: ScompTransportMessageMeta = {};
+  if (priority !== undefined) {
+    meta.priority = priority;
+  }
+  if (priorityClass !== undefined) {
+    meta.priorityClass = priorityClass;
+  }
+  if (deadlineAtMs !== undefined) {
+    meta.deadlineAtMs = deadlineAtMs;
+  }
+  if (targetLatencyMs !== undefined) {
+    meta.targetLatencyMs = targetLatencyMs;
+  }
+
+  return meta;
+}
 
 function toServiceName(route: string): string {
   const parts = route.split(".");
@@ -238,17 +276,28 @@ export class RabbitMQTransport implements ITransport {
     }
   }
 
-  async request(route: string, payload: unknown): Promise<unknown> {
-    return this.sendRpc(route, "request", payload);
+  async request(
+    route: string,
+    payload: unknown,
+    options?: ScompClientInvokeOptions,
+  ): Promise<unknown> {
+    return this.sendRpc(route, "request", payload, options);
   }
 
-  async signal(route: string, payload: unknown): Promise<void> {
+  async signal(
+    route: string,
+    payload: unknown,
+    options?: ScompClientInvokeOptions,
+  ): Promise<void> {
+    const priorityMeta = toPriorityMeta(options);
+    const baseMeta = this.mergeMeta(options?.meta, priorityMeta);
     const { allowed, principal } = await this.checkSecurity({
       direction: "outbound",
       transport: "rabbitmq",
       route,
       operation: "signal",
       payload,
+      meta: baseMeta,
     });
     if (!allowed) {
       this.emitEvent({
@@ -267,7 +316,7 @@ export class RabbitMQTransport implements ITransport {
       route,
       payload,
       op: "signal",
-      meta: this.toMessageMeta(principal),
+      meta: this.mergeMeta(baseMeta, this.toMessageMeta(principal)),
     } satisfies ScompTransportRequestEnvelope);
     this.assertPayloadSize(content);
     channel.publish(SIGNAL_EXCHANGE, route, content, {
@@ -277,7 +326,11 @@ export class RabbitMQTransport implements ITransport {
     this.emitEvent({ type: "signal_sent", route });
   }
 
-  feed(route: string, payload: unknown): AsyncIterable<unknown> {
+  feed(
+    route: string,
+    payload: unknown,
+    options?: ScompClientInvokeOptions,
+  ): AsyncIterable<unknown> {
     const self = this;
 
     return {
@@ -287,6 +340,7 @@ export class RabbitMQTransport implements ITransport {
           route,
           "feed_start",
           payload,
+          options,
         )) as { exchange: string; hash: string };
 
         const exchangeName = String(handshake.exchange);
@@ -360,7 +414,7 @@ export class RabbitMQTransport implements ITransport {
           await channel.unbindQueue(queueName, exchangeName, "");
           await channel.deleteQueue(queueName);
           self.emitEvent({ type: "feed_stopped", route, hash: feedHash });
-          await self.sendRpc(route, "feed_stop", { hash: feedHash });
+          await self.sendRpc(route, "feed_stop", { hash: feedHash }, options);
         }
       },
     };
@@ -370,13 +424,17 @@ export class RabbitMQTransport implements ITransport {
     route: string,
     op: ScompTransportRequestEnvelope["op"],
     payload: unknown,
+    options?: ScompClientInvokeOptions,
   ): Promise<unknown> {
+    const priorityMeta = toPriorityMeta(options);
+    const baseMeta = this.mergeMeta(options?.meta, priorityMeta);
     const { allowed, principal } = await this.checkSecurity({
       direction: "outbound",
       transport: "rabbitmq",
       route,
       operation: op,
       payload,
+      meta: baseMeta,
     });
     if (!allowed) {
       this.emitEvent({
@@ -410,7 +468,7 @@ export class RabbitMQTransport implements ITransport {
       route,
       payload,
       op,
-      meta: this.toMessageMeta(principal),
+      meta: this.mergeMeta(baseMeta, this.toMessageMeta(principal)),
     } satisfies ScompTransportRequestEnvelope);
     this.assertPayloadSize(body);
 
@@ -808,6 +866,20 @@ export class RabbitMQTransport implements ITransport {
         authType: principal.authType,
       },
       tenantId: principal.tenantId,
+    };
+  }
+
+  private mergeMeta(
+    baseMeta: ScompTransportMessageMeta | undefined,
+    overlayMeta: ScompTransportMessageMeta | undefined,
+  ): ScompTransportMessageMeta | undefined {
+    if (!baseMeta && !overlayMeta) {
+      return undefined;
+    }
+
+    return {
+      ...(baseMeta ?? {}),
+      ...(overlayMeta ?? {}),
     };
   }
 

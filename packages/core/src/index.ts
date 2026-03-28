@@ -19,7 +19,8 @@ export {
 } from './builder'
 
 export {
-  type ITransport
+  type ITransport,
+  type ScompClientInvokeOptions
 } from './transport'
 
 export {

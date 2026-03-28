@@ -1,6 +1,10 @@
 import type { Server as HttpServer } from "node:http";
 import type { Server as HttpsServer } from "node:https";
-import type { CompiledRoute, ITransport } from "@scomp/core";
+import type {
+  CompiledRoute,
+  ITransport,
+  ScompClientInvokeOptions,
+} from "@scomp/core";
 import {
   createFeedHash,
   type ScompFeedChunkEnvelope,
@@ -128,19 +132,31 @@ export class WebSocketServerTransport implements ITransport {
     });
   }
 
-  async request(route: string, payload: any): Promise<any> {
+  async request(
+    route: string,
+    payload: any,
+    options?: ScompClientInvokeOptions,
+  ): Promise<any> {
     const transport = this.getOutboundTransport();
-    return transport.request(route, payload);
+    return transport.request(route, payload, options);
   }
 
-  async signal(route: string, payload: any): Promise<void> {
+  async signal(
+    route: string,
+    payload: any,
+    options?: ScompClientInvokeOptions,
+  ): Promise<void> {
     const transport = this.getOutboundTransport();
-    await transport.signal(route, payload);
+    await transport.signal(route, payload, options);
   }
 
-  feed(route: string, payload: any): AsyncIterable<any> {
+  feed(
+    route: string,
+    payload: any,
+    options?: ScompClientInvokeOptions,
+  ): AsyncIterable<any> {
     const transport = this.getOutboundTransport();
-    return transport.feed(route, payload);
+    return transport.feed(route, payload, options);
   }
 
   private getOutboundTransport(): ITransport {
