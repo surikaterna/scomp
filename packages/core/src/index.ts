@@ -23,6 +23,19 @@ export {
 } from './transport'
 
 export {
+  SCOMP_DEFAULT_OPERATION_PRIORITIES,
+  normalizeScompPriority,
+  resolveScompPriority,
+  type ScompPriorityBounds,
+  type ScompPriorityClass,
+  type ScompPriorityDecision,
+  type ScompPriorityPolicy,
+  type ScompPriorityResolutionContext,
+  type ScompPrioritySource,
+  type ScompPriorityValue
+} from './priority'
+
+export {
   // Legacy API retained for in-process transport compatibility.
   createScompClient,
   createScompService as createLegacyScompService,
