@@ -1,15 +1,16 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "baseUrl": ".",
-    "paths": {
-      "@scomp/core": ["../../packages/core/dist/index.d.ts"],
-      "@scomp/client": ["../../packages/client/dist/index.d.ts"],
-      "@scomp/types": ["../../packages/types/dist/index.d.ts"],
-      "@scomp/transport-rabbitmq": ["../../packages/transport-rabbitmq/dist/index.d.ts"]
-    },
+    "composite": true,
     "rootDir": ".",
-    "outDir": "dist"
+    "outDir": "dist",
+    "tsBuildInfoFile": "dist/.tsbuildinfo"
   },
+  "references": [
+    { "path": "../../packages/types" },
+    { "path": "../../packages/core" },
+    { "path": "../../packages/client" },
+    { "path": "../../packages/transport-rabbitmq" }
+  ],
   "include": ["run.ts", "backend/**/*", "frontend/**/*", "shared/**/*"]
 }

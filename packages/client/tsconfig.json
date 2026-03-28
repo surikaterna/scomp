@@ -1,13 +1,14 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "baseUrl": ".",
-    "paths": {
-      "@scomp/core": ["../core/dist/index.d.ts"],
-      "@scomp/types": ["../types/dist/index.d.ts"]
-    },
+    "composite": true,
     "rootDir": "src",
-    "outDir": "dist"
+    "outDir": "dist",
+    "tsBuildInfoFile": "dist/.tsbuildinfo"
   },
+  "references": [
+    { "path": "../core" },
+    { "path": "../types" }
+  ],
   "include": ["src/**/*"]
 }

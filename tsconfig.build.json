@@ -1,0 +1,13 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/types" },
+    { "path": "./packages/core" },
+    { "path": "./packages/client" },
+    { "path": "./packages/transport-rabbitmq" },
+    { "path": "./packages/transport-inprocess" },
+    { "path": "./packages/transport-websocket-client" },
+    { "path": "./packages/transport-websocket-server" },
+    { "path": "./apps/demo" }
+  ]
+}

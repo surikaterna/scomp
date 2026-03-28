@@ -1,4 +1,4 @@
-export type AnyContractMethod = (input: unknown) => unknown;
+export type AnyContractMethod = (...args: Array<never>) => unknown;
 
 export type ContractMethodInput<Method> =
   Method extends (input: infer Input, ...args: Array<unknown>) => unknown ? Input : never;
@@ -28,7 +28,7 @@ export type MethodNetworkIntent<Method> =
         }
         : never;
 
-export type ContractNetworkIntent<Contract extends Record<string, unknown>> = {
+export type ContractNetworkIntent<Contract extends object> = {
   [MethodName in keyof Contract as Contract[MethodName] extends AnyContractMethod
     ? MethodName
     : never]: MethodNetworkIntent<Contract[MethodName]>;
@@ -45,16 +45,16 @@ type JoinRoute<Prefix extends string, Key extends string> = Prefix extends ''
   : `${Prefix}.${Key}`;
 
 type FlatContractRouteUnion<Contract, Prefix extends string = ''> =
-  Contract extends (...args: Array<unknown>) => unknown
+  Contract extends AnyContractMethod
     ? {
       [Route in Prefix]: MethodNetworkIntent<Contract>;
     }
-    : Contract extends Record<string, unknown>
+    : Contract extends object
       ? {
         [Key in keyof Contract & string]: FlatContractRouteUnion<Contract[Key], JoinRoute<Prefix, Key>>;
       }[keyof Contract & string]
       : never;
 
-export type ContractRouteIntents<Contract extends Record<string, unknown>> = MergeUnion<
+export type ContractRouteIntents<Contract extends object> = MergeUnion<
   FlatContractRouteUnion<Contract>
 >;

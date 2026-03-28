@@ -1,4 +1,4 @@
-import type { ContractNetworkIntent, ContractMethodInput } from '@scomp/types';
+import type { AnyContractMethod, ContractNetworkIntent, ContractMethodInput } from '@scomp/types';
 
 export interface RequestImplementationConfig<Input, Output> {
   kind?: 'request';
@@ -23,7 +23,9 @@ export interface FeedImplementationConfig<Input, Output> {
   handler: (input: Input) => AsyncIterable<Output>;
 }
 
-type ContractFunctionMap = Record<string, (input: unknown) => unknown>;
+type ContractMethodKeys<Contract extends object> = {
+  [MethodName in keyof Contract]: Contract[MethodName] extends AnyContractMethod ? MethodName : never;
+}[keyof Contract];
 
 type RequestRawHandler<Method> = Method extends (input: infer Input) => Promise<infer Output>
   ? (input: Input) => Promise<Output>
@@ -37,7 +39,7 @@ type FeedRawHandler<Method> = Method extends (input: infer Input) => AsyncIterab
   ? (input: Input) => AsyncIterable<Output>
   : never;
 
-type MethodImplementation<Method extends (input: unknown) => unknown> =
+type MethodImplementation<Method extends AnyContractMethod> =
   ReturnType<Method> extends AsyncIterable<infer FeedOutput>
     ? FeedRawHandler<Method> | FeedImplementationConfig<ContractMethodInput<Method>, FeedOutput>
     : ReturnType<Method> extends void | Promise<void>
@@ -46,8 +48,8 @@ type MethodImplementation<Method extends (input: unknown) => unknown> =
         ? RequestRawHandler<Method> | RequestImplementationConfig<ContractMethodInput<Method>, RequestOutput>
         : never;
 
-export type ServiceMethodImplementations<Contract extends ContractFunctionMap> = {
-  [MethodName in keyof Contract]: MethodImplementation<Contract[MethodName]>;
+export type ServiceMethodImplementations<Contract extends object> = {
+  [MethodName in ContractMethodKeys<Contract>]: MethodImplementation<Extract<Contract[MethodName], AnyContractMethod>>;
 };
 
 export interface CompiledRoute {
@@ -64,7 +66,7 @@ export interface CompiledRoute {
 
 export type CompiledRouter = Record<string, CompiledRoute>;
 
-export interface ServiceDefinition<Contract extends ContractFunctionMap> {
+export interface ServiceDefinition<Contract extends object> {
   name: string;
   networkIntent: ContractNetworkIntent<Contract>;
   router: CompiledRouter;
@@ -115,13 +117,13 @@ function inferRouteKind(methodConfig: unknown): 'request' | 'signal' | 'feed' {
   return 'request';
 }
 
-function compileRouter<Contract extends ContractFunctionMap>(
+function compileRouter<Contract extends object>(
   name: string,
   methods: ServiceMethodImplementations<Contract>
 ): CompiledRouter {
   const router: CompiledRouter = {};
 
-  for (const methodName of Object.keys(methods) as Array<keyof Contract & string>) {
+  for (const methodName of Object.keys(methods) as Array<ContractMethodKeys<Contract> & string>) {
     const implementation = methods[methodName];
     const route = `${name}.${methodName}`;
 
@@ -142,7 +144,7 @@ function compileRouter<Contract extends ContractFunctionMap>(
   return router;
 }
 
-export function createScompService<Contract extends ContractFunctionMap>(name: string) {
+export function createScompService<Contract extends object>(name: string) {
   return {
     implement(methods: ServiceMethodImplementations<Contract>): ServiceDefinition<Contract> {
       const router = compileRouter(name, methods);

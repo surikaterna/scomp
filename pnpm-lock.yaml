@@ -173,6 +173,9 @@ importers:
       '@scomp/core':
         specifier: workspace:*
         version: link:../core
+      '@scomp/types':
+        specifier: workspace:*
+        version: link:../types
       '@types/ws':
         specifier: ^8.18.1
         version: 8.18.1
@@ -188,6 +191,9 @@ importers:
       '@scomp/transport-websocket-client':
         specifier: workspace:*
         version: link:../transport-websocket-client
+      '@scomp/types':
+        specifier: workspace:*
+        version: link:../types
       '@types/ws':
         specifier: ^8.18.1
         version: 8.18.1

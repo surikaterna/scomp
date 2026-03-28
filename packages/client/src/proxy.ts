@@ -1,24 +1,26 @@
 import { ScompFeed, type ITransport } from '@scomp/core';
 import type { ContractRouteIntents } from '@scomp/types';
 
-type AsyncMethodOutput<Method> = Method extends (...args: Array<unknown>) => Promise<infer Output>
+type ContractMethod = (...args: Array<never>) => unknown;
+
+type AsyncMethodOutput<Method> = Method extends ContractMethod & ((...args: Array<never>) => Promise<infer Output>)
   ? Output
   : never;
 
-type FeedMethodOutput<Method> = Method extends (...args: Array<unknown>) => AsyncIterable<infer Output>
+type FeedMethodOutput<Method> = Method extends ContractMethod & ((...args: Array<never>) => AsyncIterable<infer Output>)
   ? Output
   : never;
 
 type UnknownFunction = (...args: Array<unknown>) => unknown;
 
-export type ScompClientProxy<Contract extends Record<string, unknown>> = {
-  [Key in keyof Contract]: Contract[Key] extends (...args: Array<unknown>) => AsyncIterable<unknown>
+export type ScompClientProxy<Contract extends object> = {
+  [Key in keyof Contract]: Contract[Key] extends (...args: Array<never>) => AsyncIterable<unknown>
     ? (...args: Parameters<Contract[Key]>) => ScompFeed<FeedMethodOutput<Contract[Key]>>
-    : Contract[Key] extends (...args: Array<unknown>) => void | Promise<void>
+    : Contract[Key] extends (...args: Array<never>) => void | Promise<void>
       ? (...args: Parameters<Contract[Key]>) => Promise<void>
-      : Contract[Key] extends (...args: Array<unknown>) => Promise<unknown>
+      : Contract[Key] extends (...args: Array<never>) => Promise<unknown>
         ? (...args: Parameters<Contract[Key]>) => Promise<AsyncMethodOutput<Contract[Key]>>
-        : Contract[Key] extends Record<string, unknown>
+        : Contract[Key] extends object
           ? ScompClientProxy<Contract[Key]>
           : never;
 };
@@ -75,10 +77,10 @@ function createProxyNode(
   });
 }
 
-export function createScompClient<Contract extends Record<string, unknown>>(
+export function createScompClient<Contract extends object>(
   config: CreateScompClientConfig
 ): ScompClientProxy<Contract> {
   return createProxyNode(config.transport, config.routeHints, []) as unknown as ScompClientProxy<Contract>;
 }
 
-export type ClientRouteIntentMap<Contract extends Record<string, unknown>> = ContractRouteIntents<Contract>;
+export type ClientRouteIntentMap<Contract extends object> = ContractRouteIntents<Contract>;
