@@ -1,7 +1,12 @@
-import { createHash } from 'node:crypto';
 import type { Server as HttpServer } from 'node:http';
 import type { Server as HttpsServer } from 'node:https';
 import type { CompiledRoute, ITransport } from '@scomp/core';
+import {
+  createFeedHash,
+  type ScompFeedChunkEnvelope,
+  type ScompTransportRequestEnvelope,
+  type ScompTransportResponseEnvelope
+} from '@scomp/types';
 import {
   WebSocketClientTransport,
   type WebSocketClientTransportConfig
@@ -22,13 +27,7 @@ interface RunningFeed {
   abortController: AbortController;
 }
 
-interface TransportMessage {
-  id?: string;
-  route?: string;
-  op?: string;
-  payload?: unknown;
-  hash?: string;
-}
+type TransportMessage = ScompTransportRequestEnvelope;
 
 export interface WebSocketServerTransportConfig {
   port?: number;
@@ -62,15 +61,6 @@ function toText(data: RawData): string {
   }
 
   return Buffer.from(data).toString('utf8');
-}
-
-function toFeedHash(route: string, payload: unknown, hashKey?: (payload: unknown) => string): string {
-  if (hashKey) {
-    return hashKey(payload);
-  }
-
-  const serialized = JSON.stringify(payload ?? {});
-  return createHash('sha256').update(`${route}:${serialized}`).digest('hex').slice(0, 32);
 }
 
 function toFeedExchange(hash: string): string {
@@ -188,7 +178,7 @@ export class WebSocketServerTransport implements ITransport {
   private async handleIncoming(socket: WebSocket, body: TransportMessage): Promise<void> {
     const routeName = String(body.route ?? '');
     const routeEntry = this.router?.[routeName];
-    const op = String((body as any).payload?.op ?? body.op ?? 'request');
+    const op = body.op ?? 'request';
 
     if (!routeEntry) {
       if (body.id) {
@@ -225,9 +215,12 @@ export class WebSocketServerTransport implements ITransport {
     body: TransportMessage,
     op: string
   ): Promise<void> {
-    const rawPayload = (body as any).payload?.payload ?? body.payload;
+    const rawPayload = body.payload;
     const parsedPayload = route.parser ? route.parser(rawPayload) : rawPayload;
-    const hash = String((body as any).payload?.hash ?? body.hash ?? toFeedHash(route.route, parsedPayload, route.hashKey));
+    const payloadRecord = body.payload && typeof body.payload === 'object'
+      ? body.payload as { hash?: unknown }
+      : undefined;
+    const hash = String(payloadRecord?.hash ?? createFeedHash(route.route, parsedPayload, { hashKey: route.hashKey }));
 
     if (op === 'feed_stop') {
       const running = this.runningFeeds.get(hash);
@@ -263,7 +256,9 @@ export class WebSocketServerTransport implements ITransport {
     });
 
     const iterable = ensureFeedIterable(route.handler(parsedPayload));
-    void this.publishFeed(runningFeed, iterable);
+    setImmediate(() => {
+      void this.publishFeed(runningFeed, iterable);
+    });
   }
 
   private async publishFeed(runningFeed: RunningFeed, iterable: AsyncIterable<unknown>): Promise<void> {
@@ -299,7 +294,7 @@ export class WebSocketServerTransport implements ITransport {
     const payload = JSON.stringify({
       channel: 'feed',
       ...chunk
-    });
+    } satisfies ScompFeedChunkEnvelope);
 
     for (const socket of runningFeed.subscribers) {
       if (socket.readyState !== WebSocket.OPEN) {
@@ -324,7 +319,7 @@ export class WebSocketServerTransport implements ITransport {
   }
 
   private async invokeRoute(route: CompiledRoute, message: TransportMessage): Promise<unknown> {
-    const rawPayload = (message as any).payload?.payload ?? message.payload;
+    const rawPayload = message.payload;
     const payload = route.parser ? route.parser(rawPayload) : rawPayload;
     return route.handler(payload);
   }
@@ -334,7 +329,7 @@ export class WebSocketServerTransport implements ITransport {
       return;
     }
 
-    socket.send(JSON.stringify({ id, payload }));
+    socket.send(JSON.stringify({ id, payload } satisfies ScompTransportResponseEnvelope));
   }
 
   private replyWithError(socket: WebSocket, id: string | undefined, error: unknown): void {
@@ -346,7 +341,7 @@ export class WebSocketServerTransport implements ITransport {
       JSON.stringify({
         id,
         error: error instanceof Error ? error.message : String(error)
-      })
+      } satisfies ScompTransportResponseEnvelope)
     );
   }
 }

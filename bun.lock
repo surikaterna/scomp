@@ -11,6 +11,7 @@
         "@rollup/plugin-commonjs": "^29.0.0",
         "@rollup/plugin-json": "^6.1.0",
         "@rollup/plugin-node-resolve": "^16.0.3",
+        "@types/amqplib": "^0.10.8",
         "@types/bluebird": "^3.5.42",
         "@types/chai": "^5.2.3",
         "@types/jest": "^30.0.0",
@@ -88,7 +89,27 @@
       "version": "0.1.0",
       "dependencies": {
         "@scomp/core": "workspace:*",
+        "@scomp/types": "workspace:*",
         "amqplib": "^0.10.9",
+      },
+    },
+    "packages/transport-websocket-client": {
+      "name": "@scomp/transport-websocket-client",
+      "version": "0.1.0",
+      "dependencies": {
+        "@scomp/core": "workspace:*",
+        "@types/ws": "^8.18.1",
+        "ws": "^8.18.3",
+      },
+    },
+    "packages/transport-websocket-server": {
+      "name": "@scomp/transport-websocket-server",
+      "version": "0.1.0",
+      "dependencies": {
+        "@scomp/core": "workspace:*",
+        "@scomp/transport-websocket-client": "workspace:*",
+        "@types/ws": "^8.18.1",
+        "ws": "^8.18.3",
       },
     },
     "packages/types": {
@@ -473,6 +494,10 @@
 
     "@scomp/transport-rabbitmq": ["@scomp/transport-rabbitmq@workspace:packages/transport-rabbitmq"],
 
+    "@scomp/transport-websocket-client": ["@scomp/transport-websocket-client@workspace:packages/transport-websocket-client"],
+
+    "@scomp/transport-websocket-server": ["@scomp/transport-websocket-server@workspace:packages/transport-websocket-server"],
+
     "@scomp/types": ["@scomp/types@workspace:packages/types"],
 
     "@shikijs/engine-oniguruma": ["@shikijs/engine-oniguruma@3.23.0", "", { "dependencies": { "@shikijs/types": "3.23.0", "@shikijs/vscode-textmate": "10.0.2" } }, "sha512-1nWINwKXxKKLqPibT5f4pAFLej9oZzQTsby8942OTlsJzOBZ0MWKiwzMsd+jhzu8YPCHAswGnnN1YtQfirL35g=="],
@@ -514,6 +539,8 @@
     "@turbo/windows-arm64": ["@turbo/windows-arm64@2.8.20", "", { "os": "win32", "cpu": "arm64" }, "sha512-voicVULvUV5yaGXo0Iue13BcHGYW3u0VgqSbfQwBaHbpj1zLjYV4KIe+7fYIo6DO8FVUJzxFps3ODCQG/Wy2Qw=="],
 
     "@tybys/wasm-util": ["@tybys/wasm-util@0.10.1", "", { "dependencies": { "tslib": "^2.4.0" } }, "sha512-9tTaPJLSiejZKx+Bmog4uSubteqTvFrVrURwkmHixBo0G4seD0zUxp98E1DzUBJxLQ3NPwXrGKDiVjwx/DpPsg=="],
+
+    "@types/amqplib": ["@types/amqplib@0.10.8", "", { "dependencies": { "@types/node": "*" } }, "sha512-vtDp8Pk1wsE/AuQ8/Rgtm6KUZYqcnTgNvEHwzCkX8rL7AGsC6zqAfKAAJhUZXFhM/Pp++tbnUHiam/8vVpPztA=="],
 
     "@types/babel__core": ["@types/babel__core@7.20.5", "", { "dependencies": { "@babel/parser": "^7.20.7", "@babel/types": "^7.20.7", "@types/babel__generator": "*", "@types/babel__template": "*", "@types/babel__traverse": "*" } }, "sha512-qoQprZvz5wQFJwMDqeseRXWv3rqMvhgpbXFfVyWhbx9X47POIA6i/+dXefEmZKoAgOaTdaIgNSMqMIU61yRyzA=="],
 

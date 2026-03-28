@@ -8,12 +8,19 @@ export {
 } from './network';
 
 export {
+  createFeedHash,
+  type FeedHashOptions,
   type ScompFeedChunk,
+  type ScompFeedChunkEnvelope,
   type ScompFeedChunkType,
   type ScompSerializer,
+  type ScompTransportErrorResponseEnvelope,
   type ScompTransportOperation,
   type ScompTransportRequest,
+  type ScompTransportRequestEnvelope,
   type ScompTransportResponse,
+  type ScompTransportResponseEnvelope,
   type ScompTransportErrorResponse,
-  type ScompTransportSuccessResponse
+  type ScompTransportSuccessResponse,
+  type ScompTransportSuccessResponseEnvelope
 } from './protocol';

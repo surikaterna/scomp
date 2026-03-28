@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@scomp/core": "workspace:*",
+    "@scomp/types": "workspace:*",
     "@scomp/transport-websocket-client": "workspace:*",
     "@types/ws": "^8.18.1",
     "ws": "^8.18.3"
