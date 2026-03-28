@@ -1,5 +1,27 @@
+const fs = require('node:fs');
+const path = require('node:path');
+
+function resolveJestNodeEnvironment() {
+  const repoRoot = path.resolve(__dirname, '../../../../');
+  const pnpmStore = path.join(repoRoot, 'node_modules', '.pnpm');
+
+  if (!fs.existsSync(pnpmStore)) {
+    return 'node';
+  }
+
+  const candidates = fs.readdirSync(pnpmStore).filter((entry) => entry.startsWith('jest-environment-node@'));
+  if (candidates.length === 0) {
+    return 'node';
+  }
+
+  const preferred = candidates.find((entry) => entry.startsWith('jest-environment-node@30.'))
+    ?? candidates.sort().at(-1);
+
+  return path.join(pnpmStore, preferred, 'node_modules', 'jest-environment-node');
+}
+
 module.exports = {
-  testEnvironment: 'node',
+  testEnvironment: resolveJestNodeEnvironment(),
   roots: ['<rootDir>/test'],
   testMatch: ['**/*.spec.ts'],
   transform: {
@@ -14,6 +36,7 @@ module.exports = {
   },
   moduleNameMapper: {
     '^@scomp/core$': '<rootDir>/../core/src',
+    '^@scomp/types$': '<rootDir>/../types/src',
     '^@scomp/transport-websocket-client$': '<rootDir>/../transport-websocket-client/src'
   },
   moduleFileExtensions: ['ts', 'js', 'json'],

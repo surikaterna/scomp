@@ -1,5 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import type { ITransport } from '@scomp/core';
+import type {
+  ScompFeedChunkEnvelope,
+  ScompTransportOperation,
+  ScompTransportRequestEnvelope,
+  ScompTransportResponseEnvelope
+} from '@scomp/types';
 import WebSocket, { type RawData } from 'ws';
 
 export class SocketDisconnectedError extends Error {
@@ -20,16 +26,7 @@ interface FeedState {
   closed: boolean;
 }
 
-interface TransportMessage {
-  id?: string;
-  route?: string;
-  op?: string;
-  payload?: unknown;
-  hash?: string;
-  channel?: string;
-  type?: string;
-  message?: string;
-}
+type TransportMessage = ScompTransportRequestEnvelope | ScompTransportResponseEnvelope | ScompFeedChunkEnvelope;
 
 export interface WebSocketClientTransportConfig {
   url: string;
@@ -60,12 +57,17 @@ function toText(data: RawData): string {
   return Buffer.from(data).toString('utf8');
 }
 
+function isFeedChunkEnvelope(message: TransportMessage): message is ScompFeedChunkEnvelope {
+  return (message as ScompFeedChunkEnvelope).channel === 'feed';
+}
+
 export class WebSocketClientTransport implements ITransport {
   private readonly config: WebSocketClientTransportConfig;
   private socket?: WebSocket;
   private openingPromise?: Promise<WebSocket>;
   private readonly pendingRequests = new Map<string, PendingRequest>();
   private readonly feeds = new Map<string, FeedState>();
+  private readonly pendingFeedChunks = new Map<string, Array<ScompFeedChunkEnvelope>>();
 
   constructor(config: WebSocketClientTransportConfig) {
     this.config = config;
@@ -107,6 +109,7 @@ export class WebSocketClientTransport implements ITransport {
         };
 
         self.feeds.set(feedHash, state);
+        self.drainPendingFeedChunks(feedHash, state);
 
         try {
           while (true) {
@@ -131,10 +134,7 @@ export class WebSocketClientTransport implements ITransport {
           }
         } finally {
           self.feeds.delete(feedHash);
-          await self.sendRpc(route, 'feed_stop', {
-            payload,
-            hash: feedHash
-          });
+          await self.sendRpc(route, 'feed_stop', { hash: feedHash });
         }
       }
     };
@@ -194,28 +194,21 @@ export class WebSocketClientTransport implements ITransport {
   }
 
   private handleIncoming(message: TransportMessage): void {
-    if (message.channel === 'feed') {
+    if (isFeedChunkEnvelope(message)) {
       const hash = String(message.hash ?? '');
       const feed = this.feeds.get(hash);
       if (!feed) {
+        const pending = this.pendingFeedChunks.get(hash) ?? [];
+        pending.push(message);
+        this.pendingFeedChunks.set(hash, pending);
         return;
       }
 
-      if (message.type === 'done') {
-        feed.closed = true;
-      } else if (message.type === 'error') {
-        feed.closed = true;
-        feed.queue.push(Promise.reject(new Error(String(message.message ?? 'Feed error'))));
-      } else {
-        feed.queue.push(message.payload);
-      }
-
-      const waiter = feed.waiters.shift();
-      waiter?.();
+      this.enqueueFeedChunk(feed, message);
       return;
     }
 
-    const id = String(message.id ?? '');
+    const id = String((message as ScompTransportResponseEnvelope).id ?? '');
     if (!id) {
       return;
     }
@@ -227,17 +220,17 @@ export class WebSocketClientTransport implements ITransport {
 
     this.pendingRequests.delete(id);
 
-    if (typeof message.message === 'string' && message.message.length > 0 && message.payload === undefined) {
-      pending.reject(new Error(message.message));
+    if ('error' in message && typeof message.error === 'string' && message.error.length > 0) {
+      pending.reject(new Error(message.error));
       return;
     }
 
-    if (message && typeof message === 'object' && 'error' in message && (message as any).error) {
-      pending.reject(new Error(String((message as any).error)));
+    if ('payload' in message) {
+      pending.resolve(message.payload);
       return;
     }
 
-    pending.resolve(message.payload);
+    pending.resolve(undefined);
   }
 
   private handleDisconnect(error: unknown): void {
@@ -256,7 +249,7 @@ export class WebSocketClientTransport implements ITransport {
     }
   }
 
-  private async sendRpc(route: string, op: string, payload: unknown): Promise<any> {
+  private async sendRpc(route: string, op: ScompTransportOperation, payload: unknown): Promise<any> {
     const socket = await this.getSocket();
     const id = randomUUID();
 
@@ -269,9 +262,35 @@ export class WebSocketClientTransport implements ITransport {
       route,
       op,
       payload
-    });
+    } satisfies ScompTransportRequestEnvelope);
 
     return response;
+  }
+
+  private drainPendingFeedChunks(hash: string, feed: FeedState): void {
+    const pending = this.pendingFeedChunks.get(hash);
+    if (!pending || pending.length === 0) {
+      return;
+    }
+
+    this.pendingFeedChunks.delete(hash);
+    for (const message of pending) {
+      this.enqueueFeedChunk(feed, message);
+    }
+  }
+
+  private enqueueFeedChunk(feed: FeedState, message: ScompFeedChunkEnvelope): void {
+    if (message.type === 'done') {
+      feed.closed = true;
+    } else if (message.type === 'error') {
+      feed.closed = true;
+      feed.queue.push(Promise.reject(new Error(String(message.message ?? 'Feed error'))));
+    } else {
+      feed.queue.push(message.payload);
+    }
+
+    const waiter = feed.waiters.shift();
+    waiter?.();
   }
 
   private sendJson(socket: WebSocket, payload: unknown): void {

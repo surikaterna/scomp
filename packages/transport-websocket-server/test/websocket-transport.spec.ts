@@ -48,6 +48,26 @@ async function createHarness(router: CompiledRouter): Promise<Harness> {
 }
 
 async function closeHarness(harness: Harness): Promise<void> {
+  const transportState = harness.serverTransport as unknown as {
+    sockets?: Set<{ terminate?: () => void; close?: () => void }>;
+    server?: { close: (callback: (error?: Error) => void) => void };
+    outboundTransport?: { socket?: { terminate?: () => void; close?: () => void } };
+  };
+
+  for (const socket of transportState.sockets ?? []) {
+    socket.terminate?.();
+    socket.close?.();
+  }
+
+  transportState.outboundTransport?.socket?.terminate?.();
+  transportState.outboundTransport?.socket?.close?.();
+
+  if (transportState.server) {
+    await new Promise<void>((resolve) => {
+      transportState.server?.close(() => resolve());
+    });
+  }
+
   await new Promise<void>((resolve, reject) => {
     harness.httpServer.close((error) => {
       if (error) {
@@ -58,6 +78,15 @@ async function closeHarness(harness: Harness): Promise<void> {
       resolve();
     });
   });
+}
+
+async function closeClientTransport(client: WebSocketClientTransport): Promise<void> {
+  const state = client as unknown as {
+    socket?: { terminate?: () => void; close?: () => void };
+  };
+
+  state.socket?.terminate?.();
+  state.socket?.close?.();
 }
 
 describe('WebSocket transports', () => {
@@ -103,6 +132,7 @@ describe('WebSocket transports', () => {
       const feedValues = await collect(client.feed('math.count', 3));
       assert.deepEqual(feedValues, [1, 2, 3]);
     } finally {
+      await closeClientTransport(client);
       await closeHarness(harness);
     }
   });
@@ -142,6 +172,8 @@ describe('WebSocket transports', () => {
       assert.deepEqual(valuesB, [1, 2, 3]);
       assert.equal(feedStarts, 1);
     } finally {
+      await closeClientTransport(clientA);
+      await closeClientTransport(clientB);
       await closeHarness(harness);
     }
   });

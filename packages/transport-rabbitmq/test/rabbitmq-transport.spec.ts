@@ -139,10 +139,8 @@ describe('RabbitMQTransport NFR behavior', () => {
     const rpcConsumer = fake.queueConsumers.get('scomp.rpc.users');
     await rpcConsumer?.(createMessage({
       route: 'users.liveTicker',
-      payload: {
-        op: 'feed_start',
-        payload: { room: 'room-x' }
-      }
+      op: 'feed_start',
+      payload: { room: 'room-x' }
     }));
 
     const running = (transport as unknown as { runningFeeds: Map<string, { abortController: AbortController }> }).runningFeeds.get('room-x');
