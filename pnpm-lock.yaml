@@ -165,6 +165,33 @@ importers:
         specifier: ^0.10.9
         version: 0.10.9
 
+  packages/transport-websocket-client:
+    dependencies:
+      '@scomp/core':
+        specifier: workspace:*
+        version: link:../core
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
+      ws:
+        specifier: ^8.18.3
+        version: 8.18.3
+
+  packages/transport-websocket-server:
+    dependencies:
+      '@scomp/core':
+        specifier: workspace:*
+        version: link:../core
+      '@scomp/transport-websocket-client':
+        specifier: workspace:*
+        version: link:../transport-websocket-client
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
+      ws:
+        specifier: ^8.18.3
+        version: 8.18.3
+
   packages/types: {}
 
 packages:
