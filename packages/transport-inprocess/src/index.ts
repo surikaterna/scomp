@@ -6,9 +6,9 @@ import {
 } from '@scomp/core';
 
 type AnyServiceDefinition = ScompServiceDefinition<
-  Record<string, (...args: Array<any>) => any>,
-  Record<string, (...args: Array<any>) => any>,
-  Record<string, (...args: Array<any>) => any>
+  Record<string, (...args: Array<unknown>) => Promise<unknown>>,
+  Record<string, (...args: Array<unknown>) => AsyncIterable<unknown> | Iterable<unknown>>,
+  Record<string, (...args: Array<unknown>) => void | Promise<void>>
 >;
 
 /**

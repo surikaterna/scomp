@@ -36,6 +36,9 @@ service()
 
 ## Wire format
 
+Current transport JSON protocol (RabbitMQ and WebSocket envelope compatibility):
+- See [docs/transport-json-protocol.md](docs/transport-json-protocol.md)
+
 ### Request Client -> Server
 
 ```json
