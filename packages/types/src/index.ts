@@ -4,12 +4,16 @@ export {
   type ContractMethodOutput,
   type MethodNetworkIntent,
   type ContractNetworkIntent,
-  type ContractRouteIntents
-} from './network';
+  type ContractRouteIntents,
+} from "./network";
 
 export {
   createFeedHash,
   type FeedHashOptions,
+  type ScompTransportMessageMeta,
+  type ScompTransportPrincipal,
+  type ScompTransportSecurityContext,
+  type ScompTransportSecurityPolicy,
   type ScompFeedChunk,
   type ScompFeedChunkEnvelope,
   type ScompFeedChunkType,
@@ -22,5 +26,5 @@ export {
   type ScompTransportResponseEnvelope,
   type ScompTransportErrorResponse,
   type ScompTransportSuccessResponse,
-  type ScompTransportSuccessResponseEnvelope
-} from './protocol';
+  type ScompTransportSuccessResponseEnvelope,
+} from "./protocol";
