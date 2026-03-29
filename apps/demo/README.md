@@ -26,3 +26,10 @@ bun turbo run start --filter=@scomp/demo
 ```
 
 Requires RabbitMQ at `SCOMP_RABBITMQ_URL` (defaults to `amqp://localhost:5672`).
+
+## WebSocket server package split reference
+
+When adapting this demo pattern to websocket server transport:
+
+- Use `@scomp/transport-websocket-server` for **Bun** (`Bun.serve`) hosts.
+- Use `@scomp/transport-websocket-server-node` for **Node** (`ws` + `http`) hosts.
