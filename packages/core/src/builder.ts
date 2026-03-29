@@ -108,10 +108,18 @@ export type ServiceMethodImplementations<Contract extends object> = {
   [MethodName in ContractMethodKeys<Contract>]: MethodImplementation<Extract<Contract[MethodName], AnyContractMethod>>;
 };
 
+export type FragmentMethodImplementations<Contract extends object> = Partial<ServiceMethodImplementations<Contract>>;
+
 export interface GroupedServiceMethodImplementations<Contract extends object> {
   requests: GroupedMethodImplementations<Contract, 'request'>;
   signals: GroupedMethodImplementations<Contract, 'signal'>;
   feeds: GroupedMethodImplementations<Contract, 'feed'>;
+}
+
+export interface GroupedFragmentMethodImplementations<Contract extends object> {
+  requests?: Partial<GroupedMethodImplementations<Contract, 'request'>>;
+  signals?: Partial<GroupedMethodImplementations<Contract, 'signal'>>;
+  feeds?: Partial<GroupedMethodImplementations<Contract, 'feed'>>;
 }
 
 export interface CompiledRoute {
@@ -131,6 +139,12 @@ export type CompiledRouter = Record<string, CompiledRoute>;
 export interface ServiceDefinition<Contract extends object> {
   name: string;
   networkIntent: ContractNetworkIntent<Contract>;
+  router: CompiledRouter;
+}
+
+export interface FragmentDefinition<Contract extends object> {
+  name: string;
+  networkIntent: Partial<ContractNetworkIntent<Contract>>;
   router: CompiledRouter;
 }
 
@@ -185,13 +199,13 @@ function inferRouteKind(methodConfig: unknown): RouteKind {
   return 'request';
 }
 
-function compileFlatRouter<Contract extends object>(
+function compileFlatRouter(
   name: string,
-  methods: ServiceMethodImplementations<Contract>
+  methods: Record<string, unknown>
 ): CompiledRouter {
   const router: CompiledRouter = {};
 
-  for (const methodName of Object.keys(methods) as Array<ContractMethodKeys<Contract> & string>) {
+  for (const methodName of Object.keys(methods)) {
     const implementation = methods[methodName];
     const route = `${name}.${methodName}`;
 
@@ -237,26 +251,33 @@ function compileGroupedMethods(
 
 function compileGroupedRouter<Contract extends object>(
   name: string,
-  groupedMethods: GroupedServiceMethodImplementations<Contract>
+  groupedMethods: GroupedServiceMethodImplementations<Contract> | GroupedFragmentMethodImplementations<Contract>
 ): CompiledRouter {
   const router: CompiledRouter = {};
 
-  compileGroupedMethods(name, 'request', groupedMethods.requests as Record<string, unknown>, router);
-  compileGroupedMethods(name, 'signal', groupedMethods.signals as Record<string, unknown>, router);
-  compileGroupedMethods(name, 'feed', groupedMethods.feeds as Record<string, unknown>, router);
+  compileGroupedMethods(name, 'request', (groupedMethods.requests ?? {}) as Record<string, unknown>, router);
+  compileGroupedMethods(name, 'signal', (groupedMethods.signals ?? {}) as Record<string, unknown>, router);
+  compileGroupedMethods(name, 'feed', (groupedMethods.feeds ?? {}) as Record<string, unknown>, router);
 
   return router;
 }
 
-function isGroupedMethods<Contract extends object>(
-  methods: ServiceMethodImplementations<Contract> | GroupedServiceMethodImplementations<Contract>
-): methods is GroupedServiceMethodImplementations<Contract> {
+function isGroupedMethods(methods: unknown): methods is {
+  requests?: Record<string, unknown>;
+  signals?: Record<string, unknown>;
+  feeds?: Record<string, unknown>;
+} {
   if (typeof methods !== 'object' || methods === null) {
     return false;
   }
 
   const methodMap = methods as Record<string, unknown>;
-  return 'requests' in methodMap && 'signals' in methodMap && 'feeds' in methodMap;
+  const methodKeys = Object.keys(methodMap);
+  if (methodKeys.length === 0) {
+    return false;
+  }
+
+  return methodKeys.every((key) => key === 'requests' || key === 'signals' || key === 'feeds');
 }
 
 export function createScompService<Contract extends object>(name: string) {
@@ -271,6 +292,24 @@ export function createScompService<Contract extends object>(name: string) {
       return {
         name,
         networkIntent: {} as ContractNetworkIntent<Contract>,
+        router
+      };
+    }
+  };
+}
+
+export function createScompFragment<Contract extends object>(name: string) {
+  return {
+    implement(
+      methods: FragmentMethodImplementations<Contract> | GroupedFragmentMethodImplementations<Contract>
+    ): FragmentDefinition<Contract> {
+      const router = isGroupedMethods(methods)
+        ? compileGroupedRouter(name, methods)
+        : compileFlatRouter(name, methods as Record<string, unknown>);
+
+      return {
+        name,
+        networkIntent: {} as Partial<ContractNetworkIntent<Contract>>,
         router
       };
     }

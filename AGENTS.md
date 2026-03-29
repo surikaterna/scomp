@@ -67,7 +67,7 @@ bd close bd-42 --reason "Completed" --json
 1. **Check ready work**: `bd ready` shows unblocked issues
 2. **Claim your task atomically**: `bd update <id> --claim`
 3. **Work on it**: Implement, test, document
-4. **Terminology for strict composable partial-service authoring**: use **mixins** as the primary term (formerly **fragments**)
+4. **Terminology for strict composable partial-service authoring**: use **fragments** as the primary term
 5. **Discover new work?** Create linked issue:
    - `bd create "Found bug" --description="Details about what was found" -p 1 --deps discovered-from:<parent-id>`
 6. **Complete**: `bd close <id> --reason "Done"`
