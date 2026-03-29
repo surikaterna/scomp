@@ -6,6 +6,10 @@ RPC experiment
 
 - Unary
 
+### Terminology
+
+For the strict composable partial-service authoring work, use **mixins** as the primary term (formerly called **fragments**).
+
 service()
 
 ## Usage
