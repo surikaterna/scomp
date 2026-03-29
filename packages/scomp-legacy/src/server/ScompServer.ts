@@ -1,7 +1,7 @@
 import { LoggerFactory } from 'slf';
 import sprintf from 'sprintf-js';
 import ControlledObservable from '../ControlledObservable';
-import { Scomp, ResponsePacket, RequestPacket } from '../Scomp';
+import { Scomp, ResponsePacket, RequestPacket } from '../scomp';
 import { WireEvent } from '../WireInterface';
 const LOG = LoggerFactory.getLogger('scomp:server');
 

@@ -1,5 +1,5 @@
 import { EventEmitter2 } from 'eventemitter2';
-import { RequestPacket, ResponsePacket, ScompHeader } from './Scomp';
+import { RequestPacket, ResponsePacket, ScompHeader } from './scomp';
 
 /**
  * Event names exchanged between a scomp runtime and transport wire.

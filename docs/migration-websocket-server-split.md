@@ -49,6 +49,14 @@ const transport = createWebSocketServerTransport({
 });
 ```
 
+## Guardrail
+
+Repository lint now includes an automated guardrail that fails when Node-oriented files
+import `@scomp/transport-websocket-server` instead of
+`@scomp/transport-websocket-server-node`.
+
+Valid Bun imports from `@scomp/transport-websocket-server` remain allowed.
+
 ## Protocol semantics
 
 No wire-protocol semantics changed as part of this split. Request/signal/feed behavior and

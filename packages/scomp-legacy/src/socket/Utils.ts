@@ -1,4 +1,4 @@
-import { RequestPacket, ResponsePacket } from '../Scomp';
+import { RequestPacket, ResponsePacket } from '../scomp';
 
 const DELIMETER = '$$';
 
