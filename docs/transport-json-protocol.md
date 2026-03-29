@@ -7,6 +7,8 @@ The same logical schema is used for both RabbitMQ and WebSocket transports.
 - RabbitMQ: JSON is carried in AMQP message bodies.
 - WebSocket: JSON is carried in text frames.
 
+Browser clients should use `@scomp/transport-websocket-browser`, which follows the same envelope schema as RabbitMQ and Node WebSocket transports.
+
 ## Core Envelope Types
 
 ### Request Envelope (Client -> Server)
@@ -28,6 +30,12 @@ Fields:
 - payload: Operation input payload.
 - meta (optional): Transport metadata for cross-cutting concerns.
 
+Metadata may include invocation and policy hints:
+
+- `traceId`, `tenantId`, `tags`
+- `auth` (opaque auth context)
+- `priority`, `priorityClass`, `deadlineAtMs`, `targetLatencyMs`
+
 Reserved route namespace:
 
 - `__scomp.*` is reserved for SCOMP control-plane request routes and MUST NOT be used by application routes.
@@ -48,6 +56,8 @@ Example metadata:
 
 The `meta.auth` field is intentionally opaque so each deployment can choose credential format
 (for example JWT, API key, signed session blob, or mTLS-derived claims).
+
+Priority hints are advisory unless enforced by a transport scheduler or policy layer.
 
 ### Response Envelope (Server -> Client)
 
@@ -135,6 +145,7 @@ Stream error:
 
 - Leaves a feed stream.
 - Client sends request envelope with op=feed_stop and payload/hash metadata.
+- Browser transport parity guarantee: `feed_stop` uses the same invocation metadata shape as `feed_start` for the originating call context.
 
 ## Control-Plane Routes (`__scomp.*`)
 
@@ -276,6 +287,12 @@ The WebSocket transport should use the same envelopes:
 
 No schema changes are needed between RabbitMQ and WebSocket transports; only framing and routing differ.
 
+### Browser WebSocket mapping
+
+- Browser/runtime clients use `@scomp/transport-websocket-browser`.
+- `request`, `signal`, `feed_start`, and `feed_stop` propagate invocation metadata and priority hints in `meta`.
+- Optional browser-side authenticate/authorize hooks run before outbound frames are sent.
+
 ## Pluggable Serialization
 
 SCOMP supports pluggable serializers by interface:
@@ -302,3 +319,8 @@ Recommended policy order:
 2. `authorize({ ...context, principal })`
 
 If no policy is configured, transports default to allow behavior for backward compatibility.
+
+### Security caveats
+
+- Browser-side security hooks are a client policy layer, not a server trust boundary.
+- Always enforce final authentication/authorization on the receiving server transport.

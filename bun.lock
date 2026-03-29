@@ -44,7 +44,12 @@
         "@scomp/client": "workspace:*",
         "@scomp/core": "workspace:*",
         "@scomp/transport-rabbitmq": "workspace:*",
+        "@scomp/transport-websocket-browser": "workspace:*",
+        "@scomp/transport-websocket-server": "workspace:*",
         "@scomp/types": "workspace:*",
+      },
+      "devDependencies": {
+        "ws": "^8.18.3",
       },
     },
     "packages/client": {
@@ -93,6 +98,14 @@
         "amqplib": "^0.10.9",
       },
     },
+    "packages/transport-websocket-browser": {
+      "name": "@scomp/transport-websocket-browser",
+      "version": "0.1.0",
+      "dependencies": {
+        "@scomp/core": "workspace:*",
+        "@scomp/types": "workspace:*",
+      },
+    },
     "packages/transport-websocket-client": {
       "name": "@scomp/transport-websocket-client",
       "version": "0.1.0",
@@ -108,6 +121,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@scomp/core": "workspace:*",
+        "@scomp/transport-websocket-browser": "workspace:*",
         "@scomp/transport-websocket-client": "workspace:*",
         "@scomp/transport-websocket-server-runtime": "workspace:*",
         "@scomp/types": "workspace:*",
@@ -514,6 +528,8 @@
     "@scomp/transport-inprocess": ["@scomp/transport-inprocess@workspace:packages/transport-inprocess"],
 
     "@scomp/transport-rabbitmq": ["@scomp/transport-rabbitmq@workspace:packages/transport-rabbitmq"],
+
+    "@scomp/transport-websocket-browser": ["@scomp/transport-websocket-browser@workspace:packages/transport-websocket-browser"],
 
     "@scomp/transport-websocket-client": ["@scomp/transport-websocket-client@workspace:packages/transport-websocket-client"],
 

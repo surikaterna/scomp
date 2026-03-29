@@ -6,12 +6,18 @@
     "build": "tsc -b tsconfig.json",
     "lint": "echo \"No lint configured for @scomp/demo\"",
     "test": "echo \"No tests configured for @scomp/demo\"",
-    "start": "ts-node run.ts"
+    "start": "ts-node run.ts",
+    "run-browser": "bun run build && bun dist/run-browser.js"
   },
   "dependencies": {
-    "@scomp/core": "workspace:*",
     "@scomp/client": "workspace:*",
+    "@scomp/core": "workspace:*",
     "@scomp/transport-rabbitmq": "workspace:*",
+    "@scomp/transport-websocket-browser": "workspace:*",
+    "@scomp/transport-websocket-server": "workspace:*",
     "@scomp/types": "workspace:*"
+  },
+  "devDependencies": {
+    "ws": "^8.18.3"
   }
 }
