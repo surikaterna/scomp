@@ -1,4 +1,4 @@
-import { createScompService } from './builder';
+import { createScompFragment, createScompService } from './builder';
 
 interface GroupedTypesContract {
   getUser(input: { id: number }): Promise<{ id: number }>;
@@ -19,6 +19,40 @@ createScompService<GroupedTypesContract>('users').implement({
     liveUsers: async function* ({ room }) {
       yield { id: room.length };
     }
+  }
+});
+
+createScompFragment<GroupedTypesContract>('users').implement({
+  requests: {
+    getUser: async ({ id }) => ({ id })
+  }
+});
+
+createScompFragment<GroupedTypesContract>('users').implement({
+  signals: {
+    notifyLogin: async () => {
+      return;
+    }
+  }
+});
+
+createScompFragment<GroupedTypesContract>('users').implement({
+  getUser: async ({ id }) => ({ id })
+});
+
+createScompFragment<GroupedTypesContract>('users').implement({
+  requests: {
+    // @ts-expect-error - notifyLogin is a signal and cannot be in requests
+    notifyLogin: async () => {
+      return;
+    }
+  }
+});
+
+createScompFragment<GroupedTypesContract>('users').implement({
+  signals: {
+    // @ts-expect-error - signal handlers must return void | Promise<void>
+    notifyLogin: async ({ id }) => ({ id })
   }
 });
 

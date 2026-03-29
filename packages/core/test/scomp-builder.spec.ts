@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createScompService } from '../src';
+import { createScompFragment, createScompService } from '../src';
 
 describe('createScompService contract builder', () => {
   it('supports grouped requests/signals/feeds authoring with deterministic route kinds', async () => {
@@ -131,5 +131,58 @@ describe('createScompService contract builder', () => {
     assert.equal(route.kind, 'request');
     const result = await (route.handler({ left: 2, right: 5 }) as Promise<number>);
     assert.equal(result, 7);
+  });
+});
+
+describe('createScompFragment contract builder', () => {
+  it('supports grouped partial fragment authoring with deterministic route kinds', async () => {
+    interface UsersContract {
+      getUser(input: { id: number }): Promise<{ id: number; name: string }>;
+      notifyLogin(input: { id: number }): Promise<void>;
+      liveUsers(input: { room: string }): AsyncIterable<{ id: number }>;
+    }
+
+    const fragment = createScompFragment<UsersContract>('users').implement({
+      requests: {
+        getUser: async ({ id }) => ({ id, name: `u-${id}` })
+      },
+      feeds: {
+        liveUsers: {
+          strategy: 'exclusive',
+          handler: async function* () {
+            yield { id: 1 };
+          }
+        }
+      }
+    });
+
+    assert.equal(fragment.name, 'users');
+    assert.equal(fragment.router['users.getUser'].kind, 'request');
+    assert.equal(fragment.router['users.liveUsers'].kind, 'feed');
+    assert.equal(fragment.router['users.notifyLogin'], undefined);
+
+    const getUserResult = await (fragment.router['users.getUser'].handler({ id: 7 }) as Promise<{ id: number; name: string }>);
+    assert.deepEqual(getUserResult, { id: 7, name: 'u-7' });
+  });
+
+  it('supports flat partial fragment authoring', async () => {
+    interface UsersContract {
+      getUser(input: { id: number }): Promise<{ id: number; name: string }>;
+      notifyLogin(input: { id: number }): Promise<void>;
+      liveUsers(input: { room: string }): AsyncIterable<{ id: number }>;
+    }
+
+    const fragment = createScompFragment<UsersContract>('users').implement({
+      notifyLogin: {
+        kind: 'signal',
+        handler: async () => {
+          return;
+        }
+      }
+    });
+
+    assert.equal(fragment.router['users.notifyLogin'].kind, 'signal');
+    await fragment.router['users.notifyLogin'].handler({ id: 99 });
+    assert.equal(fragment.router['users.getUser'], undefined);
   });
 });
