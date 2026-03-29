@@ -1,75 +1,86 @@
 # SCOMP
 
-RPC experiment
+Typed service contract + transport toolkit.
 
-## Concepts
+## Default authoring model (strict + grouped)
 
-- Unary
+SCOMP now defaults to **strict, grouped service authoring** with three operation sections:
 
-service()
+- `requests`
+- `signals`
+- `feeds`
 
-## Usage
+Use `createScompService` to define a full service. In strict mode, every contract method must be implemented and grouped under the correct section.
 
-```javascript
-  const scomp = new Scomp(new SocketIOWire(io));
-  const client = scomp.client();
+```ts
+import { createScompService } from '@scomp/core';
 
-  // void result function
-  scomp.call(client.saft.get('console').log('Hey ho!'));
+interface UsersContract {
+  getUser(input: { id: number }): Promise<{ id: number; name: string }>;
+  notifyLogin(input: { id: number; at: string }): Promise<void>;
+  liveUsers(input: { room: string }): AsyncIterable<{ id: number }>;
+}
 
-  // void result function ($ always initiates a call, or rename to then to be more promise like)
-  client.saft.get('console').log('Hey ho!').$();
+const usersService = createScompService<UsersContract>('users').implement({
+  requests: {
+    getUser: async ({ id }) => ({ id, name: `user-${id}` })
+  },
+  signals: {
+    notifyLogin: async ({ id, at }) => {
+      console.log('login', { id, at });
+    }
+  },
+  feeds: {
+    liveUsers: {
+      strategy: 'fanout',
+      handler: async function* () {
+        yield { id: 1 };
+      }
+    }
+  }
+});
+```
 
-  // return from promise
-  client.viewdb.collection('order').findByPromise({}).$()
-    .then(console.log);
-  // shortcut to just use .then() <-- trigger call
-  client.viewdb.collection('order').findByPromise({})
-    .then(console.log);
+## Fragment composition flow
 
-// return stream
-  client.viewdb.collection('order').find({}).toArray(scomp.callback()).$()
-    .on('data', data=>{}) // data element
-    .on('end', ()=>{}) // other side terminated stream
-    ;  
-  ```
+Use **fragments** for partial/domain-local implementation, then compose them with `composeScompFragments`.
+
+```ts
+import { createScompFragment, composeScompFragments } from '@scomp/core';
+
+const usersRequests = createScompFragment<UsersContract>('users').implement({
+  requests: {
+    getUser: async ({ id }) => ({ id, name: `user-${id}` })
+  }
+});
+
+const usersSignals = createScompFragment<UsersContract>('users').implement({
+  signals: {
+    notifyLogin: async () => {
+      return;
+    }
+  }
+});
+
+const usersFeeds = createScompFragment<UsersContract>('users').implement({
+  feeds: {
+    liveUsers: async function* () {
+      yield { id: 1 };
+    }
+  }
+});
+
+const usersRouterFragment = composeScompFragments(usersRequests, usersSignals, usersFeeds);
+```
+
+Fragment composition rejects duplicate methods across fragments.
+
+## Demo
+
+See `apps/demo` for end-to-end examples using grouped sections and fragments.
 
 ## Wire format
 
-Current protocol reference for the new transport stack:
-- See [docs/transport-json-protocol.md](docs/transport-json-protocol.md)
+Transport protocol reference:
 
-### Request Client -> Server
-
-```json
-{
-  "id": 123123121,
-  "req": {
-    "s": "saft",
-    "p":[ "eh", "oh"]
-  }
-}
-```
-
-### Response Server -> Client
-
-```json
-{
-  "id": 123123121, // corresponds to
-  "res": {}, // user data
-  "str": {}, // stream control data
-  "err": {} // error
-}
-```
-
-### Stream Control (Most commony Server -> Client)
-
-```json
-{
-  "id": 123123123, // corresponds to
-  "seq": 0, // sequence of events, start at 0
-  "res": {}, // user data
-  "str": {}, // stream control data
-  "err": {} // error
-}
-```
+- [docs/transport-json-protocol.md](docs/transport-json-protocol.md)
