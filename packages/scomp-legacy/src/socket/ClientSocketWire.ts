@@ -1,14 +1,14 @@
 import { EventEmitter2 } from 'eventemitter2';
 import io from 'socket.io-client';
-import { RequestPacket, ResponsePacket } from '../Scomp';
-import { WireEvent, WireInterface } from '../WireInterface';
+import { RequestPacket, ResponsePacket } from '../scomp';
+import WireInterface, { WireEvent } from '../WireInterface';
 import { getActualIds } from './Utils';
 
 /**
  * Configuration for creating a client-side socket wire.
  */
 export interface ClientSocketWireConfig {
-  socket?: SocketIOClient.Socket;
+  socket?: any;
   address: string;
   bidirectional: boolean;
   authentication?: {
@@ -21,7 +21,7 @@ export interface ClientSocketWireConfig {
  * Socket.IO based client transport for legacy scomp runtime.
  */
 export default class ClientSocketWire extends EventEmitter2 implements WireInterface {
-  private socket: SocketIOClient.Socket;
+  private socket: any;
 
   /**
    * Creates a client wire and binds socket event listeners.
@@ -33,7 +33,7 @@ export default class ClientSocketWire extends EventEmitter2 implements WireInter
       this.socket = config.socket;
     } else {
       console.log(config.address + '/scomp');
-      this.socket = io(config.address + '/scomp', { transports: ['websocket', 'polling', 'flashsocket'] });
+      this.socket = io(config.address + '/scomp', { transports: ['websocket', 'polling'] });
     }
 
     this.socket.on('connect', () => {

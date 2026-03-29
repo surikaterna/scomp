@@ -2,7 +2,7 @@ import ServerSocketWire from './socket/ServerSocketWire';
 import Observable from './Observable';
 import { LoggerFactory } from 'slf';
 import { ScompServer } from './server/ScompServer';
-import { Scomp } from './Scomp';
+import { Scomp } from './scomp';
 
 /**
  * Legacy manual test server used for socket interoperability verification.

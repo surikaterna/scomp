@@ -1,6 +1,6 @@
 import ClientSocketWire from './socket/ClientSocketWire';
 import Observable from './Observable';
-import { Scomp } from './Scomp';
+import { Scomp } from './scomp';
 import { LoggerFactory } from 'slf';
 
 /**

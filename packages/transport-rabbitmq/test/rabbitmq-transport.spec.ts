@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
 import {
+  composeScompFragments,
+  createScompFragment,
+  createScompService,
+} from "@scomp/core";
+import {
   createJsonSerializer,
   RabbitMQTransport,
   StreamClosedError,
@@ -163,6 +168,159 @@ describe("RabbitMQTransport NFR behavior", () => {
       running.abortController.signal.reason instanceof StreamClosedError,
       true,
     );
+  });
+
+  it("keeps grouped and composed fragment routers transport-compatible", async () => {
+    interface UsersContract {
+      getUser(input: { id: number }): Promise<{ id: number; name: string }>;
+      notifyLogin(input: { id: number }): Promise<void>;
+      liveUsers(input: { room: string }): AsyncIterable<{ id: number }>;
+    }
+
+    const groupedSignals: Array<unknown> = [];
+    const grouped = createScompService<UsersContract>("users").implement({
+      requests: {
+        getUser: async ({ id }: { id: number }) => ({ id, name: `u-${id}` }),
+      },
+      signals: {
+        notifyLogin: async (payload: { id: number }) => {
+          groupedSignals.push(payload);
+        },
+      },
+      feeds: {
+        liveUsers: {
+          strategy: "fanout",
+          hashKey: ({ room }: { room: string }) => room,
+          handler: async function* () {
+            yield { id: 1 };
+          },
+        },
+      },
+    });
+
+    const composedSignals: Array<unknown> = [];
+    const requestFragment = createScompFragment<UsersContract>("users").implement(
+      {
+        requests: {
+          getUser: async ({ id }: { id: number }) => ({ id, name: `u-${id}` }),
+        },
+      },
+    );
+    const signalFragment = createScompFragment<UsersContract>("users").implement(
+      {
+        signals: {
+          notifyLogin: async (payload: { id: number }) => {
+            composedSignals.push(payload);
+          },
+        },
+      },
+    );
+    const feedFragment = createScompFragment<UsersContract>("users").implement({
+      feeds: {
+        liveUsers: {
+          strategy: "fanout",
+          hashKey: ({ room }: { room: string }) => room,
+          handler: async function* () {
+            yield { id: 1 };
+          },
+        },
+      },
+    });
+    const composed = composeScompFragments(
+      requestFragment,
+      signalFragment,
+      feedFragment,
+    );
+
+    const cases = [
+      { router: grouped.router, seenSignals: groupedSignals },
+      { router: composed.router, seenSignals: composedSignals },
+    ];
+
+    for (const { router, seenSignals } of cases) {
+      const fake = createFakeChannel();
+      mockConnect.mockResolvedValue(fake.connection);
+
+      const transport = new RabbitMQTransport({ url: "amqp://test" });
+      await transport.listen(router as unknown as Record<string, unknown>);
+
+      // Intentional parity assertion: grouped/composed outputs still classify
+      // request/signal/feed exactly as legacy transport dispatch expects.
+      assert.equal(router["users.getUser"].kind, "request");
+      assert.equal(router["users.notifyLogin"].kind, "signal");
+      assert.equal(router["users.liveUsers"].kind, "feed");
+
+      const rpcConsumer = fake.queueConsumers.get("scomp.rpc.users");
+      assert.ok(rpcConsumer);
+
+      await rpcConsumer?.(
+        createMessage(
+          {
+            route: "users.getUser",
+            op: "request",
+            payload: { id: 7 },
+          },
+          {
+            properties: {
+              correlationId: "corr-request",
+              replyTo: "reply-users",
+            },
+          },
+        ),
+      );
+
+      const requestReply = fake.channel.sendToQueue.mock.calls.find(
+        ([queue]) => queue === "reply-users",
+      );
+      assert.ok(requestReply);
+      const requestBody = JSON.parse(
+        Buffer.from(requestReply[1]).toString("utf8"),
+      ) as { payload?: unknown };
+      assert.deepEqual(requestBody.payload, { id: 7, name: "u-7" });
+
+      const signalQueue = Array.from(fake.queueConsumers.keys()).find((queue) =>
+        queue.startsWith("scomp.event.users."),
+      );
+      assert.ok(signalQueue);
+      await fake.queueConsumers.get(String(signalQueue))?.(
+        createMessage({
+          route: "users.notifyLogin",
+          op: "signal",
+          payload: { id: 7 },
+        }),
+      );
+      assert.deepEqual(seenSignals, [{ id: 7 }]);
+
+      await rpcConsumer?.(
+        createMessage(
+          {
+            route: "users.liveUsers",
+            op: "feed_start",
+            payload: { room: "general" },
+          },
+          {
+            properties: {
+              correlationId: "corr-feed-start",
+              replyTo: "reply-users",
+            },
+          },
+        ),
+      );
+
+      const feedStartReply = fake.channel.sendToQueue.mock.calls.find(
+        ([queue, body]) =>
+          queue === "reply-users" &&
+          String(Buffer.from(body).toString("utf8")).includes("scomp.live."),
+      );
+      assert.ok(feedStartReply);
+
+      await waitFor(() => fake.channel.publish.mock.calls.length > 0);
+      const firstChunk = JSON.parse(
+        Buffer.from(fake.channel.publish.mock.calls[0][2]).toString("utf8"),
+      ) as { type?: string; payload?: unknown };
+      assert.equal(firstChunk.type, "next");
+      assert.deepEqual(firstChunk.payload, { id: 1 });
+    }
   });
 
   it("supports pluggable serializer and custom content type", async () => {

@@ -37,6 +37,11 @@ export default class NullWire extends EventEmitter2 implements WireInterface {
   _fromClient(event: string, packet: any) {
     this.emit(event, packet);
   }
+
+  /** @inheritdoc */
+  getConnections() {
+    return [];
+  }
 }
 
 /*

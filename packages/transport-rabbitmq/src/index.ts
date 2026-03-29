@@ -326,6 +326,36 @@ export class RabbitMQTransport implements ITransport {
     this.emitEvent({ type: "signal_sent", route });
   }
 
+  async close(): Promise<void> {
+    for (const feed of this.runningFeeds.values()) {
+      feed.abortController.abort(new StreamClosedError(feed.key));
+    }
+    this.runningFeeds.clear();
+    this.exchangeToFeedKey.clear();
+
+    const closeError = new Error("RabbitMQ transport closed.");
+    for (const reject of this.requestRejecters.values()) {
+      reject(closeError);
+    }
+    this.requestRejecters.clear();
+    this.requestResolvers.clear();
+    this.requestStartTime.clear();
+
+    this.replyQueue = "";
+
+    const channel = this.channel;
+    this.channel = undefined;
+    if (channel?.close) {
+      await channel.close();
+    }
+
+    const connection = this.connection;
+    this.connection = undefined;
+    if (connection?.close) {
+      await connection.close();
+    }
+  }
+
   feed(
     route: string,
     payload: unknown,

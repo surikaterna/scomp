@@ -145,6 +145,8 @@ With each commit, review and update pending changesets accordingly.
 Changesets must be written with the package consumer in mind, telling them what they need to know about changes, not just what changed.
 Packages are released manually via GitHub UI, not automatically.
 
+Terminology note for strict composable partial-service authoring: use **fragments** as the primary term.
+
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->
 ## Beads Issue Tracker
 

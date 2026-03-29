@@ -9,6 +9,7 @@ export interface ScompClientInvokeOptions extends ScompTransportPriorityHints {
 
 export interface ITransport {
   listen(router: Record<string, unknown>): Promise<void> | void;
+  close(): Promise<void> | void;
   request(
     route: string,
     payload: unknown,

@@ -1,0 +1,16 @@
+{
+  "name": "@scomp/transport-websocket-server-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "lint": "echo \"No lint configured for @scomp/transport-websocket-server-runtime\"",
+    "test": "echo \"No tests configured for @scomp/transport-websocket-server-runtime\""
+  },
+  "dependencies": {
+    "@scomp/core": "workspace:*",
+    "@scomp/types": "workspace:*"
+  }
+}
