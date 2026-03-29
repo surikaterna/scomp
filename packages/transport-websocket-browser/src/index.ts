@@ -176,11 +176,14 @@ export class WebSocketBrowserTransport implements ITransport {
     if (!allowed) {
       throw new Error(`signal not authorized for route: ${route}`);
     }
+
+    const outboundMeta = await this.composeOutboundMeta(options, principal);
+
     this.sendJson(socket, {
       route,
       op: "signal",
       payload,
-      meta: this.mergeMeta(effectiveMeta, this.toPrincipalMeta(principal)),
+      meta: outboundMeta,
     });
   }
 
@@ -414,12 +417,14 @@ export class WebSocketBrowserTransport implements ITransport {
       this.pendingRequests.set(id, { resolve, reject });
     });
 
+    const outboundMeta = await this.composeOutboundMeta(options, principal);
+
     this.sendJson(socket, {
       id,
       route,
       op,
       payload,
-      meta: this.mergeMeta(effectiveMeta, this.toPrincipalMeta(principal)),
+      meta: outboundMeta,
     } satisfies ScompTransportRequestEnvelope);
 
     return response;
@@ -490,6 +495,20 @@ export class WebSocketBrowserTransport implements ITransport {
       },
       tenantId: principal.tenantId,
     };
+  }
+
+  /**
+   * Deterministic outbound meta precedence (Node client parity):
+   * config.meta -> options.meta -> priority hints -> principal-derived auth context.
+   */
+  private async composeOutboundMeta(
+    options: ScompClientInvokeOptions | undefined,
+    principal: ScompTransportPrincipal | undefined,
+  ): Promise<ScompTransportMessageMeta | undefined> {
+    const priorityMeta = toPriorityMeta(options);
+    const baseMeta = this.mergeMeta(await this.resolveMeta(), options?.meta);
+    const effectiveMeta = this.mergeMeta(baseMeta, priorityMeta);
+    return this.mergeMeta(effectiveMeta, this.toPrincipalMeta(principal));
   }
 
   private mergeMeta(
