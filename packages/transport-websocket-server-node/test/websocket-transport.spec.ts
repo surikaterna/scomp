@@ -8,6 +8,7 @@ import {
   type CompiledRoute,
   type CompiledRouter,
 } from "@scomp/core";
+import type { ScompTransportSecurityContext } from "@scomp/types";
 import { WebSocketClientTransport } from "@scomp/transport-websocket-client";
 import { WebSocketServerTransport } from "../src";
 
@@ -363,14 +364,16 @@ describe("WebSocket transports", () => {
     const transport = new WebSocketServerTransport({
       server: httpServer,
       security: {
-        authenticate: ({ meta }) => {
+        authenticate: ({
+          meta,
+        }: Omit<ScompTransportSecurityContext, "principal">) => {
           const auth = meta?.auth as { token?: string } | undefined;
           if (auth?.token === "allow") {
             return { subject: "user:allow" };
           }
           return null;
         },
-        authorize: (ctx) => {
+        authorize: (ctx: ScompTransportSecurityContext) => {
           seen.push({
             route: ctx.route,
             operation: ctx.operation,
