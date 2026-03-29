@@ -1,5 +1,5 @@
 import { LoggerFactory } from 'slf';
-import { Scomp, ScompHeader } from '../Scomp';
+import { Scomp, ScompHeader } from '../scomp';
 
 const LOG = LoggerFactory.getLogger('scomp:proxy');
 

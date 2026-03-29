@@ -1,18 +1,23 @@
 {
   "compilerOptions": {
     "outDir": "dist",
-    "lib": ["es2015"],
-    "strict": true,
+    "rootDir": "src",
+    "lib": ["es2020"],
+    "types": ["node"],
+    "strict": false,
     "sourceMap": true,
     "declaration": true,
     "allowSyntheticDefaultImports": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "declarationDir": "dist",
-    "esModuleInterop": true
+    "esModuleInterop": true,
+    "ignoreDeprecations": "6.0"
   },
   "include": [
-    "src/**/*",
+    "src/**/*"
+  ],
+  "exclude": [
     "test/**/*"
   ]
 }

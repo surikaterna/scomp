@@ -5,6 +5,7 @@ import EventEmitter from 'events';
  */
 export class SocketService extends EventEmitter {
   public io: any;
+  public connections: any[];
 
   /**
    * Creates the socket service wrapper.
@@ -12,11 +13,13 @@ export class SocketService extends EventEmitter {
   constructor(io: any) {
     super();
     this.io = io;
+    this.connections = [];
   }
   /**
    * Registers a socket and emits a connected event.
    */
-  register(socket: any) {
+  register(socket: any, _token?: any) {
+    this.connections.push(socket);
     this.emit('connected', socket);
   }
 }
