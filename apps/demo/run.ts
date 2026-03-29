@@ -1,7 +1,10 @@
-import { startDemoServer } from './backend/server';
+import { startDemoServer, usersComposedFragment, usersService } from './backend/server';
 import { createDemoClient } from './frontend/client';
 
 async function runDemo() {
+  console.log('strict service routes:', Object.keys(usersService.router).sort());
+  console.log('composed fragment routes:', Object.keys(usersComposedFragment.router).sort());
+
   const rabbitConfig = {
     url: process.env.SCOMP_RABBITMQ_URL ?? 'amqp://localhost:5672',
     prefetch: 20
