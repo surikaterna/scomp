@@ -1,5 +1,7 @@
 import type { AnyContractMethod, ContractNetworkIntent, ContractMethodInput } from '@scomp/types';
 
+type RouteKind = 'request' | 'signal' | 'feed';
+
 export interface RequestImplementationConfig<Input, Output> {
   kind?: 'request';
   parser?: (payload: unknown) => Input;
@@ -39,22 +41,82 @@ type FeedRawHandler<Method> = Method extends (input: infer Input) => AsyncIterab
   ? (input: Input) => AsyncIterable<Output>
   : never;
 
-type MethodImplementation<Method extends AnyContractMethod> =
-  ReturnType<Method> extends AsyncIterable<infer FeedOutput>
-    ? FeedRawHandler<Method> | FeedImplementationConfig<ContractMethodInput<Method>, FeedOutput>
+type MethodKind<Method extends AnyContractMethod> =
+  ReturnType<Method> extends AsyncIterable<unknown>
+    ? 'feed'
     : ReturnType<Method> extends void | Promise<void>
-      ? SignalRawHandler<Method> | SignalImplementationConfig<ContractMethodInput<Method>>
-      : ReturnType<Method> extends Promise<infer RequestOutput>
-        ? RequestRawHandler<Method> | RequestImplementationConfig<ContractMethodInput<Method>, RequestOutput>
+      ? 'signal'
+      : ReturnType<Method> extends Promise<unknown>
+        ? 'request'
         : never;
+
+type RequestMethodImplementation<Method extends AnyContractMethod> =
+  MethodKind<Method> extends 'request'
+    ? RequestRawHandler<Method> | RequestImplementationConfig<ContractMethodInput<Method>, Awaited<ReturnType<Method>>>
+    : never;
+
+type SignalMethodImplementation<Method extends AnyContractMethod> =
+  MethodKind<Method> extends 'signal'
+    ? SignalRawHandler<Method> | SignalImplementationConfig<ContractMethodInput<Method>>
+    : never;
+
+type FeedMethodImplementation<Method extends AnyContractMethod> =
+  MethodKind<Method> extends 'feed'
+    ? FeedRawHandler<Method> | FeedImplementationConfig<ContractMethodInput<Method>, ReturnType<Method> extends AsyncIterable<infer Output> ? Output : never>
+    : never;
+
+type GroupedRequestImplementationConfig<Input, Output> = Omit<RequestImplementationConfig<Input, Output>, 'kind'>;
+type GroupedSignalImplementationConfig<Input> = Omit<SignalImplementationConfig<Input>, 'kind'>;
+type GroupedFeedImplementationConfig<Input, Output> = Omit<FeedImplementationConfig<Input, Output>, 'kind'>;
+
+type GroupedRequestMethodImplementation<Method extends AnyContractMethod> =
+  MethodKind<Method> extends 'request'
+    ? RequestRawHandler<Method> | GroupedRequestImplementationConfig<ContractMethodInput<Method>, Awaited<ReturnType<Method>>>
+    : never;
+
+type GroupedSignalMethodImplementation<Method extends AnyContractMethod> =
+  MethodKind<Method> extends 'signal'
+    ? SignalRawHandler<Method> | GroupedSignalImplementationConfig<ContractMethodInput<Method>>
+    : never;
+
+type GroupedFeedMethodImplementation<Method extends AnyContractMethod> =
+  MethodKind<Method> extends 'feed'
+    ? FeedRawHandler<Method> | GroupedFeedImplementationConfig<ContractMethodInput<Method>, ReturnType<Method> extends AsyncIterable<infer Output> ? Output : never>
+    : never;
+
+type ContractMethodKeysByKind<Contract extends object, Kind extends RouteKind> = {
+  [MethodName in ContractMethodKeys<Contract>]: MethodKind<Extract<Contract[MethodName], AnyContractMethod>> extends Kind
+    ? MethodName
+    : never;
+}[ContractMethodKeys<Contract>];
+
+type GroupedMethodImplementations<Contract extends object, Kind extends RouteKind> = {
+  [MethodName in ContractMethodKeysByKind<Contract, Kind>]:
+  Kind extends 'request'
+    ? GroupedRequestMethodImplementation<Extract<Contract[MethodName], AnyContractMethod>>
+    : Kind extends 'signal'
+      ? GroupedSignalMethodImplementation<Extract<Contract[MethodName], AnyContractMethod>>
+      : GroupedFeedMethodImplementation<Extract<Contract[MethodName], AnyContractMethod>>;
+};
+
+type MethodImplementation<Method extends AnyContractMethod> =
+  RequestMethodImplementation<Method>
+  | SignalMethodImplementation<Method>
+  | FeedMethodImplementation<Method>;
 
 export type ServiceMethodImplementations<Contract extends object> = {
   [MethodName in ContractMethodKeys<Contract>]: MethodImplementation<Extract<Contract[MethodName], AnyContractMethod>>;
 };
 
+export interface GroupedServiceMethodImplementations<Contract extends object> {
+  requests: GroupedMethodImplementations<Contract, 'request'>;
+  signals: GroupedMethodImplementations<Contract, 'signal'>;
+  feeds: GroupedMethodImplementations<Contract, 'feed'>;
+}
+
 export interface CompiledRoute {
   route: string;
-  kind: 'request' | 'signal' | 'feed';
+  kind: RouteKind;
   parser?: (payload: unknown) => unknown;
   strategy?: 'fanout' | 'exclusive';
   hashKey?: (payload: unknown) => string;
@@ -72,7 +134,11 @@ export interface ServiceDefinition<Contract extends object> {
   router: CompiledRouter;
 }
 
-function normalizeMethodConfig(methodConfig: unknown, inferredKind: 'request' | 'signal' | 'feed'): Omit<CompiledRoute, 'route'> {
+function normalizeMethodConfig(
+  methodConfig: unknown,
+  inferredKind: RouteKind,
+  deterministicKind: boolean
+): Omit<CompiledRoute, 'route'> {
   if (typeof methodConfig === 'function') {
     if (inferredKind === 'feed') {
       return {
@@ -89,7 +155,9 @@ function normalizeMethodConfig(methodConfig: unknown, inferredKind: 'request' | 
   }
 
   const configObject = methodConfig as Record<string, unknown>;
-  const kind = (configObject.kind as 'request' | 'signal' | 'feed' | undefined) ?? inferredKind;
+  const kind = deterministicKind
+    ? inferredKind
+    : (configObject.kind as RouteKind | undefined) ?? inferredKind;
   return {
     kind,
     parser: configObject.parser as ((payload: unknown) => unknown) | undefined,
@@ -100,7 +168,7 @@ function normalizeMethodConfig(methodConfig: unknown, inferredKind: 'request' | 
   };
 }
 
-function inferRouteKind(methodConfig: unknown): 'request' | 'signal' | 'feed' {
+function inferRouteKind(methodConfig: unknown): RouteKind {
   if (typeof methodConfig === 'function') {
     return 'request';
   }
@@ -117,7 +185,7 @@ function inferRouteKind(methodConfig: unknown): 'request' | 'signal' | 'feed' {
   return 'request';
 }
 
-function compileRouter<Contract extends object>(
+function compileFlatRouter<Contract extends object>(
   name: string,
   methods: ServiceMethodImplementations<Contract>
 ): CompiledRouter {
@@ -128,7 +196,7 @@ function compileRouter<Contract extends object>(
     const route = `${name}.${methodName}`;
 
     const inferredKind = inferRouteKind(implementation);
-    const normalized = normalizeMethodConfig(implementation, inferredKind);
+    const normalized = normalizeMethodConfig(implementation, inferredKind, false);
 
     router[route] = {
       route,
@@ -144,10 +212,61 @@ function compileRouter<Contract extends object>(
   return router;
 }
 
+function compileGroupedMethods(
+  name: string,
+  kind: RouteKind,
+  methods: Record<string, unknown>,
+  router: CompiledRouter
+) {
+  for (const methodName of Object.keys(methods)) {
+    const implementation = methods[methodName];
+    const route = `${name}.${methodName}`;
+    const normalized = normalizeMethodConfig(implementation, kind, true);
+
+    router[route] = {
+      route,
+      kind: normalized.kind,
+      parser: normalized.parser,
+      strategy: normalized.strategy,
+      hashKey: normalized.hashKey,
+      backpressure: normalized.backpressure,
+      handler: normalized.handler
+    };
+  }
+}
+
+function compileGroupedRouter<Contract extends object>(
+  name: string,
+  groupedMethods: GroupedServiceMethodImplementations<Contract>
+): CompiledRouter {
+  const router: CompiledRouter = {};
+
+  compileGroupedMethods(name, 'request', groupedMethods.requests as Record<string, unknown>, router);
+  compileGroupedMethods(name, 'signal', groupedMethods.signals as Record<string, unknown>, router);
+  compileGroupedMethods(name, 'feed', groupedMethods.feeds as Record<string, unknown>, router);
+
+  return router;
+}
+
+function isGroupedMethods<Contract extends object>(
+  methods: ServiceMethodImplementations<Contract> | GroupedServiceMethodImplementations<Contract>
+): methods is GroupedServiceMethodImplementations<Contract> {
+  if (typeof methods !== 'object' || methods === null) {
+    return false;
+  }
+
+  const methodMap = methods as Record<string, unknown>;
+  return 'requests' in methodMap && 'signals' in methodMap && 'feeds' in methodMap;
+}
+
 export function createScompService<Contract extends object>(name: string) {
   return {
-    implement(methods: ServiceMethodImplementations<Contract>): ServiceDefinition<Contract> {
-      const router = compileRouter(name, methods);
+    implement(
+      methods: ServiceMethodImplementations<Contract> | GroupedServiceMethodImplementations<Contract>
+    ): ServiceDefinition<Contract> {
+      const router = isGroupedMethods(methods)
+        ? compileGroupedRouter(name, methods)
+        : compileFlatRouter(name, methods);
 
       return {
         name,
