@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createScompFragment, createScompService } from '../src';
+import { composeScompFragments, createScompFragment, createScompService } from '../src';
 
 describe('createScompService contract builder', () => {
   it('supports grouped requests/signals/feeds authoring with deterministic route kinds', async () => {
@@ -184,5 +184,55 @@ describe('createScompFragment contract builder', () => {
     assert.equal(fragment.router['users.notifyLogin'].kind, 'signal');
     await fragment.router['users.notifyLogin'].handler({ id: 99 });
     assert.equal(fragment.router['users.getUser'], undefined);
+  });
+
+  it('composes fragments without overriding methods', async () => {
+    interface UsersContract {
+      getUser(input: { id: number }): Promise<{ id: number; name: string }>;
+      notifyLogin(input: { id: number }): Promise<void>;
+      liveUsers(input: { room: string }): AsyncIterable<{ id: number }>;
+    }
+
+    const requestsFragment = createScompFragment<UsersContract>('users').implement({
+      requests: {
+        getUser: async ({ id }) => ({ id, name: `u-${id}` })
+      }
+    });
+
+    const signalsFragment = createScompFragment<UsersContract>('users').implement({
+      signals: {
+        notifyLogin: async () => {
+          return;
+        }
+      }
+    });
+
+    const composed = composeScompFragments(requestsFragment, signalsFragment);
+
+    assert.equal(composed.router['users.getUser'].kind, 'request');
+    assert.equal(composed.router['users.notifyLogin'].kind, 'signal');
+  });
+
+  it('rejects duplicate methods when composing fragments', () => {
+    interface UsersContract {
+      getUser(input: { id: number }): Promise<{ id: number; name: string }>;
+    }
+
+    const first = createScompFragment<UsersContract>('users').implement({
+      requests: {
+        getUser: async ({ id }) => ({ id, name: `a-${id}` })
+      }
+    });
+
+    const second = createScompFragment<UsersContract>('users').implement({
+      requests: {
+        getUser: async ({ id }) => ({ id, name: `b-${id}` })
+      }
+    });
+
+    assert.throws(
+      () => composeScompFragments(first, second),
+      /Duplicate method "getUser" defined by fragments users#1 \(users.getUser\) and users#2 \(users.getUser\)/
+    );
   });
 });
