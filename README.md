@@ -84,3 +84,28 @@ See `apps/demo` for end-to-end examples using grouped sections and fragments.
 Transport protocol reference:
 
 - [docs/transport-json-protocol.md](docs/transport-json-protocol.md)
+
+## Bun websocket server transport
+
+`@scomp/transport-websocket-server` now includes a Bun-native server transport for `Bun.serve`.
+
+Use `createBunWebSocketServerTransport` to wire route handling without changing the existing envelope schema (`request`, `signal`, `feed_start`/`feed_stop` + feed chunk stream):
+
+```ts
+import { createBunWebSocketServerTransport } from "@scomp/transport-websocket-server";
+
+const transport = createBunWebSocketServerTransport({ path: "/ws" });
+await transport.listen(router);
+
+const server = Bun.serve({
+  port: 3000,
+  fetch: transport.fetch,
+  websocket: transport.websocket,
+});
+```
+
+Compatibility notes:
+
+- Existing Node + `ws` `WebSocketServerTransport` exports and behavior are unchanged.
+- Bun transport keeps the same request/signal/feed semantics and security policy hooks.
+- No protocol envelope changes are required for existing websocket clients.
