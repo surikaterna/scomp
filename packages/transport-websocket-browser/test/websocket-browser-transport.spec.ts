@@ -4,7 +4,7 @@ import {
   type ScompTransportRequestEnvelope,
   type ScompTransportResponseEnvelope,
 } from "@scomp/types";
-import { WebSocketBrowserTransport } from "../src";
+import { SocketDisconnectedError, WebSocketBrowserTransport } from "../src";
 
 class FakeWebSocket {
   static readonly CONNECTING = 0;
@@ -364,5 +364,82 @@ describe("WebSocketBrowserTransport invocation parity", () => {
     );
 
     assert.equal(harness.sent.length, 0);
+  });
+
+  it("delivers queued feed chunks that arrive before feed_start response", async () => {
+    const harness = createHarness();
+
+    const iterator = harness.transport
+      .feed("users.live", { room: "alpha" })
+      [Symbol.asyncIterator]();
+
+    const pendingFirst = iterator.next();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const feedStart = parseEnvelope(harness.sent[0]);
+    harness.getSocket().emit("message", {
+      data: JSON.stringify({
+        channel: "feed",
+        hash: "feed-race",
+        type: "next",
+        payload: { seq: 1 },
+      }),
+    });
+
+    harness.getSocket().emit("message", {
+      data: JSON.stringify({
+        id: feedStart.id,
+        payload: { hash: "feed-race", exchange: "scomp.live.feed-race" },
+      } satisfies ScompTransportResponseEnvelope),
+    });
+
+    const first = await pendingFirst;
+    assert.equal(first.done, false);
+    assert.deepEqual(first.value, { seq: 1 });
+
+    const pendingStop = iterator.return?.(undefined);
+    if (!pendingStop) {
+      throw new Error("Expected feed iterator return()");
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const feedStop = parseEnvelope(harness.sent[1]);
+    harness.getSocket().emit("message", {
+      data: JSON.stringify({
+        id: feedStop.id,
+        payload: { ok: true },
+      } satisfies ScompTransportResponseEnvelope),
+    });
+
+    const stopResult = await pendingStop;
+    assert.equal(stopResult.done, true);
+  });
+
+  it("propagates disconnect to pending request and active feed", async () => {
+    const harness = createHarness();
+
+    const pendingRequest = harness.transport.request("users.get", { id: 1 });
+    const iterator = harness.transport
+      .feed("users.live", { room: "alpha" })
+      [Symbol.asyncIterator]();
+
+    const pendingFeedNext = iterator.next();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const feedStart = parseEnvelope(harness.sent[1]);
+    harness.getSocket().emit("message", {
+      data: JSON.stringify({
+        id: feedStart.id,
+        payload: { hash: "feed-disconnect", exchange: "scomp.live.feed-disconnect" },
+      } satisfies ScompTransportResponseEnvelope),
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    harness.getSocket().close();
+
+    await assert.rejects(pendingRequest, SocketDisconnectedError);
+    const feedResult = await pendingFeedNext;
+    assert.equal(feedResult.done, true);
   });
 });

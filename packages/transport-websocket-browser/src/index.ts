@@ -27,6 +27,19 @@ interface FeedState {
   queue: Array<unknown | Promise<never>>;
   waiters: Array<() => void>;
   closed: boolean;
+  terminalError?: Error;
+}
+
+function toDisconnectError(error: unknown): Error {
+  if (error instanceof Error) {
+    return error;
+  }
+
+  const message =
+    typeof error === "string" && error.length > 0
+      ? error
+      : "WebSocket connection closed.";
+  return new SocketDisconnectedError(message);
 }
 
 type BrowserSocket = Pick<
@@ -130,6 +143,7 @@ export class WebSocketBrowserTransport implements ITransport {
   private readonly config: WebSocketBrowserTransportConfig;
   private socket?: BrowserSocket;
   private openingPromise?: Promise<BrowserSocket>;
+  private lastDisconnectError?: Error;
   private readonly pendingRequests = new Map<string, PendingRequest>();
   private readonly feeds = new Map<string, FeedState>();
   private readonly pendingFeedChunks = new Map<
@@ -212,9 +226,19 @@ export class WebSocketBrowserTransport implements ITransport {
           queue: [],
           waiters: [],
           closed: false,
+          terminalError: undefined,
         };
 
         self.feeds.set(feedHash, state);
+        if (!self.socket || !self.isOpen(self.socket)) {
+          state.closed = true;
+          state.queue.push(
+            Promise.reject(
+              self.lastDisconnectError ?? new SocketDisconnectedError(),
+            ),
+          );
+        }
+
         self.drainPendingFeedChunks(feedHash, state);
 
         try {
@@ -226,6 +250,11 @@ export class WebSocketBrowserTransport implements ITransport {
               }
 
               if (state.closed && value === undefined) {
+                const terminalError =
+                  state.terminalError ?? self.lastDisconnectError;
+                if (terminalError) {
+                  throw terminalError;
+                }
                 return;
               }
 
@@ -233,6 +262,11 @@ export class WebSocketBrowserTransport implements ITransport {
                 yield value;
               }
             } else if (state.closed) {
+              const terminalError =
+                state.terminalError ?? self.lastDisconnectError;
+              if (terminalError) {
+                throw terminalError;
+              }
               return;
             } else {
               await new Promise<void>((resolve) => state.waiters.push(resolve));
@@ -240,7 +274,19 @@ export class WebSocketBrowserTransport implements ITransport {
           }
         } finally {
           self.feeds.delete(feedHash);
-          await self.sendRpc(route, "feed_stop", { hash: feedHash }, options);
+          self.pendingFeedChunks.delete(feedHash);
+          const activeSocket = self.socket;
+          if (!activeSocket || !self.isOpen(activeSocket)) {
+            return;
+          }
+
+          try {
+            await self.sendRpc(route, "feed_stop", { hash: feedHash }, options);
+          } catch (error) {
+            if (!(error instanceof SocketDisconnectedError)) {
+              throw error;
+            }
+          }
         }
       },
     };
@@ -282,6 +328,7 @@ export class WebSocketBrowserTransport implements ITransport {
       const onOpen = () => {
         cleanup();
         this.socket = socket;
+        this.lastDisconnectError = undefined;
         this.attachSocketHandlers(socket);
         this.openingPromise = undefined;
         resolve(socket);
@@ -370,23 +417,24 @@ export class WebSocketBrowserTransport implements ITransport {
 
   private handleDisconnect(error: unknown): void {
     this.socket = undefined;
+    const disconnectError = toDisconnectError(error);
+    this.lastDisconnectError = disconnectError;
 
     for (const pending of this.pendingRequests.values()) {
-      pending.reject(error);
+      pending.reject(disconnectError);
     }
     this.pendingRequests.clear();
 
+    this.pendingFeedChunks.clear();
+
     for (const feed of this.feeds.values()) {
       feed.closed = true;
-      feed.queue.push(
-        Promise.reject(
-          error instanceof Error
-            ? error
-            : new SocketDisconnectedError(String(error)),
-        ),
-      );
-      const waiter = feed.waiters.shift();
-      waiter?.();
+      feed.terminalError = disconnectError;
+      feed.queue.push(Promise.reject(disconnectError));
+      while (feed.waiters.length > 0) {
+        const waiter = feed.waiters.shift();
+        waiter?.();
+      }
     }
   }
 
@@ -445,11 +493,12 @@ export class WebSocketBrowserTransport implements ITransport {
   private enqueueFeedChunk(feed: FeedState, message: ScompFeedChunkEnvelope): void {
     if (message.type === "done") {
       feed.closed = true;
+      feed.terminalError = undefined;
     } else if (message.type === "error") {
       feed.closed = true;
-      feed.queue.push(
-        Promise.reject(new Error(String(message.message ?? "Feed error"))),
-      );
+      const error = new Error(String(message.message ?? "Feed error"));
+      feed.terminalError = error;
+      feed.queue.push(Promise.reject(error));
     } else {
       feed.queue.push(message.payload);
     }
