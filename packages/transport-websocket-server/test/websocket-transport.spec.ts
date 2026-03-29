@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { createServer, type Server as HttpServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { type CompiledRoute, type CompiledRouter } from "@scomp/core";
+import {
+  composeScompFragments,
+  createScompFragment,
+  createScompService,
+  type CompiledRoute,
+  type CompiledRouter,
+} from "@scomp/core";
 import { WebSocketClientTransport } from "@scomp/transport-websocket-client";
 import { WebSocketServerTransport } from "../src";
 
@@ -9,10 +15,8 @@ function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function collect(
-  iterable: AsyncIterable<number>,
-): Promise<Array<number>> {
-  const values: Array<number> = [];
+async function collect<T>(iterable: AsyncIterable<T>): Promise<Array<T>> {
+  const values: Array<T> = [];
   for await (const value of iterable) {
     values.push(value);
   }
@@ -95,6 +99,102 @@ async function closeClientTransport(
 }
 
 describe("WebSocket transports", () => {
+  it("keeps grouped and composed fragment routers transport-compatible", async () => {
+    interface UsersContract {
+      getUser(input: { id: number }): Promise<{ id: number; name: string }>;
+      notifyLogin(input: { id: number }): Promise<void>;
+      liveUsers(input: { room: string }): AsyncIterable<{ id: number }>;
+    }
+
+    const groupedSignals: Array<unknown> = [];
+    const grouped = createScompService<UsersContract>("users").implement({
+      requests: {
+        getUser: async ({ id }: { id: number }) => ({ id, name: `u-${id}` }),
+      },
+      signals: {
+        notifyLogin: async (payload: { id: number }) => {
+          groupedSignals.push(payload);
+        },
+      },
+      feeds: {
+        liveUsers: {
+          strategy: "fanout",
+          hashKey: ({ room }: { room: string }) => room,
+          handler: async function* () {
+            yield { id: 1 };
+            yield { id: 2 };
+          },
+        },
+      },
+    });
+
+    const composedSignals: Array<unknown> = [];
+    const requestFragment = createScompFragment<UsersContract>("users").implement(
+      {
+        requests: {
+          getUser: async ({ id }: { id: number }) => ({ id, name: `u-${id}` }),
+        },
+      },
+    );
+    const signalFragment = createScompFragment<UsersContract>("users").implement(
+      {
+        signals: {
+          notifyLogin: async (payload: { id: number }) => {
+            composedSignals.push(payload);
+          },
+        },
+      },
+    );
+    const feedFragment = createScompFragment<UsersContract>("users").implement({
+      feeds: {
+        liveUsers: {
+          strategy: "fanout",
+          hashKey: ({ room }: { room: string }) => room,
+          handler: async function* () {
+            yield { id: 1 };
+            yield { id: 2 };
+          },
+        },
+      },
+    });
+    const composed = composeScompFragments(
+      requestFragment,
+      signalFragment,
+      feedFragment,
+    );
+
+    const cases = [
+      { router: grouped.router, signals: groupedSignals },
+      { router: composed.router, signals: composedSignals },
+    ];
+
+    for (const { router, signals } of cases) {
+      assert.equal(router["users.getUser"].kind, "request");
+      assert.equal(router["users.notifyLogin"].kind, "signal");
+      assert.equal(router["users.liveUsers"].kind, "feed");
+
+      const harness = await createHarness(router);
+      const client = new WebSocketClientTransport({ url: harness.url });
+
+      try {
+        const requestResult = await client.request("users.getUser", { id: 7 });
+        assert.deepEqual(requestResult, { id: 7, name: "u-7" });
+
+        await client.signal("users.notifyLogin", { id: 7 });
+        await wait(15);
+        assert.deepEqual(signals, [{ id: 7 }]);
+
+        const feedValues = await collect(client.feed("users.liveUsers", {
+          room: "general",
+        }));
+        assert.deepEqual(feedValues, [{ id: 1 }, { id: 2 }]);
+      } finally {
+        await closeClientTransport(client);
+        await closeHarness(harness);
+      }
+    }
+  });
+
   it("supports request, signal, and feed end-to-end", async () => {
     const signals: Array<unknown> = [];
 
