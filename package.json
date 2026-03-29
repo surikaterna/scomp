@@ -5,7 +5,9 @@
   "scripts": {
     "build": "turbo run build",
     "build:ts": "tsc -b tsconfig.build.json",
-    "lint": "turbo run lint",
+    "check:websocket-server-imports": "bun ./check-websocket-server-imports.mjs",
+    "check:websocket-server-imports:fixtures": "bun ./check-websocket-server-imports-fixtures.mjs",
+    "lint": "bun run check:websocket-server-imports && turbo run lint",
     "test": "turbo run test"
   },
   "devDependencies": {
