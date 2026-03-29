@@ -13,6 +13,7 @@ export {
   type CompiledRoute,
   type CompiledRouter,
   type FeedImplementationConfig,
+  type GroupedServiceMethodImplementations,
   type RequestImplementationConfig,
   type ServiceDefinition,
   type SignalImplementationConfig,
