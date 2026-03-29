@@ -54,27 +54,7 @@ async function createHarness(router: CompiledRouter): Promise<Harness> {
 }
 
 async function closeHarness(harness: Harness): Promise<void> {
-  const transportState = harness.serverTransport as unknown as {
-    sockets?: Set<{ terminate?: () => void; close?: () => void }>;
-    server?: { close: (callback: (error?: Error) => void) => void };
-    outboundTransport?: {
-      socket?: { terminate?: () => void; close?: () => void };
-    };
-  };
-
-  for (const socket of transportState.sockets ?? []) {
-    socket.terminate?.();
-    socket.close?.();
-  }
-
-  transportState.outboundTransport?.socket?.terminate?.();
-  transportState.outboundTransport?.socket?.close?.();
-
-  if (transportState.server) {
-    await new Promise<void>((resolve) => {
-      transportState.server?.close(() => resolve());
-    });
-  }
+  await harness.serverTransport.close();
 
   await new Promise<void>((resolve, reject) => {
     harness.httpServer.close((error) => {
@@ -91,12 +71,7 @@ async function closeHarness(harness: Harness): Promise<void> {
 async function closeClientTransport(
   client: WebSocketClientTransport,
 ): Promise<void> {
-  const state = client as unknown as {
-    socket?: { terminate?: () => void; close?: () => void };
-  };
-
-  state.socket?.terminate?.();
-  state.socket?.close?.();
+  await client.close();
 }
 
 describe("WebSocket transports", () => {
