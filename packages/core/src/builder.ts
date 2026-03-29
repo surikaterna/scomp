@@ -110,10 +110,18 @@ export type ServiceMethodImplementations<Contract extends object> = {
 
 export type FragmentMethodImplementations<Contract extends object> = Partial<ServiceMethodImplementations<Contract>>;
 
+type FlatServiceMethodImplementationsInput<Contract extends object> = Partial<ServiceMethodImplementations<Contract>>;
+
 export interface GroupedServiceMethodImplementations<Contract extends object> {
   requests: GroupedMethodImplementations<Contract, 'request'>;
   signals: GroupedMethodImplementations<Contract, 'signal'>;
   feeds: GroupedMethodImplementations<Contract, 'feed'>;
+}
+
+interface GroupedServiceMethodImplementationsInput<Contract extends object> {
+  requests?: Partial<GroupedMethodImplementations<Contract, 'request'>>;
+  signals?: Partial<GroupedMethodImplementations<Contract, 'signal'>>;
+  feeds?: Partial<GroupedMethodImplementations<Contract, 'feed'>>;
 }
 
 export interface GroupedFragmentMethodImplementations<Contract extends object> {
@@ -121,6 +129,59 @@ export interface GroupedFragmentMethodImplementations<Contract extends object> {
   signals?: Partial<GroupedMethodImplementations<Contract, 'signal'>>;
   feeds?: Partial<GroupedMethodImplementations<Contract, 'feed'>>;
 }
+
+type ServiceMethodImplementationsInput<Contract extends object> =
+  | FlatServiceMethodImplementationsInput<Contract>
+  | GroupedServiceMethodImplementationsInput<Contract>;
+
+type GroupedProvidedMethodKeys<Grouped> =
+  Grouped extends {
+    requests?: infer Requests;
+    signals?: infer Signals;
+    feeds?: infer Feeds;
+  }
+    ? keyof NonNullable<Requests> | keyof NonNullable<Signals> | keyof NonNullable<Feeds>
+    : never;
+
+type ProvidedMethodKeys<Methods> = Methods extends {
+  requests?: unknown;
+  signals?: unknown;
+  feeds?: unknown;
+}
+  ? GroupedProvidedMethodKeys<Methods>
+  : keyof Methods;
+
+type MissingServiceMethodKeys<Contract extends object, Methods> = Exclude<
+  ContractMethodKeys<Contract>,
+  ProvidedMethodKeys<Methods>
+>;
+
+type UnknownServiceMethodKeys<Contract extends object, Methods> = Exclude<
+  ProvidedMethodKeys<Methods>,
+  ContractMethodKeys<Contract>
+>;
+
+type EnsureKnownServiceMethods<Contract extends object, Methods> =
+  [UnknownServiceMethodKeys<Contract, Methods>] extends [never]
+    ? {}
+    : {
+      __scomp_unknown_methods__: {
+        [MethodName in UnknownServiceMethodKeys<Contract, Methods>]: 'Method is not in contract';
+      };
+    };
+
+type EnsureCompleteServiceImplementation<Contract extends object, Methods> =
+  [MissingServiceMethodKeys<Contract, Methods>] extends [never]
+    ? {}
+    : {
+      __scomp_missing_methods__: {
+        [MethodName in MissingServiceMethodKeys<Contract, Methods>]: 'Missing contract implementation';
+      };
+    };
+
+type StrictServiceImplementationChecks<Contract extends object, Methods> =
+  EnsureKnownServiceMethods<Contract, Methods>
+  & EnsureCompleteServiceImplementation<Contract, Methods>;
 
 export interface CompiledRoute {
   route: string;
@@ -251,7 +312,10 @@ function compileGroupedMethods(
 
 function compileGroupedRouter<Contract extends object>(
   name: string,
-  groupedMethods: GroupedServiceMethodImplementations<Contract> | GroupedFragmentMethodImplementations<Contract>
+  groupedMethods:
+    | GroupedServiceMethodImplementations<Contract>
+    | GroupedServiceMethodImplementationsInput<Contract>
+    | GroupedFragmentMethodImplementations<Contract>
 ): CompiledRouter {
   const router: CompiledRouter = {};
 
@@ -282,12 +346,12 @@ function isGroupedMethods(methods: unknown): methods is {
 
 export function createScompService<Contract extends object>(name: string) {
   return {
-    implement(
-      methods: ServiceMethodImplementations<Contract> | GroupedServiceMethodImplementations<Contract>
+    implement<Methods extends ServiceMethodImplementationsInput<Contract>>(
+      methods: Methods & StrictServiceImplementationChecks<Contract, Methods>
     ): ServiceDefinition<Contract> {
       const router = isGroupedMethods(methods)
         ? compileGroupedRouter(name, methods)
-        : compileFlatRouter(name, methods);
+        : compileFlatRouter(name, methods as Record<string, unknown>);
 
       return {
         name,

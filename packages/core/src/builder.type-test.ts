@@ -22,6 +22,16 @@ createScompService<GroupedTypesContract>('users').implement({
   }
 });
 
+createScompService<GroupedTypesContract>('users').implement({
+  getUser: async ({ id }) => ({ id }),
+  notifyLogin: async () => {
+    return;
+  },
+  liveUsers: async function* () {
+    yield { id: 1 };
+  }
+});
+
 createScompFragment<GroupedTypesContract>('users').implement({
   requests: {
     getUser: async ({ id }) => ({ id })
@@ -86,6 +96,26 @@ createScompService<GroupedTypesContract>('users').implement({
   feeds: {
     liveUsers: async function* () {
       yield { id: 1 };
+    }
+  }
+});
+
+// @ts-expect-error - strict services must implement all contract methods (missing liveUsers)
+createScompService<GroupedTypesContract>('users').implement({
+  getUser: async ({ id }) => ({ id }),
+  notifyLogin: async () => {
+    return;
+  }
+});
+
+// @ts-expect-error - strict grouped services must implement all contract methods (missing liveUsers feed)
+createScompService<GroupedTypesContract>('users').implement({
+  requests: {
+    getUser: async ({ id }) => ({ id })
+  },
+  signals: {
+    notifyLogin: async () => {
+      return;
     }
   }
 });
