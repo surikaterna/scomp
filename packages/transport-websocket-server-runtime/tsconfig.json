@@ -8,9 +8,7 @@
   },
   "references": [
     { "path": "../core" },
-    { "path": "../types" },
-    { "path": "../transport-websocket-client" },
-    { "path": "../transport-websocket-server-runtime" }
+    { "path": "../types" }
   ],
   "include": ["src/**/*"]
 }
