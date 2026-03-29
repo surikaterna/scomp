@@ -154,6 +154,30 @@ export class WebSocketServerTransport implements ITransport {
     });
   }
 
+  async close(): Promise<void> {
+    if (this.outboundTransport) {
+      await this.outboundTransport.close();
+      this.outboundTransport = undefined;
+    }
+
+    for (const socket of this.sockets) {
+      this.runtime.detachSocketFromFeeds(socket);
+      socket.terminate();
+      socket.close();
+    }
+    this.sockets.clear();
+
+    const server = this.server;
+    this.server = undefined;
+    if (!server) {
+      return;
+    }
+
+    await new Promise<void>((resolve) => {
+      server.close(() => resolve());
+    });
+  }
+
   async request(
     route: string,
     payload: any,

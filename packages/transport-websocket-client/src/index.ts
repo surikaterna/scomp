@@ -129,6 +129,47 @@ export class WebSocketClientTransport implements ITransport {
     );
   }
 
+  async close(): Promise<void> {
+    const socket = this.socket;
+    this.handleDisconnect(
+      new SocketDisconnectedError("WebSocket transport closed."),
+    );
+
+    if (!socket) {
+      return;
+    }
+
+    if (
+      socket.readyState === WebSocket.CLOSING ||
+      socket.readyState === WebSocket.CLOSED
+    ) {
+      return;
+    }
+
+    await new Promise<void>((resolve) => {
+      const onClose = () => {
+        socket.off("close", onClose);
+        socket.off("error", onError);
+        resolve();
+      };
+
+      const onError = () => {
+        socket.off("close", onClose);
+        socket.off("error", onError);
+        resolve();
+      };
+
+      socket.once("close", onClose);
+      socket.once("error", onError);
+
+      try {
+        socket.close();
+      } catch {
+        onClose();
+      }
+    });
+  }
+
   async request(
     route: string,
     payload: any,
@@ -332,11 +373,13 @@ export class WebSocketClientTransport implements ITransport {
 
   private handleDisconnect(error: unknown): void {
     this.socket = undefined;
+    this.openingPromise = undefined;
 
     for (const pending of this.pendingRequests.values()) {
       pending.reject(error);
     }
     this.pendingRequests.clear();
+    this.pendingFeedChunks.clear();
 
     for (const feed of this.feeds.values()) {
       feed.closed = true;
@@ -347,8 +390,10 @@ export class WebSocketClientTransport implements ITransport {
             : new SocketDisconnectedError(String(error)),
         ),
       );
-      const waiter = feed.waiters.shift();
-      waiter?.();
+      while (feed.waiters.length > 0) {
+        const waiter = feed.waiters.shift();
+        waiter?.();
+      }
     }
   }
 

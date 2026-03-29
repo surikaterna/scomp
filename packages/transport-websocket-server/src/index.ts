@@ -27,6 +27,8 @@ interface BunLikeServerWebSocket {
   readyState: number;
   data?: BunServerData;
   send(payload: string): void;
+  close?(code?: number, reason?: string): void;
+  terminate?(): void;
 }
 
 interface BunLikeServer {
@@ -199,6 +201,23 @@ export class WebSocketServerTransport implements ITransport {
         },
       },
     });
+  }
+
+  async close(): Promise<void> {
+    if (this.outboundTransport) {
+      await this.outboundTransport.close();
+      this.outboundTransport = undefined;
+    }
+
+    for (const socket of this.sockets) {
+      this.runtime.detachSocketFromFeeds(socket);
+      socket.terminate?.();
+      socket.close?.();
+    }
+    this.sockets.clear();
+
+    this.server?.stop(true);
+    this.server = undefined;
   }
 
   async request(
