@@ -1,5 +1,11 @@
 import assert from 'node:assert/strict';
-import { composeScompFragments, createScompFragment, createScompService } from '../src';
+import {
+  composeScompFragments,
+  createNodeLocalDiscoverHandler,
+  createNodeLocalResolveHandler,
+  createScompFragment,
+  createScompService
+} from '../src';
 
 describe('createScompService contract builder', () => {
   it('supports grouped requests/signals/feeds authoring with deterministic route kinds', async () => {
@@ -59,6 +65,44 @@ describe('createScompService contract builder', () => {
     const liveIterator = (liveRoute.handler({ room: 'general' }) as AsyncIterable<{ id: number }>)[Symbol.asyncIterator]();
     const firstChunk = await liveIterator.next();
     assert.deepEqual(firstChunk, { value: { id: 1 }, done: false });
+  });
+
+  it('keeps grouped route kind deterministic even if method configs include conflicting kinds', () => {
+    interface UsersContract {
+      getUser(input: { id: number }): Promise<{ id: number }>;
+      notifyLogin(input: { id: number }): Promise<void>;
+      liveUsers(input: { room: string }): AsyncIterable<{ id: number }>;
+    }
+
+    const service = createScompService<UsersContract>('users').implement({
+      requests: {
+        getUser: {
+          kind: 'feed',
+          handler: async (input: { id: number }) => ({ id: input.id })
+        } as unknown as (input: { id: number }) => Promise<{ id: number }>
+      },
+      signals: {
+        notifyLogin: {
+          kind: 'request',
+          handler: async () => {
+            return;
+          }
+        } as unknown as (input: { id: number }) => Promise<void>
+      },
+      feeds: {
+        liveUsers: {
+          kind: 'signal',
+          strategy: 'exclusive',
+          handler: async function* () {
+            yield { id: 1 };
+          }
+        } as unknown as (input: { room: string }) => AsyncIterable<{ id: number }>
+      }
+    });
+
+    assert.equal(service.router['users.getUser'].kind, 'request');
+    assert.equal(service.router['users.notifyLogin'].kind, 'signal');
+    assert.equal(service.router['users.liveUsers'].kind, 'feed');
   });
 
   it('compiles request, signal, and feed methods into a flat routing table', async () => {
@@ -213,6 +257,76 @@ describe('createScompFragment contract builder', () => {
     assert.equal(composed.router['users.notifyLogin'].kind, 'signal');
   });
 
+  it('composed fragment router remains compatible with discover/resolve control-plane handlers', () => {
+    interface UsersContract {
+      getUser(input: { id: number }): Promise<{ id: number; name: string }>;
+      notifyLogin(input: { id: number }): Promise<void>;
+      liveUsers(input: { room: string }): AsyncIterable<{ id: number }>;
+    }
+
+    const requestsFragment = createScompFragment<UsersContract>('users').implement({
+      requests: {
+        getUser: async ({ id }) => ({ id, name: `u-${id}` })
+      }
+    });
+
+    const signalsFragment = createScompFragment<UsersContract>('users').implement({
+      signals: {
+        notifyLogin: async () => {
+          return;
+        }
+      }
+    });
+
+    const feedsFragment = createScompFragment<UsersContract>('users').implement({
+      feeds: {
+        liveUsers: {
+          strategy: 'fanout',
+          handler: async function* () {
+            yield { id: 1 };
+          }
+        }
+      }
+    });
+
+    const composed = composeScompFragments(requestsFragment, signalsFragment, feedsFragment);
+    const discover = createNodeLocalDiscoverHandler(composed.router, {
+      nodeId: 'node-1'
+    });
+    const resolve = createNodeLocalResolveHandler(composed.router, {
+      defaultTransport: 'inproc'
+    });
+
+    const discovered = discover({ includeRoutes: true });
+    assert.deepEqual(discovered.services, [
+      {
+        name: 'users',
+        routes: ['users.getUser', 'users.liveUsers', 'users.notifyLogin']
+      }
+    ]);
+
+    const resolved = resolve({ route: 'users.notifyLogin', channel: 'alpha' });
+    assert.equal(resolved.resolved, true);
+    assert.equal(resolved.fallbackUsed, true);
+    assert.deepEqual(resolved.endpoint, {
+      route: 'users.notifyLogin',
+      channel: 'current-channel',
+      transport: 'inproc'
+    });
+    assert.deepEqual(resolved.candidates, [
+      {
+        route: 'users.notifyLogin',
+        channel: 'alpha',
+        transport: 'inproc'
+      },
+      {
+        route: 'users.notifyLogin',
+        channel: 'current-channel',
+        transport: 'inproc'
+      }
+    ]);
+  });
+
   it('rejects duplicate methods when composing fragments', () => {
     interface UsersContract {
       getUser(input: { id: number }): Promise<{ id: number; name: string }>;
@@ -231,7 +345,7 @@ describe('createScompFragment contract builder', () => {
     });
 
     assert.throws(
-      () => composeScompFragments(first, second),
+      () => composeScompFragments(first as never, second as never),
       /Duplicate method "getUser" defined by fragments users#1 \(users.getUser\) and users#2 \(users.getUser\)/
     );
   });
