@@ -124,11 +124,13 @@ interface GroupedServiceMethodImplementationsInput<Contract extends object> {
   feeds?: Partial<GroupedMethodImplementations<Contract, 'feed'>>;
 }
 
-export interface GroupedFragmentMethodImplementations<Contract extends object> {
+type GroupedMethodImplementationsInput<Contract extends object> = {
   requests?: Partial<GroupedMethodImplementations<Contract, 'request'>>;
   signals?: Partial<GroupedMethodImplementations<Contract, 'signal'>>;
   feeds?: Partial<GroupedMethodImplementations<Contract, 'feed'>>;
-}
+};
+
+export interface GroupedFragmentMethodImplementations<Contract extends object> extends GroupedMethodImplementationsInput<Contract> {}
 
 type ServiceMethodImplementationsInput<Contract extends object> =
   | FlatServiceMethodImplementationsInput<Contract>
@@ -305,15 +307,7 @@ function compileFlatRouter(
     const inferredKind = inferRouteKind(implementation);
     const normalized = normalizeMethodConfig(implementation, inferredKind, false);
 
-    router[route] = {
-      route,
-      kind: normalized.kind,
-      parser: normalized.parser,
-      strategy: normalized.strategy,
-      hashKey: normalized.hashKey,
-      backpressure: normalized.backpressure,
-      handler: normalized.handler
-    };
+    router[route] = buildCompiledRoute(route, normalized);
   }
 
   return router;
@@ -330,16 +324,20 @@ function compileGroupedMethods(
     const route = `${name}.${methodName}`;
     const normalized = normalizeMethodConfig(implementation, kind, true);
 
-    router[route] = {
-      route,
-      kind: normalized.kind,
-      parser: normalized.parser,
-      strategy: normalized.strategy,
-      hashKey: normalized.hashKey,
-      backpressure: normalized.backpressure,
-      handler: normalized.handler
-    };
+    router[route] = buildCompiledRoute(route, normalized);
   }
+}
+
+function buildCompiledRoute(route: string, normalized: Omit<CompiledRoute, 'route'>): CompiledRoute {
+  return {
+    route,
+    kind: normalized.kind,
+    parser: normalized.parser,
+    strategy: normalized.strategy,
+    hashKey: normalized.hashKey,
+    backpressure: normalized.backpressure,
+    handler: normalized.handler
+  };
 }
 
 function compileGroupedRouter<Contract extends object>(
@@ -356,6 +354,15 @@ function compileGroupedRouter<Contract extends object>(
   compileGroupedMethods(name, 'feed', (groupedMethods.feeds ?? {}) as Record<string, unknown>, router);
 
   return router;
+}
+
+function compileImplementationsRouter<Contract extends object>(
+  name: string,
+  methods: ServiceMethodImplementationsInput<Contract> | FragmentMethodImplementations<Contract> | GroupedFragmentMethodImplementations<Contract>
+): CompiledRouter {
+  return isGroupedMethods(methods)
+    ? compileGroupedRouter(name, methods)
+    : compileFlatRouter(name, methods as Record<string, unknown>);
 }
 
 function isGroupedMethods(methods: unknown): methods is {
@@ -381,9 +388,7 @@ export function createScompService<Contract extends object>(name: string) {
     implement<Methods extends ServiceMethodImplementationsInput<Contract>>(
       methods: Methods & StrictServiceImplementationChecks<Contract, Methods>
     ): ServiceDefinition<Contract> {
-      const router = isGroupedMethods(methods)
-        ? compileGroupedRouter(name, methods)
-        : compileFlatRouter(name, methods as Record<string, unknown>);
+      const router = compileImplementationsRouter(name, methods);
 
       return {
         name,
@@ -399,9 +404,7 @@ export function createScompFragment<Contract extends object>(name: string) {
     implement<Methods extends FragmentMethodImplementations<Contract> | GroupedFragmentMethodImplementations<Contract>>(
       methods: Methods
     ): FragmentDefinition<Contract, Extract<ProvidedMethodKeys<Methods>, string>> {
-      const router = isGroupedMethods(methods)
-        ? compileGroupedRouter(name, methods)
-        : compileFlatRouter(name, methods as Record<string, unknown>);
+      const router = compileImplementationsRouter(name, methods);
 
       return {
         name,
