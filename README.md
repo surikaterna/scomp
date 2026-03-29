@@ -79,33 +79,30 @@ Fragment composition rejects duplicate methods across fragments.
 
 See `apps/demo` for end-to-end examples using grouped sections and fragments.
 
+## WebSocket server package split (Bun vs Node)
+
+The websocket server transport is now split by runtime:
+
+- **Bun runtime (`Bun.serve`)**: `@scomp/transport-websocket-server`
+- **Node runtime (`ws` + `http`)**: `@scomp/transport-websocket-server-node`
+
+This is a breaking rename for Node users.
+
+```ts
+// Bun server usage
+import { createWebSocketServerTransport } from '@scomp/transport-websocket-server';
+
+// Node server usage (renamed package)
+import { createWebSocketServerTransport } from '@scomp/transport-websocket-server-node';
+```
+
+If you previously imported Node server transport from `@scomp/transport-websocket-server`,
+switch those imports to `@scomp/transport-websocket-server-node`.
+
+See migration notes: [docs/migration-websocket-server-split.md](docs/migration-websocket-server-split.md)
+
 ## Wire format
 
 Transport protocol reference:
 
 - [docs/transport-json-protocol.md](docs/transport-json-protocol.md)
-
-## Bun websocket server transport
-
-`@scomp/transport-websocket-server` now includes a Bun-native server transport for `Bun.serve`.
-
-Use `createBunWebSocketServerTransport` to wire route handling without changing the existing envelope schema (`request`, `signal`, `feed_start`/`feed_stop` + feed chunk stream):
-
-```ts
-import { createBunWebSocketServerTransport } from "@scomp/transport-websocket-server";
-
-const transport = createBunWebSocketServerTransport({ path: "/ws" });
-await transport.listen(router);
-
-const server = Bun.serve({
-  port: 3000,
-  fetch: transport.fetch,
-  websocket: transport.websocket,
-});
-```
-
-Compatibility notes:
-
-- Existing Node + `ws` `WebSocketServerTransport` exports and behavior are unchanged.
-- Bun transport keeps the same request/signal/feed semantics and security policy hooks.
-- No protocol envelope changes are required for existing websocket clients.

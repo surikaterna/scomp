@@ -1,13 +1,17 @@
+import type { Server as HttpServer } from "node:http";
+import type { Server as HttpsServer } from "node:https";
 import type {
   CompiledRoute,
   ITransport,
   ScompClientInvokeOptions,
 } from "@scomp/core";
-import {
-  type ScompTransportPrincipal,
-  type ScompTransportSecurityPolicy,
-  type ScompTransportMessageMeta,
-  type ScompTransportResponseEnvelope,
+import type {
+  ScompTransportPrincipal,
+  ScompTransportRequestEnvelope,
+  ScompTransportResponseEnvelope,
+  ScompTransportSecurityPolicy,
+  ScompFeedChunkEnvelope,
+  ScompTransportMessageMeta,
 } from "@scomp/types";
 import {
   parseTransportMessage,
@@ -18,56 +22,23 @@ import {
   WebSocketClientTransport,
   type WebSocketClientTransportConfig,
 } from "@scomp/transport-websocket-client";
+import WebSocket, { type RawData, WebSocketServer } from "ws";
 
 export { StreamClosedError };
 
-type BunReadyStateOpen = 1;
-
-interface BunLikeServerWebSocket {
-  readyState: number;
-  data?: BunServerData;
-  send(payload: string): void;
-  close?(code?: number, reason?: string): void;
-  terminate?(): void;
+interface SocketWithPrincipal extends WebSocket {
+  scompPrincipal?: ScompTransportPrincipal;
 }
 
-interface BunLikeServer {
-  stop(closeActiveConnections?: boolean): void;
-}
+type RouterTable = Record<string, CompiledRoute>;
 
-interface BunLikeServeOptions {
-  port: number;
-  hostname?: string;
-  fetch: (
-    request: Request,
-    server: {
-      upgrade(request: Request, options?: { data?: BunServerData }): boolean;
-    },
-  ) => Response | undefined;
-  websocket: {
-    open?: (socket: BunLikeServerWebSocket) => void;
-    message?: (
-      socket: BunLikeServerWebSocket,
-      data: string | Buffer | ArrayBuffer | Uint8Array,
-    ) => void;
-    close?: (socket: BunLikeServerWebSocket) => void;
-  };
-}
-
-declare const Bun: {
-  serve(options: BunLikeServeOptions): BunLikeServer;
-};
-
-type BunServerData = {
-  principal?: ScompTransportPrincipal;
-};
-
-type BunSocketWithState = BunLikeServerWebSocket & { data: BunServerData };
+type TransportMessage = ScompTransportRequestEnvelope;
 
 export interface WebSocketServerTransportConfig {
-  port: number;
+  port?: number;
   host?: string;
   path?: string;
+  server?: HttpServer | HttpsServer;
   outbound?: WebSocketClientTransportConfig | WebSocketClientTransport;
   security?: ScompTransportSecurityPolicy;
 }
@@ -76,7 +47,7 @@ function toFeedExchange(hash: string): string {
   return `scomp.live.${hash}`;
 }
 
-function toText(data: string | Buffer | ArrayBuffer | Uint8Array): string {
+function toText(data: RawData): string {
   if (typeof data === "string") {
     return data;
   }
@@ -85,8 +56,8 @@ function toText(data: string | Buffer | ArrayBuffer | Uint8Array): string {
     return data.toString("utf8");
   }
 
-  if (data instanceof Uint8Array) {
-    return Buffer.from(data).toString("utf8");
+  if (Array.isArray(data)) {
+    return Buffer.concat(data).toString("utf8");
   }
 
   return Buffer.from(data).toString("utf8");
@@ -113,40 +84,40 @@ function toPrincipalMeta(
   };
 }
 
-function ensureSocketState(socket: BunLikeServerWebSocket): BunSocketWithState {
-  const withState = socket as BunSocketWithState;
-  withState.data = withState.data ?? {};
-  return withState;
-}
-
 export class WebSocketServerTransport implements ITransport {
   private readonly config: WebSocketServerTransportConfig;
-  private server?: BunLikeServer;
-  private readonly sockets = new Set<BunSocketWithState>();
+  private server?: WebSocketServer;
+  private readonly sockets = new Set<SocketWithPrincipal>();
   private outboundTransport?: ITransport;
-  private readonly runtime: WebSocketServerRuntime<BunSocketWithState>;
+  private readonly runtime: WebSocketServerRuntime<SocketWithPrincipal>;
 
   constructor(config: WebSocketServerTransportConfig) {
     this.config = config;
-    this.runtime = new WebSocketServerRuntime<BunSocketWithState>({
+    this.runtime = new WebSocketServerRuntime<SocketWithPrincipal>({
       security: this.config.security,
-      getSocketPrincipal: (socket) => socket.data?.principal,
-      setSocketPrincipal: (socket, principal) => {
-        socket.data = {
-          ...(socket.data ?? {}),
-          principal,
-        };
+      getSocketPrincipal: (socket: SocketWithPrincipal) => socket.scompPrincipal,
+      setSocketPrincipal: (
+        socket: SocketWithPrincipal,
+        principal: ScompTransportPrincipal,
+      ) => {
+        socket.scompPrincipal = principal;
       },
-      invokeRoute: async (route, message) => {
+      invokeRoute: async (
+        route: CompiledRoute,
+        message: ScompTransportRequestEnvelope,
+      ) => {
         const rawPayload = message.payload;
         const payload = route.parser ? route.parser(rawPayload) : rawPayload;
         return route.handler(payload);
       },
-      isSocketOpen: (socket) => socket.readyState === (1 as BunReadyStateOpen),
-      onReply: (socket, response: ScompTransportResponseEnvelope) => {
+      isSocketOpen: (socket: SocketWithPrincipal) => socket.readyState === WebSocket.OPEN,
+      onReply: (
+        socket: SocketWithPrincipal,
+        response: ScompTransportResponseEnvelope,
+      ) => {
         socket.send(JSON.stringify(response));
       },
-      onFeedChunk: (socket, chunk) => {
+      onFeedChunk: (socket: SocketWithPrincipal, chunk: ScompFeedChunkEnvelope) => {
         socket.send(JSON.stringify(chunk));
       },
       onFeedExchange: toFeedExchange,
@@ -154,52 +125,32 @@ export class WebSocketServerTransport implements ITransport {
     });
   }
 
-  async listen(router: Record<string, CompiledRoute>): Promise<void> {
+  async listen(router: RouterTable): Promise<void> {
     this.runtime.setRouter(router);
-    if (this.server) {
+    const server = this.getServer();
+
+    if (server.listenerCount("connection") > 0) {
       return;
     }
 
-    if (!this.config.port) {
-      throw new Error("WebSocketServerTransport requires a port for Bun.serve.");
-    }
+    server.on("connection", (socket: WebSocket) => {
+      const socketWithPrincipal = socket as SocketWithPrincipal;
+      this.sockets.add(socketWithPrincipal);
 
-    const expectedPath = this.config.path ?? "/";
+      socket.on("message", async (data: RawData) => {
+        const body = parseTransportMessage(toText(data)) as TransportMessage;
+        await this.runtime.handleIncoming(socketWithPrincipal, body);
+      });
 
-    this.server = Bun.serve({
-      port: this.config.port,
-      hostname: this.config.host,
-      fetch: (request, server) => {
-        const url = new URL(request.url);
-        if (url.pathname !== expectedPath) {
-          return new Response("Not found", { status: 404 });
-        }
+      socket.on("close", () => {
+        this.runtime.detachSocketFromFeeds(socketWithPrincipal);
+        this.sockets.delete(socketWithPrincipal);
+      });
 
-        const upgraded = server.upgrade(request, {
-          data: {},
-        });
-
-        if (!upgraded) {
-          return new Response("WebSocket upgrade failed", { status: 400 });
-        }
-
-        return undefined;
-      },
-      websocket: {
-        open: (socket: BunLikeServerWebSocket) => {
-          this.sockets.add(ensureSocketState(socket));
-        },
-        message: (socket: BunLikeServerWebSocket, data) => {
-          const socketWithState = ensureSocketState(socket);
-          const body = parseTransportMessage(toText(data));
-          void this.runtime.handleIncoming(socketWithState, body);
-        },
-        close: (socket: BunLikeServerWebSocket) => {
-          const socketWithState = ensureSocketState(socket);
-          this.runtime.detachSocketFromFeeds(socketWithState);
-          this.sockets.delete(socketWithState);
-        },
-      },
+      socket.on("error", () => {
+        this.runtime.detachSocketFromFeeds(socketWithPrincipal);
+        this.sockets.delete(socketWithPrincipal);
+      });
     });
   }
 
@@ -211,13 +162,20 @@ export class WebSocketServerTransport implements ITransport {
 
     for (const socket of this.sockets) {
       this.runtime.detachSocketFromFeeds(socket);
-      socket.terminate?.();
-      socket.close?.();
+      socket.terminate();
+      socket.close();
     }
     this.sockets.clear();
 
-    this.server?.stop(true);
+    const server = this.server;
     this.server = undefined;
+    if (!server) {
+      return;
+    }
+
+    await new Promise<void>((resolve) => {
+      server.close(() => resolve());
+    });
   }
 
   async request(
@@ -265,6 +223,34 @@ export class WebSocketServerTransport implements ITransport {
         : new WebSocketClientTransport(outboundConfig);
 
     return this.outboundTransport;
+  }
+
+  private getServer(): WebSocketServer {
+    if (this.server) {
+      return this.server;
+    }
+
+    if (this.config.server) {
+      this.server = new WebSocketServer({
+        server: this.config.server,
+        path: this.config.path,
+      });
+      return this.server;
+    }
+
+    if (!this.config.port) {
+      throw new Error(
+        "WebSocketServerTransport requires either a port or an existing HTTP server.",
+      );
+    }
+
+    this.server = new WebSocketServer({
+      port: this.config.port,
+      host: this.config.host,
+      path: this.config.path,
+    });
+
+    return this.server;
   }
 }
 

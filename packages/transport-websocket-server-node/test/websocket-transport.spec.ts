@@ -8,6 +8,7 @@ import {
   type CompiledRoute,
   type CompiledRouter,
 } from "@scomp/core";
+import type { ScompTransportSecurityContext } from "@scomp/types";
 import { WebSocketClientTransport } from "@scomp/transport-websocket-client";
 import { WebSocketServerTransport } from "../src";
 
@@ -53,27 +54,7 @@ async function createHarness(router: CompiledRouter): Promise<Harness> {
 }
 
 async function closeHarness(harness: Harness): Promise<void> {
-  const transportState = harness.serverTransport as unknown as {
-    sockets?: Set<{ terminate?: () => void; close?: () => void }>;
-    server?: { close: (callback: (error?: Error) => void) => void };
-    outboundTransport?: {
-      socket?: { terminate?: () => void; close?: () => void };
-    };
-  };
-
-  for (const socket of transportState.sockets ?? []) {
-    socket.terminate?.();
-    socket.close?.();
-  }
-
-  transportState.outboundTransport?.socket?.terminate?.();
-  transportState.outboundTransport?.socket?.close?.();
-
-  if (transportState.server) {
-    await new Promise<void>((resolve) => {
-      transportState.server?.close(() => resolve());
-    });
-  }
+  await harness.serverTransport.close();
 
   await new Promise<void>((resolve, reject) => {
     harness.httpServer.close((error) => {
@@ -90,12 +71,7 @@ async function closeHarness(harness: Harness): Promise<void> {
 async function closeClientTransport(
   client: WebSocketClientTransport,
 ): Promise<void> {
-  const state = client as unknown as {
-    socket?: { terminate?: () => void; close?: () => void };
-  };
-
-  state.socket?.terminate?.();
-  state.socket?.close?.();
+  await client.close();
 }
 
 describe("WebSocket transports", () => {
@@ -363,14 +339,16 @@ describe("WebSocket transports", () => {
     const transport = new WebSocketServerTransport({
       server: httpServer,
       security: {
-        authenticate: ({ meta }) => {
+        authenticate: ({
+          meta,
+        }: Omit<ScompTransportSecurityContext, "principal">) => {
           const auth = meta?.auth as { token?: string } | undefined;
           if (auth?.token === "allow") {
             return { subject: "user:allow" };
           }
           return null;
         },
-        authorize: (ctx) => {
+        authorize: (ctx: ScompTransportSecurityContext) => {
           seen.push({
             route: ctx.route,
             operation: ctx.operation,

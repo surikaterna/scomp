@@ -8,5 +8,7 @@ module.exports = createJestConfig({
     "^@scomp/types$": "<rootDir>/../types/src",
     "^@scomp/transport-websocket-client$":
       "<rootDir>/../transport-websocket-client/src",
+    "^@scomp/transport-websocket-server-runtime$":
+      "<rootDir>/../transport-websocket-server-runtime/src",
   },
 });
