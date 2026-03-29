@@ -1,4 +1,4 @@
-import { createScompFragment, createScompService } from './builder';
+import { composeScompFragments, createScompFragment, createScompService } from './builder';
 
 interface GroupedTypesContract {
   getUser(input: { id: number }): Promise<{ id: number }>;
@@ -21,6 +21,31 @@ createScompService<GroupedTypesContract>('users').implement({
     }
   }
 });
+
+const userRequests = createScompFragment<GroupedTypesContract>('users').implement({
+  requests: {
+    getUser: async ({ id }) => ({ id })
+  }
+});
+
+const userSignals = createScompFragment<GroupedTypesContract>('users').implement({
+  signals: {
+    notifyLogin: async () => {
+      return;
+    }
+  }
+});
+
+composeScompFragments(userRequests, userSignals);
+
+const duplicateUserRequests = createScompFragment<GroupedTypesContract>('users').implement({
+  requests: {
+    getUser: async ({ id }) => ({ id })
+  }
+});
+
+// @ts-expect-error - duplicate methods across fragments are rejected
+composeScompFragments(userRequests, duplicateUserRequests);
 
 createScompService<GroupedTypesContract>('users').implement({
   getUser: async ({ id }) => ({ id }),

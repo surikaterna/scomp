@@ -9,6 +9,7 @@ export {
 } from "./feed";
 
 export {
+  composeScompFragments,
   createScompFragment,
   createScompService,
   type CompiledRoute,

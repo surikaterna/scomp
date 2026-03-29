@@ -203,11 +203,43 @@ export interface ServiceDefinition<Contract extends object> {
   router: CompiledRouter;
 }
 
-export interface FragmentDefinition<Contract extends object> {
+export interface FragmentDefinition<Contract extends object, Methods extends string = never> {
   name: string;
   networkIntent: Partial<ContractNetworkIntent<Contract>>;
   router: CompiledRouter;
+  readonly __scomp_fragment_methods__?: Methods;
 }
+
+type FragmentMethodNames<Fragment> =
+  Fragment extends FragmentDefinition<object, infer Methods>
+    ? Methods
+    : never;
+
+type CombinedFragmentMethodNames<Fragments extends readonly unknown[]> =
+  Fragments extends readonly [infer Fragment, ...infer Rest]
+    ? FragmentMethodNames<Fragment> | CombinedFragmentMethodNames<Rest>
+    : never;
+
+type DuplicateFragmentMethodNames<
+  Fragments extends readonly unknown[],
+  Seen extends string = never,
+  Duplicates extends string = never
+> = Fragments extends readonly [infer Fragment, ...infer Rest]
+  ? DuplicateFragmentMethodNames<
+    Rest,
+    Seen | FragmentMethodNames<Fragment>,
+    Duplicates | Extract<FragmentMethodNames<Fragment>, Seen>
+  >
+  : Duplicates;
+
+type EnsureNoDuplicateFragmentMethods<Fragments extends readonly unknown[]> =
+  [DuplicateFragmentMethodNames<Fragments>] extends [never]
+    ? {}
+    : {
+      __scomp_duplicate_fragment_methods__: {
+        [MethodName in DuplicateFragmentMethodNames<Fragments>]: 'Duplicate method declared across fragments';
+      };
+    };
 
 function normalizeMethodConfig(
   methodConfig: unknown,
@@ -364,9 +396,9 @@ export function createScompService<Contract extends object>(name: string) {
 
 export function createScompFragment<Contract extends object>(name: string) {
   return {
-    implement(
-      methods: FragmentMethodImplementations<Contract> | GroupedFragmentMethodImplementations<Contract>
-    ): FragmentDefinition<Contract> {
+    implement<Methods extends FragmentMethodImplementations<Contract> | GroupedFragmentMethodImplementations<Contract>>(
+      methods: Methods
+    ): FragmentDefinition<Contract, Extract<ProvidedMethodKeys<Methods>, string>> {
       const router = isGroupedMethods(methods)
         ? compileGroupedRouter(name, methods)
         : compileFlatRouter(name, methods as Record<string, unknown>);
@@ -377,5 +409,58 @@ export function createScompFragment<Contract extends object>(name: string) {
         router
       };
     }
+  };
+}
+
+export function composeScompFragments<
+  Contract extends object,
+  Fragments extends readonly [
+    FragmentDefinition<Contract, string>,
+    ...Array<FragmentDefinition<Contract, string>>
+  ]
+>(
+  ...fragments: Fragments & EnsureNoDuplicateFragmentMethods<Fragments>
+): FragmentDefinition<Contract, CombinedFragmentMethodNames<Fragments>> {
+  const [firstFragment] = fragments;
+  const name = firstFragment.name;
+  const router: CompiledRouter = {};
+  const networkIntent: Partial<ContractNetworkIntent<Contract>> = {};
+
+  const methodToSource = new Map<string, { fragmentLabel: string; route: string }>();
+
+  for (const [index, fragment] of fragments.entries()) {
+    const fragmentLabel = `${fragment.name}#${index + 1}`;
+
+    if (fragment.name !== name) {
+      throw new Error(`Cannot compose fragments with different names: expected "${name}", got "${fragment.name}"`);
+    }
+
+    Object.assign(networkIntent, fragment.networkIntent);
+
+    for (const [routeName, route] of Object.entries(fragment.router)) {
+      const separatorIndex = routeName.indexOf('.');
+      const methodName = separatorIndex === -1 ? routeName : routeName.slice(separatorIndex + 1);
+      const existingSource = methodToSource.get(methodName);
+
+      if (existingSource) {
+        throw new Error(
+          `Duplicate method "${methodName}" defined by fragments ${existingSource.fragmentLabel} (${existingSource.route}) and ${fragmentLabel} (${routeName})`
+        );
+      }
+
+      methodToSource.set(methodName, { fragmentLabel, route: routeName });
+
+      if (router[routeName]) {
+        throw new Error(`Duplicate route "${routeName}" while composing fragments`);
+      }
+
+      router[routeName] = route;
+    }
+  }
+
+  return {
+    name,
+    networkIntent,
+    router
   };
 }
