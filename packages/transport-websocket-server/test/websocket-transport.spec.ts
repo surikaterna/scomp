@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createServer, type Server as HttpServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { type CompiledRoute, type CompiledRouter } from "@scomp/core";
+import { WebSocketBrowserTransport } from "@scomp/transport-websocket-browser";
 import { WebSocketClientTransport } from "@scomp/transport-websocket-client";
 import { WebSocketServerTransport } from "../src";
 
@@ -95,6 +96,120 @@ async function closeClientTransport(
 }
 
 describe("WebSocket transports", () => {
+  it("passes invocation options metadata through browser outbound envelopes", async () => {
+    const observed: Array<{
+      route: string;
+      op: string;
+      meta?: Record<string, unknown>;
+    }> = [];
+
+    const router: Record<string, CompiledRoute> = {
+      "meta.request": {
+        route: "meta.request",
+        kind: "request",
+        handler: async (payload: unknown) => payload,
+      },
+      "meta.signal": {
+        route: "meta.signal",
+        kind: "signal",
+        handler: async () => undefined,
+      },
+      "meta.feed": {
+        route: "meta.feed",
+        kind: "feed",
+        strategy: "fanout",
+        handler: async function* () {
+          yield { ok: true };
+        },
+      },
+    };
+
+    const harness = await createHarness(router);
+
+    const browser = new WebSocketBrowserTransport({
+      url: harness.url,
+      meta: { traceId: "trace-browser" },
+      security: {
+        authorize: (ctx) => {
+          observed.push({
+            route: ctx.route,
+            op: ctx.operation,
+            meta: ctx.meta as Record<string, unknown> | undefined,
+          });
+          return true;
+        },
+      },
+    });
+
+    try {
+      await browser.request("meta.request", { id: 1 }, {
+        meta: { tenantId: "tenant-r" },
+        priority: "P0",
+        priorityClass: "P1",
+        deadlineAtMs: 111,
+        targetLatencyMs: 22,
+      });
+
+      await browser.signal("meta.signal", { id: 2 }, {
+        meta: { tenantId: "tenant-s" },
+        priority: "P2",
+        priorityClass: "P3",
+        deadlineAtMs: 222,
+        targetLatencyMs: 33,
+      });
+
+      const feedIterator = browser
+        .feed("meta.feed", { id: 3 }, {
+          meta: { tenantId: "tenant-f" },
+          priority: "P1",
+          priorityClass: "P2",
+          deadlineAtMs: 333,
+          targetLatencyMs: 44,
+        })
+        [Symbol.asyncIterator]();
+
+      await feedIterator.next();
+      await feedIterator.return?.(undefined);
+
+      const requestMeta = observed.find(
+        (entry) => entry.route === "meta.request" && entry.op === "request",
+      )?.meta;
+      assert.equal(requestMeta?.traceId, "trace-browser");
+      assert.equal(requestMeta?.tenantId, "tenant-r");
+      assert.equal(requestMeta?.priority, "P0");
+      assert.equal(requestMeta?.priorityClass, "P1");
+      assert.equal(requestMeta?.deadlineAtMs, 111);
+      assert.equal(requestMeta?.targetLatencyMs, 22);
+
+      const signalMeta = observed.find(
+        (entry) => entry.route === "meta.signal" && entry.op === "signal",
+      )?.meta;
+      assert.equal(signalMeta?.traceId, "trace-browser");
+      assert.equal(signalMeta?.tenantId, "tenant-s");
+      assert.equal(signalMeta?.priority, "P2");
+      assert.equal(signalMeta?.priorityClass, "P3");
+      assert.equal(signalMeta?.deadlineAtMs, 222);
+      assert.equal(signalMeta?.targetLatencyMs, 33);
+
+      const feedStartMeta = observed.find(
+        (entry) => entry.route === "meta.feed" && entry.op === "feed_start",
+      )?.meta;
+      assert.equal(feedStartMeta?.traceId, "trace-browser");
+      assert.equal(feedStartMeta?.tenantId, "tenant-f");
+      assert.equal(feedStartMeta?.priority, "P1");
+      assert.equal(feedStartMeta?.priorityClass, "P2");
+      assert.equal(feedStartMeta?.deadlineAtMs, 333);
+      assert.equal(feedStartMeta?.targetLatencyMs, 44);
+
+      const feedStopMeta = observed.find(
+        (entry) => entry.route === "meta.feed" && entry.op === "feed_stop",
+      )?.meta;
+      assert.deepEqual(feedStopMeta, feedStartMeta);
+    } finally {
+      await closeHarness(harness);
+    }
+  });
+
   it("supports request, signal, and feed end-to-end", async () => {
     const signals: Array<unknown> = [];
 

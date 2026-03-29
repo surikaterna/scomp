@@ -4,13 +4,12 @@
     "composite": true,
     "rootDir": "src",
     "outDir": "dist",
-    "tsBuildInfoFile": "dist/.tsbuildinfo"
+    "tsBuildInfoFile": "dist/.tsbuildinfo",
+    "lib": ["es2019", "dom"]
   },
   "references": [
     { "path": "../core" },
-    { "path": "../types" },
-    { "path": "../transport-websocket-browser" },
-    { "path": "../transport-websocket-client" }
+    { "path": "../types" }
   ],
   "include": ["src/**/*"]
 }

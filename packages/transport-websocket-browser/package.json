@@ -1,0 +1,16 @@
+{
+  "name": "@scomp/transport-websocket-browser",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "lint": "echo \"No lint configured for @scomp/transport-websocket-browser\"",
+    "test": "jest --config jest.config.cjs"
+  },
+  "dependencies": {
+    "@scomp/core": "workspace:*",
+    "@scomp/types": "workspace:*"
+  }
+}
