@@ -1,7 +1,7 @@
 import { EventEmitter2 } from 'eventemitter2';
 import socketioJwt from 'socketio-jwt';
-import { RequestPacket, ResponsePacket, ScompHeader } from '../Scomp';
-import { WireEvent, WireInterface } from '../WireInterface';
+import { RequestPacket, ResponsePacket, ScompHeader } from '../scomp';
+import WireInterface, { WireEvent } from '../WireInterface';
 import { SocketService } from './SocketService';
 import { getActualIds } from './Utils';
 

@@ -1,19 +1,20 @@
 {
-  "name": "@scomp/transport-websocket-server",
+  "name": "@scomp/transport-websocket-server-node",
   "version": "0.1.0",
   "private": true,
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc -b tsconfig.json",
-    "lint": "echo \"No lint configured for @scomp/transport-websocket-server\"",
-    "test": "bun test ./test"
+    "lint": "echo \"No lint configured for @scomp/transport-websocket-server-node\"",
+    "test": "jest --config jest.config.cjs"
   },
   "dependencies": {
     "@scomp/core": "workspace:*",
-    "@scomp/transport-websocket-browser": "workspace:*",
     "@scomp/types": "workspace:*",
     "@scomp/transport-websocket-client": "workspace:*",
-    "@scomp/transport-websocket-server-runtime": "workspace:*"
+    "@scomp/transport-websocket-server-runtime": "workspace:*",
+    "@types/ws": "^8.18.1",
+    "ws": "^8.18.3"
   }
 }

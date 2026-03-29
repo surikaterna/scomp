@@ -7,7 +7,7 @@
     "lint": "echo \"No lint configured for @scomp/demo\"",
     "test": "echo \"No tests configured for @scomp/demo\"",
     "start": "ts-node run.ts",
-    "run-browser": "bun run build && node dist/run-browser.js"
+    "run-browser": "bun run build && bun dist/run-browser.js"
   },
   "dependencies": {
     "@scomp/client": "workspace:*",

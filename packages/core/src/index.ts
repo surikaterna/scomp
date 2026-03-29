@@ -9,10 +9,16 @@ export {
 } from "./feed";
 
 export {
+  composeScompFragments,
+  createScompFragment,
   createScompService,
   type CompiledRoute,
   type CompiledRouter,
+  type FragmentDefinition,
+  type FragmentMethodImplementations,
   type FeedImplementationConfig,
+  type GroupedFragmentMethodImplementations,
+  type GroupedServiceMethodImplementations,
   type RequestImplementationConfig,
   type ServiceDefinition,
   type SignalImplementationConfig,

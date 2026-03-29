@@ -1,8 +1,14 @@
 import assert from "node:assert/strict";
 import { createServer, type Server as HttpServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { type CompiledRoute, type CompiledRouter } from "@scomp/core";
-import { WebSocketBrowserTransport } from "@scomp/transport-websocket-browser";
+import {
+  composeScompFragments,
+  createScompFragment,
+  createScompService,
+  type CompiledRoute,
+  type CompiledRouter,
+} from "@scomp/core";
+import type { ScompTransportSecurityContext } from "@scomp/types";
 import { WebSocketClientTransport } from "@scomp/transport-websocket-client";
 import { WebSocketServerTransport } from "../src";
 
@@ -10,10 +16,8 @@ function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function collect(
-  iterable: AsyncIterable<number>,
-): Promise<Array<number>> {
-  const values: Array<number> = [];
+async function collect<T>(iterable: AsyncIterable<T>): Promise<Array<T>> {
+  const values: Array<T> = [];
   for await (const value of iterable) {
     values.push(value);
   }
@@ -50,27 +54,7 @@ async function createHarness(router: CompiledRouter): Promise<Harness> {
 }
 
 async function closeHarness(harness: Harness): Promise<void> {
-  const transportState = harness.serverTransport as unknown as {
-    sockets?: Set<{ terminate?: () => void; close?: () => void }>;
-    server?: { close: (callback: (error?: Error) => void) => void };
-    outboundTransport?: {
-      socket?: { terminate?: () => void; close?: () => void };
-    };
-  };
-
-  for (const socket of transportState.sockets ?? []) {
-    socket.terminate?.();
-    socket.close?.();
-  }
-
-  transportState.outboundTransport?.socket?.terminate?.();
-  transportState.outboundTransport?.socket?.close?.();
-
-  if (transportState.server) {
-    await new Promise<void>((resolve) => {
-      transportState.server?.close(() => resolve());
-    });
-  }
+  await harness.serverTransport.close();
 
   await new Promise<void>((resolve, reject) => {
     harness.httpServer.close((error) => {
@@ -87,126 +71,103 @@ async function closeHarness(harness: Harness): Promise<void> {
 async function closeClientTransport(
   client: WebSocketClientTransport,
 ): Promise<void> {
-  const state = client as unknown as {
-    socket?: { terminate?: () => void; close?: () => void };
-  };
-
-  state.socket?.terminate?.();
-  state.socket?.close?.();
+  await client.close();
 }
 
 describe("WebSocket transports", () => {
-  it("passes invocation options metadata through browser outbound envelopes", async () => {
-    const observed: Array<{
-      route: string;
-      op: string;
-      meta?: Record<string, unknown>;
-    }> = [];
+  it("keeps grouped and composed fragment routers transport-compatible", async () => {
+    interface UsersContract {
+      getUser(input: { id: number }): Promise<{ id: number; name: string }>;
+      notifyLogin(input: { id: number }): Promise<void>;
+      liveUsers(input: { room: string }): AsyncIterable<{ id: number }>;
+    }
 
-    const router: Record<string, CompiledRoute> = {
-      "meta.request": {
-        route: "meta.request",
-        kind: "request",
-        handler: async (payload: unknown) => payload,
+    const groupedSignals: Array<unknown> = [];
+    const grouped = createScompService<UsersContract>("users").implement({
+      requests: {
+        getUser: async ({ id }: { id: number }) => ({ id, name: `u-${id}` }),
       },
-      "meta.signal": {
-        route: "meta.signal",
-        kind: "signal",
-        handler: async () => undefined,
-      },
-      "meta.feed": {
-        route: "meta.feed",
-        kind: "feed",
-        strategy: "fanout",
-        handler: async function* () {
-          yield { ok: true };
+      signals: {
+        notifyLogin: async (payload: { id: number }) => {
+          groupedSignals.push(payload);
         },
       },
-    };
-
-    const harness = await createHarness(router);
-
-    const browser = new WebSocketBrowserTransport({
-      url: harness.url,
-      meta: { traceId: "trace-browser" },
-      security: {
-        authorize: (ctx) => {
-          observed.push({
-            route: ctx.route,
-            op: ctx.operation,
-            meta: ctx.meta as Record<string, unknown> | undefined,
-          });
-          return true;
+      feeds: {
+        liveUsers: {
+          strategy: "fanout",
+          hashKey: ({ room }: { room: string }) => room,
+          handler: async function* () {
+            yield { id: 1 };
+            yield { id: 2 };
+          },
         },
       },
     });
 
-    try {
-      await browser.request("meta.request", { id: 1 }, {
-        meta: { tenantId: "tenant-r" },
-        priority: "P0",
-        priorityClass: "P1",
-        deadlineAtMs: 111,
-        targetLatencyMs: 22,
-      });
+    const composedSignals: Array<unknown> = [];
+    const requestFragment = createScompFragment<UsersContract>("users").implement(
+      {
+        requests: {
+          getUser: async ({ id }: { id: number }) => ({ id, name: `u-${id}` }),
+        },
+      },
+    );
+    const signalFragment = createScompFragment<UsersContract>("users").implement(
+      {
+        signals: {
+          notifyLogin: async (payload: { id: number }) => {
+            composedSignals.push(payload);
+          },
+        },
+      },
+    );
+    const feedFragment = createScompFragment<UsersContract>("users").implement({
+      feeds: {
+        liveUsers: {
+          strategy: "fanout",
+          hashKey: ({ room }: { room: string }) => room,
+          handler: async function* () {
+            yield { id: 1 };
+            yield { id: 2 };
+          },
+        },
+      },
+    });
+    const composed = composeScompFragments(
+      requestFragment,
+      signalFragment,
+      feedFragment,
+    );
 
-      await browser.signal("meta.signal", { id: 2 }, {
-        meta: { tenantId: "tenant-s" },
-        priority: "P2",
-        priorityClass: "P3",
-        deadlineAtMs: 222,
-        targetLatencyMs: 33,
-      });
+    const cases = [
+      { router: grouped.router, signals: groupedSignals },
+      { router: composed.router, signals: composedSignals },
+    ];
 
-      const feedIterator = browser
-        .feed("meta.feed", { id: 3 }, {
-          meta: { tenantId: "tenant-f" },
-          priority: "P1",
-          priorityClass: "P2",
-          deadlineAtMs: 333,
-          targetLatencyMs: 44,
-        })
-        [Symbol.asyncIterator]();
+    for (const { router, signals } of cases) {
+      assert.equal(router["users.getUser"].kind, "request");
+      assert.equal(router["users.notifyLogin"].kind, "signal");
+      assert.equal(router["users.liveUsers"].kind, "feed");
 
-      await feedIterator.next();
-      await feedIterator.return?.(undefined);
+      const harness = await createHarness(router);
+      const client = new WebSocketClientTransport({ url: harness.url });
 
-      const requestMeta = observed.find(
-        (entry) => entry.route === "meta.request" && entry.op === "request",
-      )?.meta;
-      assert.equal(requestMeta?.traceId, "trace-browser");
-      assert.equal(requestMeta?.tenantId, "tenant-r");
-      assert.equal(requestMeta?.priority, "P0");
-      assert.equal(requestMeta?.priorityClass, "P1");
-      assert.equal(requestMeta?.deadlineAtMs, 111);
-      assert.equal(requestMeta?.targetLatencyMs, 22);
+      try {
+        const requestResult = await client.request("users.getUser", { id: 7 });
+        assert.deepEqual(requestResult, { id: 7, name: "u-7" });
 
-      const signalMeta = observed.find(
-        (entry) => entry.route === "meta.signal" && entry.op === "signal",
-      )?.meta;
-      assert.equal(signalMeta?.traceId, "trace-browser");
-      assert.equal(signalMeta?.tenantId, "tenant-s");
-      assert.equal(signalMeta?.priority, "P2");
-      assert.equal(signalMeta?.priorityClass, "P3");
-      assert.equal(signalMeta?.deadlineAtMs, 222);
-      assert.equal(signalMeta?.targetLatencyMs, 33);
+        await client.signal("users.notifyLogin", { id: 7 });
+        await wait(15);
+        assert.deepEqual(signals, [{ id: 7 }]);
 
-      const feedStartMeta = observed.find(
-        (entry) => entry.route === "meta.feed" && entry.op === "feed_start",
-      )?.meta;
-      assert.equal(feedStartMeta?.traceId, "trace-browser");
-      assert.equal(feedStartMeta?.tenantId, "tenant-f");
-      assert.equal(feedStartMeta?.priority, "P1");
-      assert.equal(feedStartMeta?.priorityClass, "P2");
-      assert.equal(feedStartMeta?.deadlineAtMs, 333);
-      assert.equal(feedStartMeta?.targetLatencyMs, 44);
-
-      const feedStopMeta = observed.find(
-        (entry) => entry.route === "meta.feed" && entry.op === "feed_stop",
-      )?.meta;
-      assert.deepEqual(feedStopMeta, feedStartMeta);
-    } finally {
-      await closeHarness(harness);
+        const feedValues = await collect(client.feed("users.liveUsers", {
+          room: "general",
+        }));
+        assert.deepEqual(feedValues, [{ id: 1 }, { id: 2 }]);
+      } finally {
+        await closeClientTransport(client);
+        await closeHarness(harness);
+      }
     }
   });
 
@@ -378,14 +339,16 @@ describe("WebSocket transports", () => {
     const transport = new WebSocketServerTransport({
       server: httpServer,
       security: {
-        authenticate: ({ meta }) => {
+        authenticate: ({
+          meta,
+        }: Omit<ScompTransportSecurityContext, "principal">) => {
           const auth = meta?.auth as { token?: string } | undefined;
           if (auth?.token === "allow") {
             return { subject: "user:allow" };
           }
           return null;
         },
-        authorize: (ctx) => {
+        authorize: (ctx: ScompTransportSecurityContext) => {
           seen.push({
             route: ctx.route,
             operation: ctx.operation,

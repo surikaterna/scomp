@@ -161,6 +161,27 @@ export class WebSocketBrowserTransport implements ITransport {
     );
   }
 
+  async close(): Promise<void> {
+    const socket = this.socket;
+    this.handleDisconnect(
+      new SocketDisconnectedError("WebSocket transport closed."),
+    );
+
+    if (!socket) {
+      return;
+    }
+
+    if (socket.readyState >= 2) {
+      return;
+    }
+
+    try {
+      socket.close();
+    } catch {
+      // no-op
+    }
+  }
+
   async request(
     route: string,
     payload: any,

@@ -4,7 +4,7 @@ import { EventEmitter } from 'events';
 import Observable from './Observable';
 import pathProxyFactory, { Path } from './util/PathProxyFactory';
 import { v4 as uuidv4 } from 'uuid';
-import { WireEvent, WireInterface } from './WireInterface';
+import WireInterface, { WireEvent } from './WireInterface';
 
 export { ScompServer } from './server/ScompServer';
 const LOG = LoggerFactory.getLogger('scomp:core');
@@ -85,7 +85,7 @@ export class Scomp extends EventEmitter {
       try {
         this._onResponsePacket(packet);
       } catch (e) {
-        console.log(e.message);
+        console.log((e as Error).message);
         // package error;
       }
     });
@@ -158,7 +158,7 @@ export class Scomp extends EventEmitter {
   unsubscribe(id: string) {
     LOG.info('Unsubscribe ', id);
     if (this._responses[id]) {
-      this._responses[id].unsubscribe();
+      this._responses[id].unsubscribe?.();
       delete this._responses[id];
     } else {
       throw new Error(`No subscription found for response ${id}`);

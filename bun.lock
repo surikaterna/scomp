@@ -123,9 +123,28 @@
         "@scomp/core": "workspace:*",
         "@scomp/transport-websocket-browser": "workspace:*",
         "@scomp/transport-websocket-client": "workspace:*",
+        "@scomp/transport-websocket-server-runtime": "workspace:*",
+        "@scomp/types": "workspace:*",
+      },
+    },
+    "packages/transport-websocket-server-node": {
+      "name": "@scomp/transport-websocket-server-node",
+      "version": "0.1.0",
+      "dependencies": {
+        "@scomp/core": "workspace:*",
+        "@scomp/transport-websocket-client": "workspace:*",
+        "@scomp/transport-websocket-server-runtime": "workspace:*",
         "@scomp/types": "workspace:*",
         "@types/ws": "^8.18.1",
         "ws": "^8.18.3",
+      },
+    },
+    "packages/transport-websocket-server-runtime": {
+      "name": "@scomp/transport-websocket-server-runtime",
+      "version": "0.1.0",
+      "dependencies": {
+        "@scomp/core": "workspace:*",
+        "@scomp/types": "workspace:*",
       },
     },
     "packages/types": {
@@ -515,6 +534,10 @@
     "@scomp/transport-websocket-client": ["@scomp/transport-websocket-client@workspace:packages/transport-websocket-client"],
 
     "@scomp/transport-websocket-server": ["@scomp/transport-websocket-server@workspace:packages/transport-websocket-server"],
+
+    "@scomp/transport-websocket-server-node": ["@scomp/transport-websocket-server-node@workspace:packages/transport-websocket-server-node"],
+
+    "@scomp/transport-websocket-server-runtime": ["@scomp/transport-websocket-server-runtime@workspace:packages/transport-websocket-server-runtime"],
 
     "@scomp/types": ["@scomp/types@workspace:packages/types"],
 
