@@ -1,75 +1,117 @@
 # SCOMP
 
-RPC experiment
+SCOMP is a transport-agnostic RPC toolkit with first-class `request`, `signal`, and `feed` semantics.
 
-## Concepts
+This branch aligns browser usage with current parity guarantees so docs and demos match implemented behavior.
 
-- Unary
+## Packages
 
-service()
+- `@scomp/client` – typed client proxy API with per-call invocation options.
+- `@scomp/core` – service/router primitives.
+- `@scomp/transport-rabbitmq` – RabbitMQ transport.
+- `@scomp/transport-websocket-server` – WebSocket server transport for hosting routes.
+- `@scomp/transport-websocket-browser` – browser WebSocket client transport.
 
-## Usage
+## Browser transport quickstart
 
-```javascript
-  const scomp = new Scomp(new SocketIOWire(io));
-  const client = scomp.client();
+Use `@scomp/transport-websocket-browser` in browser-like runtimes and pair it with a server transport (for example `@scomp/transport-websocket-server`) that hosts routes.
 
-  // void result function
-  scomp.call(client.saft.get('console').log('Hey ho!'));
+```ts
+import { createScompClient, type ClientRouteHints } from "@scomp/client";
+import { createWebSocketBrowserTransport } from "@scomp/transport-websocket-browser";
 
-  // void result function ($ always initiates a call, or rename to then to be more promise like)
-  client.saft.get('console').log('Hey ho!').$();
+type ApiContract = {
+  users: {
+    getUser(input: { id: number }): Promise<{ id: number; name: string }>;
+    notifyLogin(input: { userId: number; at: string }): Promise<void>;
+    liveTicker(input: { channel: string }): AsyncIterable<{ sequence: number }>;
+  };
+};
 
-  // return from promise
-  client.viewdb.collection('order').findByPromise({}).$()
-    .then(console.log);
-  // shortcut to just use .then() <-- trigger call
-  client.viewdb.collection('order').findByPromise({})
-    .then(console.log);
+const routeHints: ClientRouteHints = {
+  "users.getUser": "request",
+  "users.notifyLogin": "signal",
+  "users.liveTicker": "feed",
+};
 
-// return stream
-  client.viewdb.collection('order').find({}).toArray(scomp.callback()).$()
-    .on('data', data=>{}) // data element
-    .on('end', ()=>{}) // other side terminated stream
-    ;  
-  ```
+const transport = createWebSocketBrowserTransport({
+  url: "ws://127.0.0.1:3399",
+  meta: {
+    traceId: "browser-trace",
+    tags: { source: "browser" },
+  },
+});
 
-## Wire format
+const client = createScompClient<ApiContract>({ transport, routeHints });
 
-Current protocol reference for the new transport stack:
-- See [docs/transport-json-protocol.md](docs/transport-json-protocol.md)
+const user = await client.users.getUser(
+  { id: 1 },
+  {
+    meta: { tenantId: "tenant-a" },
+    priority: "P1",
+    priorityClass: "P2",
+    deadlineAtMs: Date.now() + 1_000,
+    targetLatencyMs: 40,
+  },
+);
 
-### Request Client -> Server
+await client.users.notifyLogin({ userId: user.id, at: new Date().toISOString() });
 
-```json
-{
-  "id": 123123121,
-  "req": {
-    "s": "saft",
-    "p":[ "eh", "oh"]
-  }
+for await (const tick of client.users.liveTicker({ channel: "prices" })) {
+  console.log(tick);
+  break;
 }
 ```
 
-### Response Server -> Client
+## Browser parity guarantees
 
-```json
-{
-  "id": 123123121, // corresponds to
-  "res": {}, // user data
-  "str": {}, // stream control data
-  "err": {} // error
-}
-```
+`@scomp/transport-websocket-browser` now matches server/client transports for invocation envelope behavior:
 
-### Stream Control (Most commony Server -> Client)
+- `request`, `signal`, `feed_start`, and `feed_stop` all carry invocation options.
+- Metadata merge order is deterministic: `config.meta` -> `call meta` -> priority hints -> authenticated principal metadata.
+- Priority hints (`priority`, `priorityClass`, `deadlineAtMs`, `targetLatencyMs`) are serialized into envelope `meta`.
+- Feed stop uses the same metadata shape as feed start when invoked from the same call context.
 
-```json
-{
-  "id": 123123123, // corresponds to
-  "seq": 0, // sequence of events, start at 0
-  "res": {}, // user data
-  "str": {}, // stream control data
-  "err": {} // error
-}
-```
+## Security behavior and caveats
+
+Both browser and WebSocket server transports support `security.authenticate` and `security.authorize` hooks.
+
+- Browser transport hooks run before sending outbound envelopes.
+- Server transport hooks run for inbound envelopes before route dispatch.
+- If authorization denies an operation, the operation is rejected and no outbound frame is sent (browser client behavior).
+
+Important caveats:
+
+- Browser-side hooks are best-effort client policy controls, not a trust boundary.
+- `meta.auth` is opaque and transport-agnostic; verify and enforce identity server-side.
+- Priority hints are advisory metadata unless a transport/policy explicitly enforces scheduling behavior.
+
+## Migration notes (browser websocket)
+
+If you were using browser WebSocket transport before parity updates, align to the following:
+
+1. Depend on `@scomp/transport-websocket-browser` for browser clients.
+2. Pass invocation options on client calls when needed:
+   - `meta`
+   - `priority`
+   - `priorityClass`
+   - `deadlineAtMs`
+   - `targetLatencyMs`
+3. Expect these options to be present on request/signal/feed envelopes.
+4. Keep authorization and identity enforcement on trusted server-side transports.
+
+## Demo
+
+RabbitMQ demo entrypoint (existing):
+
+- `bun run --filter='@scomp/demo' start`
+
+Browser parity demo entrypoint:
+
+- `bun run --filter='@scomp/demo' run-browser`
+
+The browser demo uses WebSocket server + browser transport in one process and showcases request/signal/feed parity including metadata, priority hints, and security hooks.
+
+## Protocol reference
+
+- [docs/transport-json-protocol.md](docs/transport-json-protocol.md)

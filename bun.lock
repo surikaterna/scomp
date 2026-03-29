@@ -44,7 +44,12 @@
         "@scomp/client": "workspace:*",
         "@scomp/core": "workspace:*",
         "@scomp/transport-rabbitmq": "workspace:*",
+        "@scomp/transport-websocket-browser": "workspace:*",
+        "@scomp/transport-websocket-server": "workspace:*",
         "@scomp/types": "workspace:*",
+      },
+      "devDependencies": {
+        "ws": "^8.18.3",
       },
     },
     "packages/client": {
@@ -116,6 +121,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@scomp/core": "workspace:*",
+        "@scomp/transport-websocket-browser": "workspace:*",
         "@scomp/transport-websocket-client": "workspace:*",
         "@scomp/types": "workspace:*",
         "@types/ws": "^8.18.1",
