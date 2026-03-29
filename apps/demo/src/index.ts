@@ -1,52 +1,57 @@
-import {
-  createScompClient,
-  createScompFeed,
-  createLegacyScompService,
-} from "@scomp/core";
-import { createInprocessTransport } from "@scomp/transport-inprocess";
+import { composeScompFragments, createScompFragment, createScompService } from '@scomp/core';
 
-/**
- * Runs a local demo showcasing request, feed, and command service methods.
- */
-async function main() {
-  const service = createLegacyScompService()
-    .request("sum", async (left: number, right: number) => left + right)
-    .feed("countTo", async function* (limit: number) {
-      for (let value = 1; value <= limit; value += 1) {
-        yield value;
-      }
-    })
-    .feed("watch", () => {
-      const feed = createScompFeed<number>();
-      queueMicrotask(() => {
-        feed.next(42).complete();
-      });
-      return feed;
-    })
-    .command("log", (message: string): void => {
-      console.log("command:", message);
-    })
-    .build();
-
-  const transport = createInprocessTransport(service);
-  const client = createScompClient(service, transport);
-
-  const sumResult = await client.sum(2, 3);
-  console.log("sum result:", sumResult);
-
-  const counted: Array<number> = [];
-  for await (const value of client.countTo(3)) {
-    counted.push(value);
-  }
-  console.log("count feed:", counted);
-
-  const watched: Array<number> = [];
-  for await (const value of client.watch()) {
-    watched.push(value);
-  }
-  console.log("watch feed:", watched);
-
-  client.log("fire-and-forget from demo");
+interface LocalUsersContract {
+  getUser(input: { id: number }): Promise<{ id: number; name: string }>;
+  notifyLogin(input: { id: number; at: string }): Promise<void>;
+  liveUsers(input: { room: string }): AsyncIterable<{ id: number; at: string }>;
 }
 
-void main();
+function main() {
+  const strictService = createScompService<LocalUsersContract>('users').implement({
+    requests: {
+      getUser: async ({ id }) => ({ id, name: `user-${id}` })
+    },
+    signals: {
+      notifyLogin: async ({ id, at }) => {
+        console.log('notifyLogin', { id, at });
+      }
+    },
+    feeds: {
+      liveUsers: {
+        strategy: 'fanout',
+        handler: async function* ({ room }) {
+          yield { id: room.length, at: new Date().toISOString() };
+        }
+      }
+    }
+  });
+
+  const requestsFragment = createScompFragment<LocalUsersContract>('users').implement({
+    requests: {
+      getUser: async ({ id }) => ({ id, name: `user-${id}` })
+    }
+  });
+
+  const signalsFragment = createScompFragment<LocalUsersContract>('users').implement({
+    signals: {
+      notifyLogin: async ({ id, at }) => {
+        console.log('notifyLogin(fragment)', { id, at });
+      }
+    }
+  });
+
+  const feedsFragment = createScompFragment<LocalUsersContract>('users').implement({
+    feeds: {
+      liveUsers: async function* ({ room }) {
+        yield { id: room.length, at: new Date().toISOString() };
+      }
+    }
+  });
+
+  const composedFragment = composeScompFragments(requestsFragment, signalsFragment, feedsFragment);
+
+  console.log('strict grouped routes:', Object.keys(strictService.router).sort());
+  console.log('composed fragment routes:', Object.keys(composedFragment.router).sort());
+}
+
+main();
