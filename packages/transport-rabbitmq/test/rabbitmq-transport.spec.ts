@@ -481,6 +481,192 @@ describe("RabbitMQTransport NFR behavior", () => {
     );
   });
 
+  it("emits outbound priority decision observability events", async () => {
+    const fake = createFakeChannel();
+    mockConnect.mockResolvedValue(fake.connection);
+
+    const events: Array<unknown> = [];
+    const transport = new RabbitMQTransport({
+      url: "amqp://test",
+      observability: {
+        onEvent: (event) => {
+          events.push(event);
+        },
+      },
+    });
+
+    const pendingRequest = transport.request(
+      "users.getUser",
+      { id: 1 },
+      { priorityClass: "P1" },
+    );
+    await waitFor(() => fake.channel.sendToQueue.mock.calls.length > 0);
+
+    const outboundRequestDecision = events.find(
+      (event) =>
+        event &&
+        typeof event === "object" &&
+        (event as { type?: string }).type === "priority_decision" &&
+        (event as { direction?: string }).direction === "outbound" &&
+        (event as { operation?: string }).operation === "request",
+    ) as
+      | {
+          route?: string;
+          source?: string;
+          requested?: string;
+          effective?: string;
+        }
+      | undefined;
+    assert.equal(outboundRequestDecision?.route, "users.getUser");
+    assert.equal(outboundRequestDecision?.source, "metadata_hint");
+    assert.equal(outboundRequestDecision?.requested, "P1");
+    assert.equal(outboundRequestDecision?.effective, "P1");
+
+    const [, , requestOptions] = fake.channel.sendToQueue.mock.calls[0];
+    const replyConsumer = fake.queueConsumers.get("generated-1");
+    await replyConsumer?.(
+      createMessage(
+        { payload: { ok: true } },
+        {
+          properties: {
+            correlationId: requestOptions.correlationId,
+            replyTo: requestOptions.replyTo,
+          },
+        },
+      ),
+    );
+    await pendingRequest;
+
+    await transport.signal(
+      "users.notifyLogin",
+      { id: 1 },
+      { priorityClass: "P4" },
+    );
+    const outboundSignalDecision = events.find(
+      (event) =>
+        event &&
+        typeof event === "object" &&
+        (event as { type?: string }).type === "priority_decision" &&
+        (event as { direction?: string }).direction === "outbound" &&
+        (event as { operation?: string }).operation === "signal",
+    ) as
+      | {
+          route?: string;
+          source?: string;
+          requested?: string;
+          effective?: string;
+        }
+      | undefined;
+    assert.equal(outboundSignalDecision?.route, "users.notifyLogin");
+    assert.equal(outboundSignalDecision?.source, "metadata_hint");
+    assert.equal(outboundSignalDecision?.requested, "P4");
+    assert.equal(outboundSignalDecision?.effective, "P4");
+  });
+
+  it("emits inbound priority decision observability events", async () => {
+    const fake = createFakeChannel();
+    mockConnect.mockResolvedValue(fake.connection);
+
+    const events: Array<unknown> = [];
+    const seenSignals: Array<unknown> = [];
+    const transport = new RabbitMQTransport({
+      url: "amqp://test",
+      observability: {
+        onEvent: (event) => {
+          events.push(event);
+        },
+      },
+    });
+
+    await transport.listen({
+      "users.getUser": {
+        route: "users.getUser",
+        kind: "request",
+        handler: async (payload: unknown) => payload,
+      },
+      "users.notifyLogin": {
+        route: "users.notifyLogin",
+        kind: "signal",
+        handler: async (payload: unknown) => {
+          seenSignals.push(payload);
+        },
+      },
+    } as unknown as Record<string, unknown>);
+
+    const rpcConsumer = fake.queueConsumers.get("scomp.rpc.users");
+    await rpcConsumer?.(
+      createMessage(
+        {
+          route: "users.getUser",
+          op: "request",
+          payload: { id: 3 },
+          meta: { priority: "P0" },
+        },
+        {
+          properties: {
+            correlationId: "corr-inbound-request",
+            replyTo: "reply-users",
+          },
+        },
+      ),
+    );
+
+    const inboundRequestDecision = events.find(
+      (event) =>
+        event &&
+        typeof event === "object" &&
+        (event as { type?: string }).type === "priority_decision" &&
+        (event as { direction?: string }).direction === "inbound" &&
+        (event as { operation?: string }).operation === "request",
+    ) as
+      | {
+          route?: string;
+          source?: string;
+          requested?: string;
+          effective?: string;
+        }
+      | undefined;
+    assert.equal(inboundRequestDecision?.route, "users.getUser");
+    assert.equal(inboundRequestDecision?.source, "metadata_hint");
+    assert.equal(inboundRequestDecision?.requested, "P0");
+    assert.equal(inboundRequestDecision?.effective, "P0");
+
+    const signalQueue = Array.from(fake.queueConsumers.keys()).find((queue) =>
+      queue.startsWith("scomp.event.users."),
+    );
+    assert.ok(signalQueue);
+    await fake.queueConsumers.get(String(signalQueue))?.(
+      createMessage({
+        route: "users.notifyLogin",
+        op: "signal",
+        payload: { id: 7 },
+        meta: { priorityClass: "P3" },
+      }),
+    );
+
+    assert.deepEqual(seenSignals, [{ id: 7 }]);
+
+    const inboundSignalDecision = events.find(
+      (event) =>
+        event &&
+        typeof event === "object" &&
+        (event as { type?: string }).type === "priority_decision" &&
+        (event as { direction?: string }).direction === "inbound" &&
+        (event as { operation?: string }).operation === "signal",
+    ) as
+      | {
+          route?: string;
+          source?: string;
+          requested?: string;
+          effective?: string;
+        }
+      | undefined;
+    assert.equal(inboundSignalDecision?.route, "users.notifyLogin");
+    assert.equal(inboundSignalDecision?.source, "metadata_hint");
+    assert.equal(inboundSignalDecision?.requested, "P3");
+    assert.equal(inboundSignalDecision?.effective, "P3");
+  });
+
   it("propagates inbound priority metadata to security policy", async () => {
     const fake = createFakeChannel();
     mockConnect.mockResolvedValue(fake.connection);
