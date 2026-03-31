@@ -3,7 +3,9 @@ import { once } from "node:events";
 import {
   type CompiledRoute,
   type ITransport,
+  type ScompPriorityDecision,
   type ScompClientInvokeOptions,
+  resolveScompPriority,
 } from "@scomp/core";
 import {
   createFeedHash,
@@ -98,6 +100,15 @@ export type RabbitMQTransportEvent =
       route: string;
       operation: string;
       direction: "inbound" | "outbound";
+    }
+  | {
+      type: "priority_decision";
+      direction: "inbound" | "outbound";
+      route: string;
+      operation: ScompTransportRequestEnvelope["op"];
+      source: ScompPriorityDecision["source"];
+      requested: ScompPriorityDecision["requested"];
+      effective: ScompPriorityDecision["effective"];
     };
 
 export interface RabbitMQTransportObservabilityConfig {
@@ -251,6 +262,12 @@ export class RabbitMQTransport implements ITransport {
         const body = this.deserializeFromBuffer<ScompTransportRequestEnvelope>(
           message.content,
         );
+        this.emitPriorityDecision(
+          "inbound",
+          signalRoute.route,
+          "signal",
+          body.meta,
+        );
         const { allowed } = await this.checkSecurity({
           direction: "inbound",
           transport: "rabbitmq",
@@ -291,6 +308,7 @@ export class RabbitMQTransport implements ITransport {
   ): Promise<void> {
     const priorityMeta = toPriorityMeta(options);
     const baseMeta = this.mergeMeta(options?.meta, priorityMeta);
+    this.emitPriorityDecision("outbound", route, "signal", baseMeta);
     const { allowed, principal } = await this.checkSecurity({
       direction: "outbound",
       transport: "rabbitmq",
@@ -458,6 +476,7 @@ export class RabbitMQTransport implements ITransport {
   ): Promise<unknown> {
     const priorityMeta = toPriorityMeta(options);
     const baseMeta = this.mergeMeta(options?.meta, priorityMeta);
+    this.emitPriorityDecision("outbound", route, op, baseMeta);
     const { allowed, principal } = await this.checkSecurity({
       direction: "outbound",
       transport: "rabbitmq",
@@ -632,6 +651,7 @@ export class RabbitMQTransport implements ITransport {
       message.content,
     );
     const route = String(body.route ?? "");
+    this.emitPriorityDecision("inbound", route, body.op, body.meta);
     const { allowed } = await this.checkSecurity({
       direction: "inbound",
       transport: "rabbitmq",
@@ -989,6 +1009,28 @@ export class RabbitMQTransport implements ITransport {
 
   private emitEvent(event: RabbitMQTransportEvent): void {
     this.config.observability?.onEvent?.(event);
+  }
+
+  private emitPriorityDecision(
+    direction: "inbound" | "outbound",
+    route: string,
+    operation: ScompTransportRequestEnvelope["op"],
+    meta?: ScompTransportMessageMeta,
+  ): void {
+    const decision = resolveScompPriority({
+      route,
+      operation,
+      meta: meta as (ScompTransportMessageMeta & Record<string, unknown>) | undefined,
+    });
+    this.emitEvent({
+      type: "priority_decision",
+      direction,
+      route,
+      operation,
+      source: decision.source,
+      requested: decision.requested,
+      effective: decision.effective,
+    });
   }
 
   private now(): number {
