@@ -25,10 +25,28 @@ export interface BrowserWindowsTransportConfig {
   heartbeatTimeoutMs?: number;
   nodeId?: BrowserWindowsParticipantId;
   sharedWorkerCtor?: BrowserWindowsSharedWorkerCtor;
+  broadcastChannelCtor?: BrowserWindowsBroadcastChannelCtor;
   meta?:
     | ScompTransportMessageMeta
     | (() => ScompTransportMessageMeta | Promise<ScompTransportMessageMeta>);
 }
+
+export interface BrowserWindowsBroadcastChannelLike {
+  postMessage(message: unknown): void;
+  addEventListener(
+    type: "message",
+    listener: (event: { data: unknown }) => void,
+  ): void;
+  removeEventListener(
+    type: "message",
+    listener: (event: { data: unknown }) => void,
+  ): void;
+  close(): void;
+}
+
+export type BrowserWindowsBroadcastChannelCtor = new (
+  name: string,
+) => BrowserWindowsBroadcastChannelLike;
 
 export interface BrowserWindowsSharedWorkerPortLike {
   postMessage(message: unknown): void;

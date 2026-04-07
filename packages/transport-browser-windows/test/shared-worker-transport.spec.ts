@@ -57,11 +57,69 @@ class MockSharedWorker {
   }
 }
 
+class MockBroadcastChannel {
+  private static channels = new Map<string, Set<MockBroadcastChannel>>();
+  private readonly listeners = new Set<(event: { data: any }) => void>();
+
+  constructor(private readonly name: string) {
+    const entries = MockBroadcastChannel.channels.get(name) ?? new Set();
+    entries.add(this);
+    MockBroadcastChannel.channels.set(name, entries);
+  }
+
+  static reset(): void {
+    MockBroadcastChannel.channels.clear();
+  }
+
+  postMessage(message: any): void {
+    const entries = MockBroadcastChannel.channels.get(this.name);
+    if (!entries) {
+      return;
+    }
+
+    for (const channel of entries) {
+      if (channel === this) {
+        continue;
+      }
+
+      queueMicrotask(() => {
+        for (const listener of channel.listeners) {
+          listener({ data: message });
+        }
+      });
+    }
+  }
+
+  addEventListener(
+    _type: "message",
+    listener: (event: { data: any }) => void,
+  ): void {
+    this.listeners.add(listener);
+  }
+
+  removeEventListener(
+    _type: "message",
+    listener: (event: { data: any }) => void,
+  ): void {
+    this.listeners.delete(listener);
+  }
+
+  close(): void {
+    const entries = MockBroadcastChannel.channels.get(this.name);
+    entries?.delete(this);
+    if (entries && entries.size === 0) {
+      MockBroadcastChannel.channels.delete(this.name);
+    }
+    this.listeners.clear();
+  }
+}
+
 let mockWorkerBroker: BrowserWindowsSharedWorkerBroker;
 
 describe("BrowserWindowsTransport shared worker", () => {
   beforeEach(() => {
     mockWorkerBroker = new BrowserWindowsSharedWorkerBroker();
+    MockBroadcastChannel.reset();
   });
 
   test("request round-trip resolves response payload", async () => {
@@ -163,6 +221,97 @@ describe("BrowserWindowsTransport shared worker", () => {
     }
 
     expect(values).toEqual([1, 2]);
+
+    invoke.close();
+    host.close();
+  });
+
+  test("broadcast fallback activates when SharedWorker is unavailable", async () => {
+    const host = new BrowserWindowsTransport({
+      nodeId: "node-host",
+      channelName: "test-fallback-sharedworker-missing",
+      sharedWorkerCtor: undefined,
+      broadcastChannelCtor: MockBroadcastChannel as any,
+      heartbeatIntervalMs: 10,
+      heartbeatTimeoutMs: 40,
+    });
+
+    host.listen({
+      "svc.double": {
+        route: "svc.double",
+        kind: "request",
+        handler(payload: unknown) {
+          return { value: Number((payload as { value: number }).value) * 2 };
+        },
+      },
+    });
+
+    const invoke = new BrowserWindowsTransport({
+      nodeId: "node-invoke",
+      channelName: "test-fallback-sharedworker-missing",
+      sharedWorkerCtor: undefined,
+      broadcastChannelCtor: MockBroadcastChannel as any,
+      heartbeatIntervalMs: 10,
+      heartbeatTimeoutMs: 40,
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    const response = await invoke.request("svc.double", { value: 9 });
+    expect(response).toEqual({ value: 18 });
+
+    invoke.close();
+    host.close();
+  });
+
+  test("broadcast mode failover recovers subsequent requests", async () => {
+    const channelName = "test-broadcast-failover";
+
+    const firstLeader = new BrowserWindowsTransport({
+      mode: "broadcast-channel",
+      nodeId: "node-a",
+      channelName,
+      broadcastChannelCtor: MockBroadcastChannel as any,
+      heartbeatIntervalMs: 10,
+      heartbeatTimeoutMs: 40,
+    });
+
+    const host = new BrowserWindowsTransport({
+      mode: "broadcast-channel",
+      nodeId: "node-b",
+      channelName,
+      broadcastChannelCtor: MockBroadcastChannel as any,
+      heartbeatIntervalMs: 10,
+      heartbeatTimeoutMs: 40,
+    });
+
+    host.listen({
+      "svc.identity": {
+        route: "svc.identity",
+        kind: "request",
+        handler(payload: unknown) {
+          return payload;
+        },
+      },
+    });
+
+    const invoke = new BrowserWindowsTransport({
+      mode: "broadcast-channel",
+      nodeId: "node-c",
+      channelName,
+      broadcastChannelCtor: MockBroadcastChannel as any,
+      heartbeatIntervalMs: 10,
+      heartbeatTimeoutMs: 40,
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const beforeFailover = await invoke.request("svc.identity", { value: "before" });
+    expect(beforeFailover).toEqual({ value: "before" });
+
+    firstLeader.close();
+    await new Promise((resolve) => setTimeout(resolve, 80));
+
+    const afterFailover = await invoke.request("svc.identity", { value: "after" });
+    expect(afterFailover).toEqual({ value: "after" });
 
     invoke.close();
     host.close();
