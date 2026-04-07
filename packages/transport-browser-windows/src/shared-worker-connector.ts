@@ -8,6 +8,7 @@ import {
   createBroadcastFallbackConnector,
   type BrowserWindowsFallbackConnector,
 } from "./broadcast-fallback";
+import { DEFAULT_BROWSER_WINDOWS_WORKER_URL } from "./worker-url";
 
 export interface BrowserWindowsRuntimeConnector {
   addMessageListener(listener: (data: unknown) => void): void;
@@ -52,7 +53,7 @@ export function createSharedWorkerConnector(
   config: BrowserWindowsTransportConfig,
 ): BrowserWindowsRuntimeConnector {
   const WorkerCtor = resolveSharedWorkerCtor(config);
-  const workerUrl = config.workerUrl ?? "./scomp-browser-windows.worker.js";
+  const workerUrl = config.workerUrl ?? DEFAULT_BROWSER_WINDOWS_WORKER_URL;
   const workerName = config.workerName ?? config.channelName;
   const worker = new WorkerCtor(workerUrl, workerName ? { name: workerName } : undefined);
   const { port } = worker;

@@ -9,3 +9,5 @@ export type {
   BrowserWindowsTransportModePreference,
   BrowserWindowsParticipantRole,
 } from "./types";
+
+export { DEFAULT_BROWSER_WINDOWS_WORKER_URL } from "./worker-url";
