@@ -4,6 +4,11 @@ SCOMP is a transport-agnostic RPC toolkit with first-class `request`, `signal`, 
 
 Typed service contract + transport toolkit.
 
+## LLM/contributor guides
+
+- [llms.txt](llms.txt) — practical SCOMP mental model, modern API usage, transport matrix, security caveats, and common mistakes.
+- [docs/llms-transports.md](docs/llms-transports.md) — concise runnable transport setup patterns.
+
 ## Default authoring model (strict + grouped)
 
 SCOMP defaults to **strict, grouped service authoring** with three operation sections:
