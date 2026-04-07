@@ -18,8 +18,24 @@ const MockSharedWorker = sharedWorkerCtor();
 const SilentSharedWorker = FakeSilentSharedWorker;
 const MockBroadcastChannel = FakeBroadcastChannel;
 
+class MissingBroadcastChannel {
+  constructor(_name: string) {
+    throw new Error("BroadcastChannel unavailable in test runtime.");
+  }
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function latestReasonCode(transport: BrowserWindowsTransport): string | undefined {
+  const snapshot = transport.healthSnapshot();
+  const last = snapshot.reasons[snapshot.reasons.length - 1];
+  return last?.code;
+}
+
+function hasReasonCode(transport: BrowserWindowsTransport, code: string): boolean {
+  return transport.healthSnapshot().reasons.some((reason) => reason.code === code);
 }
 
 describe("BrowserWindowsTransport shared worker", () => {
@@ -63,6 +79,7 @@ describe("BrowserWindowsTransport shared worker", () => {
     await expect(invoke.request("svc.never", { id: 1 })).rejects.toThrow(
       /request timed out/i,
     );
+    expect(latestReasonCode(invoke)).toBe("request-timeout");
 
     await expect(invoke.request("svc.never", { id: 2 })).rejects.toThrow(
       /request timed out/i,
@@ -250,6 +267,7 @@ describe("BrowserWindowsTransport shared worker", () => {
     host.close();
 
     await expect(pendingRequest).rejects.toThrow(/host disconnected/i);
+    expect(latestReasonCode(invoke)).toBe("host-disconnected");
     await expect(feedIterator.next()).rejects.toThrow(/feed host disconnected/i);
 
     invoke.close();
@@ -318,6 +336,7 @@ describe("BrowserWindowsTransport shared worker", () => {
   });
 
   test("broadcast fallback activates when SharedWorker is unavailable", async () => {
+    const snapshots: Array<string> = [];
     const host = new BrowserWindowsTransport({
       nodeId: "node-host",
       channelName: "test-fallback-sharedworker-missing",
@@ -325,6 +344,11 @@ describe("BrowserWindowsTransport shared worker", () => {
       broadcastChannelCtor: MockBroadcastChannel as any,
       heartbeatIntervalMs: 10,
       heartbeatTimeoutMs: 40,
+      health: {
+        onSnapshot(snapshot) {
+          snapshots.push(snapshot.status);
+        },
+      },
     });
 
     host.listen({
@@ -347,11 +371,64 @@ describe("BrowserWindowsTransport shared worker", () => {
     });
 
     await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(hasReasonCode(host, "shared-worker-unavailable")).toBe(true);
+    expect(snapshots).toContain("degraded");
     const response = await invoke.request("svc.double", { value: 9 });
     expect(response).toEqual({ value: 18 });
 
     invoke.close();
     host.close();
+  });
+
+  test("mode=broadcast-channel reports broadcast-channel-unavailable before throw", () => {
+    const snapshots: Array<{ status: string; codes: Array<string> }> = [];
+
+    expect(
+      () =>
+        new BrowserWindowsTransport({
+          mode: "broadcast-channel",
+          broadcastChannelCtor: MissingBroadcastChannel as any,
+          health: {
+            onSnapshot(snapshot) {
+              snapshots.push({
+                status: snapshot.status,
+                codes: snapshot.reasons.map((reason) => reason.code),
+              });
+            },
+          },
+        }),
+    ).toThrow(/broadcast-channel-unavailable/i);
+
+    expect(snapshots.length).toBeGreaterThan(0);
+    const latest = snapshots[snapshots.length - 1];
+    expect(latest?.status).toBe("unavailable");
+    expect(latest?.codes).toContain("broadcast-channel-unavailable");
+  });
+
+  test("shared-worker fallback failure reports broadcast-channel-unavailable before throw", () => {
+    const snapshots: Array<{ status: string; codes: Array<string> }> = [];
+
+    expect(
+      () =>
+        new BrowserWindowsTransport({
+          mode: "auto",
+          sharedWorkerCtor: undefined,
+          broadcastChannelCtor: MissingBroadcastChannel as any,
+          health: {
+            onSnapshot(snapshot) {
+              snapshots.push({
+                status: snapshot.status,
+                codes: snapshot.reasons.map((reason) => reason.code),
+              });
+            },
+          },
+        }),
+    ).toThrow(/broadcast-channel-unavailable/i);
+
+    expect(snapshots.length).toBeGreaterThan(0);
+    const latest = snapshots[snapshots.length - 1];
+    expect(latest?.status).toBe("unavailable");
+    expect(latest?.codes).toContain("broadcast-channel-unavailable");
   });
 
   test("broadcast mode failover recovers subsequent requests", async () => {
@@ -605,6 +682,7 @@ describe("BrowserWindowsTransport shared worker", () => {
     await expect(invoke.request("svc.secure", { id: 1 })).rejects.toThrow(
       /request not authorized/i,
     );
+    expect(latestReasonCode(invoke)).toBe("auth-denied");
     await expect(invoke.signal("svc.signal", { id: 1 })).rejects.toThrow(
       /signal not authorized/i,
     );
@@ -641,5 +719,20 @@ describe("BrowserWindowsTransport shared worker", () => {
 
     invoke.close();
     host.close();
+  });
+
+  test("subscribeHealth emits immediate initial snapshot", async () => {
+    const transport = new BrowserWindowsTransport({
+      sharedWorkerCtor: SilentSharedWorker as any,
+    });
+
+    const snapshots: Array<string> = [];
+    const unsubscribe = transport.subscribeHealth((snapshot) => {
+      snapshots.push(snapshot.status);
+    });
+
+    expect(snapshots[0]).toBe("healthy");
+    unsubscribe();
+    transport.close();
   });
 });

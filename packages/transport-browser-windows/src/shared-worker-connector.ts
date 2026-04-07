@@ -1,21 +1,39 @@
 import type {
   BrowserWindowsBroadcastChannelCtor,
-  BrowserWindowsBroadcastChannelLike,
   BrowserWindowsSharedWorkerCtor,
   BrowserWindowsTransportConfig,
 } from "./types";
 import {
   createBroadcastFallbackConnector,
-  type BrowserWindowsFallbackConnector,
+  type BrowserWindowsFallbackRuntimeEvent,
 } from "./broadcast-fallback";
 import { DEFAULT_BROWSER_WINDOWS_WORKER_URL } from "./worker-url";
+import {
+  toErrorMessage,
+  toUnavailableDetail,
+} from "./shared-worker-connector-errors";
 
 export interface BrowserWindowsRuntimeConnector {
   addMessageListener(listener: (data: unknown) => void): void;
   removeMessageListener(listener: (data: unknown) => void): void;
+  addRuntimeEventListener?(listener: (event: BrowserWindowsRuntimeEvent) => void): void;
+  removeRuntimeEventListener?(listener: (event: BrowserWindowsRuntimeEvent) => void): void;
   postMessage(message: unknown): void;
   close(): void;
 }
+
+export type BrowserWindowsRuntimeEvent =
+  | BrowserWindowsFallbackRuntimeEvent
+  | {
+      type: "shared-worker-unavailable";
+      detail: string;
+      atMs: number;
+    }
+  | {
+      type: "broadcast-channel-unavailable";
+      detail: string;
+      atMs: number;
+    };
 
 function resolveSharedWorkerCtor(
   config: BrowserWindowsTransportConfig,
@@ -99,25 +117,77 @@ function shouldUseBroadcastFallback(config: BrowserWindowsTransportConfig): bool
   return config.mode === "broadcast-channel";
 }
 
+function withInitialRuntimeEvent(
+  connector: ReturnType<typeof createBroadcastFallbackConnector>,
+  initialEvent: BrowserWindowsRuntimeEvent,
+): BrowserWindowsRuntimeConnector {
+  return {
+    addMessageListener(listener) {
+      connector.addMessageListener(listener);
+    },
+    removeMessageListener(listener) {
+      connector.removeMessageListener(listener);
+    },
+    addRuntimeEventListener(listener) {
+      listener(initialEvent);
+      connector.addRuntimeEventListener(listener);
+    },
+    removeRuntimeEventListener(listener) {
+      connector.removeRuntimeEventListener(listener);
+    },
+    postMessage(message) {
+      connector.postMessage(message);
+    },
+    close() {
+      connector.close();
+    },
+  };
+}
+
 export function createRuntimeConnector(
   config: BrowserWindowsTransportConfig,
   participantId: string,
 ): BrowserWindowsRuntimeConnector {
   if (shouldUseBroadcastFallback(config)) {
-    const ChannelCtor = resolveBroadcastChannelCtor(config);
-    return createBroadcastFallbackConnector(config, participantId, ChannelCtor);
+    try {
+      const ChannelCtor = resolveBroadcastChannelCtor(config);
+      return createBroadcastFallbackConnector(config, participantId, ChannelCtor);
+    } catch (error) {
+      const detail = toErrorMessage(error, "BroadcastChannel initialization failed.");
+      throw new Error(toUnavailableDetail("broadcast-channel-unavailable", detail));
+    }
   }
 
   try {
     return createSharedWorkerConnector(config);
-  } catch {
-    const ChannelCtor = resolveBroadcastChannelCtor(config);
-    return createBroadcastFallbackConnector(
-      config,
-      participantId,
-      ChannelCtor,
-    );
+  } catch (error) {
+    const sharedWorkerDetail = toErrorMessage(error, "SharedWorker initialization failed.");
+
+    try {
+      const ChannelCtor = resolveBroadcastChannelCtor(config);
+      const fallbackConnector = createBroadcastFallbackConnector(
+        config,
+        participantId,
+        ChannelCtor,
+      );
+
+      return withInitialRuntimeEvent(fallbackConnector, {
+        type: "shared-worker-unavailable",
+        detail: sharedWorkerDetail,
+        atMs: Date.now(),
+      });
+    } catch (broadcastError) {
+      const broadcastDetail = toErrorMessage(
+        broadcastError,
+        "BroadcastChannel fallback initialization failed.",
+      );
+
+      throw new Error(
+        toUnavailableDetail(
+          "broadcast-channel-unavailable",
+          `SharedWorker failed (${sharedWorkerDetail}); fallback failed (${broadcastDetail})`,
+        ),
+      );
+    }
   }
 }
-
-export type { BrowserWindowsFallbackConnector };

@@ -54,6 +54,44 @@ console.log(result.value);
 
 Use `channelName`, `workerUrl`, and `workerName` to isolate logical clusters when needed.
 
+## Health snapshots and degraded reason taxonomy
+
+The transport can emit runtime health snapshots for observability and alerting:
+
+```ts
+const transport = createBrowserWindowsTransport({
+  health: {
+    onSnapshot(snapshot) {
+      // Called immediately with initial snapshot, then on transitions.
+      console.log(snapshot.status, snapshot.reasons);
+    },
+  },
+});
+
+const unsubscribe = transport.subscribeHealth((snapshot) => {
+  console.log(snapshot.updatedAtMs);
+});
+
+const now = transport.healthSnapshot();
+unsubscribe();
+```
+
+Snapshot status model:
+
+- `healthy`
+- `degraded`
+- `unavailable`
+
+Reason codes are machine-readable and stable:
+
+- `shared-worker-unavailable`
+- `broadcast-channel-unavailable`
+- `leader-failover`
+- `host-disconnected`
+- `auth-denied`
+- `request-timeout`
+- `publish-failed`
+
 ## SharedWorker script integration (`workerUrl`)
 
 `workerUrl` defaults to `"./scomp-browser-windows.worker.js"`.
