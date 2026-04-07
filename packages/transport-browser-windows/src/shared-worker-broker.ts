@@ -1,4 +1,5 @@
 import type {
+  BrowserWindowsFeedSubscriptionState,
   BrowserWindowsBrokerState,
   BrowserWindowsFeedSubscriptionKey,
 } from "./broker-state";
@@ -66,7 +67,88 @@ export class BrowserWindowsSharedWorkerBroker {
 
   disconnectParticipant(participantId: BrowserWindowsParticipantId): void {
     this.portsByParticipant.delete(participantId);
+    this.cleanupDisconnectedParticipant(participantId);
+  }
+
+  private cleanupDisconnectedParticipant(
+    participantId: BrowserWindowsParticipantId,
+  ): void {
     this.unregisterAllRoutes(participantId);
+
+    for (const [key, subscription] of this.state.feedSubscriptions.entries()) {
+      for (const [requestId, invokeId] of subscription.subscribersByRequestId.entries()) {
+        if (invokeId !== participantId) {
+          continue;
+        }
+
+        subscription.subscribersByRequestId.delete(requestId);
+        this.state.pendingRequests.delete(requestId);
+      }
+
+      if (subscription.subscribersByRequestId.size > 0) {
+        continue;
+      }
+
+      this.state.feedSubscriptions.delete(key);
+      const activeUpstream = this.state.activeUpstreamFeeds.get(key);
+      if (!activeUpstream) {
+        continue;
+      }
+
+      this.sendToParticipant(activeUpstream.ownerHostId, {
+        type: "host_feed_stop",
+        sourceId: "broker",
+        targetId: activeUpstream.ownerHostId,
+        sentAtMs: Date.now(),
+        invokeId: participantId,
+        requestId: activeUpstream.sourceRequestId,
+        route: activeUpstream.route,
+        operation: "feed_stop",
+        payloadKey: activeUpstream.payloadKey,
+        payloadHash: activeUpstream.payloadHash,
+      });
+
+      this.state.activeUpstreamFeeds.delete(key);
+      this.state.pendingRequests.delete(activeUpstream.sourceRequestId);
+    }
+
+    for (const [key, activeUpstream] of this.state.activeUpstreamFeeds.entries()) {
+      if (activeUpstream.ownerHostId !== participantId) {
+        continue;
+      }
+
+      const subscription = this.state.feedSubscriptions.get(key);
+      if (subscription) {
+        this.failFeedSubscription(
+          subscription,
+          `Feed host disconnected for route: ${activeUpstream.route}`,
+        );
+        this.state.feedSubscriptions.delete(key);
+      }
+
+      this.state.activeUpstreamFeeds.delete(key);
+      this.state.pendingRequests.delete(activeUpstream.sourceRequestId);
+    }
+
+    for (const [requestId, pending] of this.state.pendingRequests.entries()) {
+      if (pending.invokeId === participantId) {
+        this.state.pendingRequests.delete(requestId);
+        continue;
+      }
+
+      if (pending.hostId === participantId) {
+        this.sendToParticipant(pending.invokeId, {
+          type: "invoke_response",
+          sourceId: "broker",
+          targetId: pending.invokeId,
+          sentAtMs: Date.now(),
+          requestId: pending.requestId,
+          hostId: participantId,
+          error: `Host disconnected for route: ${pending.route}`,
+        });
+        this.state.pendingRequests.delete(requestId);
+      }
+    }
   }
 
   private handleMessage(
@@ -94,6 +176,10 @@ export class BrowserWindowsSharedWorkerBroker {
         return;
       case "routes_unregister":
         this.unregisterRoutes(message.sourceId, message.routes);
+        return;
+      case "participant_disconnect":
+        this.cleanupDisconnectedParticipant(message.sourceId);
+        this.portsByParticipant.delete(message.sourceId);
         return;
       case "invoke_request":
         this.handleInvokeRequest(message);
@@ -449,6 +535,27 @@ export class BrowserWindowsSharedWorkerBroker {
 
       this.state.feedSubscriptions.delete(key);
       this.state.activeUpstreamFeeds.delete(key);
+    }
+  }
+
+  private failFeedSubscription(
+    subscription: BrowserWindowsFeedSubscriptionState,
+    errorMessage: string,
+  ): void {
+    for (const [subscriberRequestId, subscriberInvokeId] of subscription.subscribersByRequestId) {
+      this.sendToParticipant(subscriberInvokeId, {
+        type: "invoke_feed_chunk",
+        sourceId: "broker",
+        targetId: subscriberInvokeId,
+        sentAtMs: Date.now(),
+        requestId: subscriberRequestId,
+        hostId: "broker",
+        payloadKey: subscription.payloadKey,
+        payloadHash: subscription.payloadHash,
+        chunkType: "error",
+        message: errorMessage,
+      });
+      this.state.pendingRequests.delete(subscriberRequestId);
     }
   }
 

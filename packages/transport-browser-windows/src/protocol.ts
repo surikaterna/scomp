@@ -13,6 +13,7 @@ import type {
 export type BrowserWindowsProtocolMessageType =
   | "hello"
   | "hello_ack"
+  | "participant_disconnect"
   | "heartbeat"
   | "routes_register"
   | "routes_unregister"
@@ -46,6 +47,11 @@ export interface BrowserWindowsHelloMessage
 export interface BrowserWindowsHelloAckMessage
   extends BrowserWindowsProtocolEnvelopeBase {
   type: "hello_ack";
+}
+
+export interface BrowserWindowsParticipantDisconnectMessage
+  extends BrowserWindowsProtocolEnvelopeBase {
+  type: "participant_disconnect";
 }
 
 export interface BrowserWindowsHeartbeatMessage
@@ -197,6 +203,7 @@ export interface BrowserWindowsInvokeFeedChunkMessage
 export type BrowserWindowsProtocolMessage =
   | BrowserWindowsHelloMessage
   | BrowserWindowsHelloAckMessage
+  | BrowserWindowsParticipantDisconnectMessage
   | BrowserWindowsHeartbeatMessage
   | BrowserWindowsRoutesRegisterMessage
   | BrowserWindowsRoutesUnregisterMessage

@@ -19,6 +19,7 @@ export type {
   BrowserWindowsProtocolEnvelopeBase,
   BrowserWindowsHelloMessage,
   BrowserWindowsHelloAckMessage,
+  BrowserWindowsParticipantDisconnectMessage,
   BrowserWindowsHeartbeatMessage,
   BrowserWindowsRoutesRegisterMessage,
   BrowserWindowsRoutesUnregisterMessage,

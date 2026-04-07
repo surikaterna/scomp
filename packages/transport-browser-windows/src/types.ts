@@ -24,6 +24,9 @@ export interface BrowserWindowsTransportConfig {
   channelName?: string;
   workerUrl?: string;
   workerName?: string;
+  requestTimeoutMs?: number;
+  maxPendingRequests?: number;
+  maxBufferedFeedChunksPerSubscriber?: number;
   heartbeatIntervalMs?: number;
   heartbeatTimeoutMs?: number;
   nodeId?: BrowserWindowsParticipantId;

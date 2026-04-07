@@ -57,6 +57,17 @@ class MockSharedWorker {
   }
 }
 
+class SilentSharedWorker {
+  readonly port: MockPort;
+
+  constructor(
+    _scriptUrl: string,
+    _optionsOrName: { name?: string } | string | undefined,
+  ) {
+    this.port = new MockPort();
+  }
+}
+
 class MockBroadcastChannel {
   private static channels = new Map<string, Set<MockBroadcastChannel>>();
   private readonly listeners = new Set<(event: { data: any }) => void>();
@@ -151,6 +162,40 @@ describe("BrowserWindowsTransport shared worker", () => {
     host.close();
   });
 
+  test("request timeout rejects and frees pending slot", async () => {
+    const invoke = new BrowserWindowsTransport({
+      sharedWorkerCtor: SilentSharedWorker as any,
+      requestTimeoutMs: 15,
+      maxPendingRequests: 1,
+    });
+
+    await expect(invoke.request("svc.never", { id: 1 })).rejects.toThrow(
+      /request timed out/i,
+    );
+
+    await expect(invoke.request("svc.never", { id: 2 })).rejects.toThrow(
+      /request timed out/i,
+    );
+
+    invoke.close();
+  });
+
+  test("max pending requests guard rejects overflow", async () => {
+    const invoke = new BrowserWindowsTransport({
+      sharedWorkerCtor: SilentSharedWorker as any,
+      requestTimeoutMs: 500,
+      maxPendingRequests: 1,
+    });
+
+    const first = invoke.request("svc.never", { id: 1 });
+    await expect(invoke.request("svc.never", { id: 2 })).rejects.toThrow(
+      /max pending requests exceeded/i,
+    );
+
+    await expect(first).rejects.toThrow(/request timed out/i);
+    invoke.close();
+  });
+
   test("signal fanout reaches all registered hosts", async () => {
     const calls: Array<string> = [];
 
@@ -228,6 +273,95 @@ describe("BrowserWindowsTransport shared worker", () => {
 
     invoke.close();
     host.close();
+  });
+
+  test("feed subscriber buffer high-water triggers deterministic termination", async () => {
+    const host = new BrowserWindowsTransport({
+      sharedWorkerCtor: MockSharedWorker as any,
+    });
+
+    host.listen({
+      "svc.hot": {
+        route: "svc.hot",
+        kind: "feed",
+        handler() {
+          return {
+            async *[Symbol.asyncIterator]() {
+              for (let i = 0; i < 10; i += 1) {
+                yield i;
+              }
+            },
+          };
+        },
+      },
+    });
+
+    const invoke = new BrowserWindowsTransport({
+      sharedWorkerCtor: MockSharedWorker as any,
+      maxBufferedFeedChunksPerSubscriber: 2,
+    });
+
+    const iterator = invoke.feed("svc.hot", { id: 1 })[Symbol.asyncIterator]();
+    await iterator.next();
+    await sleep(20);
+    await expect(iterator.next()).rejects.toThrow(/feed buffer exceeded/i);
+
+    invoke.close();
+    host.close();
+  });
+
+  test("disconnect cleanup rejects pending request and terminates feed", async () => {
+    const host = new BrowserWindowsTransport({
+      sharedWorkerCtor: MockSharedWorker as any,
+    });
+
+    host.listen({
+      "svc.hang": {
+        route: "svc.hang",
+        kind: "request",
+        async handler() {
+          return await new Promise(() => {
+            // intentional never-resolve
+          });
+        },
+      },
+      "svc.live": {
+        route: "svc.live",
+        kind: "feed",
+        handler() {
+          let stopped = false;
+          return {
+            unsubscribe() {
+              stopped = true;
+            },
+            async *[Symbol.asyncIterator]() {
+              let n = 0;
+              while (!stopped) {
+                await sleep(3);
+                yield n;
+                n += 1;
+              }
+            },
+          };
+        },
+      },
+    });
+
+    const invoke = new BrowserWindowsTransport({
+      sharedWorkerCtor: MockSharedWorker as any,
+      requestTimeoutMs: 1_000,
+    });
+
+    const pendingRequest = invoke.request("svc.hang", { id: 1 });
+    const feedIterator = invoke.feed("svc.live", { id: 1 })[Symbol.asyncIterator]();
+    await feedIterator.next();
+
+    host.close();
+
+    await expect(pendingRequest).rejects.toThrow(/host disconnected/i);
+    await expect(feedIterator.next()).rejects.toThrow(/feed host disconnected/i);
+
+    invoke.close();
   });
 
   test("feed multiplexes subscribers and stops upstream once", async () => {
