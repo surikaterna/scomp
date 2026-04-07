@@ -36,7 +36,7 @@ function toIntentMap(
     return resolved;
   }
 
-  return intents;
+  return intents as BrowserWindowsRouteIntentMap;
 }
 
 export function createRouteIntentsFromCompiledRouter(

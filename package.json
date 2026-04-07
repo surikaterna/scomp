@@ -7,6 +7,7 @@
     "build:ts": "tsc -b tsconfig.build.json",
     "check:websocket-server-imports": "bun ./check-websocket-server-imports.mjs",
     "check:websocket-server-imports:fixtures": "bun ./check-websocket-server-imports-fixtures.mjs",
+    "smoke:transport-browser-windows": "bun ./check-transport-browser-windows-bundler-smoke.mjs",
     "lint": "bun run check:websocket-server-imports && turbo run lint",
     "test": "turbo run test --concurrency=2"
   },

@@ -165,9 +165,9 @@ Reason codes are machine-readable and stable:
 `workerUrl` defaults to `"./scomp-browser-windows.worker.js"`.
 That default is a placeholder path, not an auto-hosted worker file. Your app must bundle or host a SharedWorker script and pass its URL.
 
-`@scomp/transport-browser-windows` now provides a concrete worker entry module at:
+`@scomp/transport-browser-windows` provides a concrete worker entry module at:
 
-- `@scomp/transport-browser-windows/src/worker-entry`
+- `@scomp/transport-browser-windows/worker-entry`
 
 Bundle that module as a SharedWorker asset in your app, then pass the emitted URL to `createBrowserWindowsTransport`.
 
@@ -178,7 +178,7 @@ import {
 } from "@scomp/transport-browser-windows";
 
 const workerUrl = new URL(
-  "@scomp/transport-browser-windows/src/worker-entry.ts",
+  "@scomp/transport-browser-windows/worker-entry",
   import.meta.url,
 );
 
@@ -198,6 +198,19 @@ Exact worker bundling syntax depends on your toolchain (Vite/Webpack/Rollup/Parc
 
 1. Build/host the worker-entry script as a SharedWorker file.
 2. Pass that runtime URL via `workerUrl`.
+
+## Bundler smoke validation commands
+
+This package includes a lightweight Rollup smoke check that validates:
+
+- importing `@scomp/transport-browser-windows`
+- importing `@scomp/transport-browser-windows/worker-entry`
+- bundling browser outputs without Node polyfill assumptions
+
+Run either command:
+
+- package-local: `bun run smoke:bundler` (from `packages/transport-browser-windows`)
+- repo root: `bun run smoke:transport-browser-windows`
 
 ## Security guidance
 
