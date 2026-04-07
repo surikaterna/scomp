@@ -5,93 +5,22 @@ import type {
   BrowserWindowsBroadcastChannelLike,
   BrowserWindowsTransportConfig,
 } from "./types";
+import {
+  createLeaderAnnounceFrame,
+  createLeaderHeartbeatFrame,
+  createLeaderRetireFrame,
+  electLeaderId,
+  isRetireFrame,
+  shouldAdoptLeader,
+} from "./broadcast-fallback-leader";
+import {
+  type BroadcastControlFrame,
+  type BroadcastFallbackFrame,
+  type BroadcastProtocolFrame,
+  isBroadcastFallbackFrame,
+} from "./broadcast-fallback-frames";
+import { BrokerPortLike, InMemoryBrokerPort } from "./broadcast-fallback-port";
 
-interface BroadcastProtocolFrame {
-  frameType: "protocol";
-  sourceId: string;
-  message: BrowserWindowsProtocolMessage;
-}
-
-interface BroadcastLeaderHeartbeatFrame {
-  frameType: "leader_heartbeat";
-  sourceId: string;
-  leaderId: string;
-  leaseUntilMs: number;
-  sentAtMs: number;
-}
-
-interface BroadcastLeaderAnnounceFrame {
-  frameType: "leader_announce";
-  sourceId: string;
-  leaderId: string;
-  leaseUntilMs: number;
-  sentAtMs: number;
-}
-
-interface BroadcastLeaderRetireFrame {
-  frameType: "leader_retire";
-  sourceId: string;
-  leaderId: string;
-  sentAtMs: number;
-}
-
-type BroadcastFallbackFrame =
-  | BroadcastProtocolFrame
-  | BroadcastLeaderHeartbeatFrame
-  | BroadcastLeaderAnnounceFrame
-  | BroadcastLeaderRetireFrame;
-
-interface BrokerPortLike {
-  postMessage(message: BrowserWindowsProtocolMessage): void;
-  addEventListener(
-    type: "message",
-    listener: (event: { data: BrowserWindowsProtocolMessage }) => void,
-  ): void;
-  removeEventListener(
-    type: "message",
-    listener: (event: { data: BrowserWindowsProtocolMessage }) => void,
-  ): void;
-  start?(): void;
-  emitIncoming(message: BrowserWindowsProtocolMessage): void;
-}
-
-class InMemoryBrokerPort implements BrokerPortLike {
-  private readonly listeners = new Set<
-    (event: { data: BrowserWindowsProtocolMessage }) => void
-  >();
-
-  constructor(
-    private readonly sender: (message: BrowserWindowsProtocolMessage) => void,
-  ) {}
-
-  postMessage(message: BrowserWindowsProtocolMessage): void {
-    this.sender(message);
-  }
-
-  addEventListener(
-    _type: "message",
-    listener: (event: { data: BrowserWindowsProtocolMessage }) => void,
-  ): void {
-    this.listeners.add(listener);
-  }
-
-  removeEventListener(
-    _type: "message",
-    listener: (event: { data: BrowserWindowsProtocolMessage }) => void,
-  ): void {
-    this.listeners.delete(listener);
-  }
-
-  start(): void {
-    // no-op
-  }
-
-  emitIncoming(message: BrowserWindowsProtocolMessage): void {
-    for (const listener of this.listeners) {
-      listener({ data: message });
-    }
-  }
-}
 
 export interface BrowserWindowsFallbackConnector {
   addMessageListener(listener: (data: unknown) => void): void;
@@ -104,20 +33,10 @@ function isProtocolMessage(value: unknown): value is BrowserWindowsProtocolMessa
   return typeof value === "object" && value !== null && "type" in value;
 }
 
-function pickLeader(participants: Array<string>): string | undefined {
-  if (participants.length === 0) {
-    return undefined;
-  }
-
-  const sorted = [...participants].sort((a, b) => a.localeCompare(b));
-  return sorted[0];
-}
-
 export function createBroadcastFallbackConnector(
   config: BrowserWindowsTransportConfig,
   participantId: string,
   ChannelCtor: BrowserWindowsBroadcastChannelCtor,
-  _sharedWorkerError?: Error,
 ): BrowserWindowsFallbackConnector {
   const channelName = config.channelName ?? "scomp-browser-windows";
   const channel: BrowserWindowsBroadcastChannelLike = new ChannelCtor(channelName);
@@ -164,13 +83,7 @@ export function createBroadcastFallbackConnector(
     }
 
     leaderLeaseUntilMs = Date.now() + heartbeatTimeoutMs;
-    postFrame({
-      frameType: "leader_heartbeat",
-      sourceId: participantId,
-      leaderId: participantId,
-      leaseUntilMs: leaderLeaseUntilMs,
-      sentAtMs: Date.now(),
-    });
+    postFrame(createLeaderHeartbeatFrame(participantId, leaderLeaseUntilMs));
   };
 
   const syncLocalStateToBroker = (): void => {
@@ -209,13 +122,7 @@ export function createBroadcastFallbackConnector(
     ensureLeaderBroker();
     leaderId = participantId;
     leaderLeaseUntilMs = Date.now() + heartbeatTimeoutMs;
-    postFrame({
-      frameType: "leader_announce",
-      sourceId: participantId,
-      leaderId: participantId,
-      leaseUntilMs: leaderLeaseUntilMs,
-      sentAtMs: Date.now(),
-    });
+    postFrame(createLeaderAnnounceFrame(participantId, leaderLeaseUntilMs));
     broadcastHeartbeat();
     syncLocalStateToBroker();
   };
@@ -241,13 +148,11 @@ export function createBroadcastFallbackConnector(
 
   const maybeElectLeader = (): void => {
     const now = Date.now();
-    knownParticipants.set(participantId, now);
-
-    const alive = Array.from(knownParticipants.entries())
-      .filter(([, lastSeenMs]) => now - lastSeenMs <= heartbeatTimeoutMs)
-      .map(([id]) => id);
-
-    const elected = pickLeader(alive);
+    const elected = electLeaderId(
+      participantId,
+      knownParticipants,
+      heartbeatTimeoutMs,
+    );
     if (!elected) {
       return;
     }
@@ -299,14 +204,11 @@ export function createBroadcastFallbackConnector(
   };
 
   const onControlFrame = (
-    frame:
-      | BroadcastLeaderHeartbeatFrame
-      | BroadcastLeaderAnnounceFrame
-      | BroadcastLeaderRetireFrame,
+    frame: BroadcastControlFrame,
   ): void => {
     knownParticipants.set(frame.sourceId, Date.now());
 
-    if (frame.frameType === "leader_retire") {
+    if (isRetireFrame(frame)) {
       if (leaderId === frame.leaderId) {
         leaderLeaseUntilMs = 0;
         maybeElectLeader();
@@ -315,21 +217,17 @@ export function createBroadcastFallbackConnector(
     }
 
     const now = Date.now();
-    if (
-      !leaderId ||
-      leaderId === frame.leaderId ||
-      now >= leaderLeaseUntilMs ||
-      frame.leaderId.localeCompare(leaderId) < 0
-    ) {
+    if (shouldAdoptLeader({ leaderId, leaderLeaseUntilMs }, frame.leaderId, now)) {
       adoptLeader(frame.leaderId, frame.leaseUntilMs);
     }
   };
 
   const onChannelMessage = (event: { data: unknown }): void => {
-    const data = event.data as BroadcastFallbackFrame | undefined;
-    if (!data || typeof data !== "object" || !("frameType" in data)) {
+    if (!isBroadcastFallbackFrame(event.data)) {
       return;
     }
+
+    const data = event.data;
 
     switch (data.frameType) {
       case "protocol":
@@ -413,12 +311,7 @@ export function createBroadcastFallbackConnector(
       clearInterval(interval);
 
       if (leaderId === participantId) {
-        postFrame({
-          frameType: "leader_retire",
-          sourceId: participantId,
-          leaderId: participantId,
-          sentAtMs: Date.now(),
-        });
+        postFrame(createLeaderRetireFrame(participantId));
       }
 
       if (broker && leaderId === participantId) {

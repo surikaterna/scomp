@@ -109,13 +109,12 @@ export function createRuntimeConnector(
 
   try {
     return createSharedWorkerConnector(config);
-  } catch (error) {
+  } catch {
     const ChannelCtor = resolveBroadcastChannelCtor(config);
     return createBroadcastFallbackConnector(
       config,
       participantId,
       ChannelCtor,
-      error instanceof Error ? error : undefined,
     );
   }
 }
