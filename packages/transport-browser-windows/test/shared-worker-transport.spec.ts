@@ -1,131 +1,22 @@
 import { BrowserWindowsSharedWorkerBroker } from "../src/shared-worker-broker";
 import { BrowserWindowsTransport } from "../src/transport-browser-windows";
-
-class MockPort {
-  peer?: MockPort;
-  readonly listeners = new Set<(event: { data: any }) => void>();
-
-  postMessage(message: any): void {
-    const target = this.peer;
-    if (!target) {
-      return;
-    }
-
-    queueMicrotask(() => {
-      for (const listener of target.listeners) {
-        listener({ data: message });
-      }
-    });
-  }
-
-  addEventListener(
-    _type: "message",
-    listener: (event: { data: any }) => void,
-  ): void {
-    this.listeners.add(listener);
-  }
-
-  removeEventListener(
-    _type: "message",
-    listener: (event: { data: any }) => void,
-  ): void {
-    this.listeners.delete(listener);
-  }
-
-  start(): void {
-    // no-op
-  }
-
-  close(): void {
-    this.listeners.clear();
-  }
-}
-
-class MockSharedWorker {
-  readonly port: MockPort;
-
-  constructor(
-    _scriptUrl: string,
-    _optionsOrName: { name?: string } | string | undefined,
-  ) {
-    const runtimePort = new MockPort();
-    const brokerPort = new MockPort();
-    runtimePort.peer = brokerPort;
-    brokerPort.peer = runtimePort;
-    this.port = runtimePort;
-    mockWorkerBroker.attachPort(brokerPort);
-  }
-}
-
-class SilentSharedWorker {
-  readonly port: MockPort;
-
-  constructor(
-    _scriptUrl: string,
-    _optionsOrName: { name?: string } | string | undefined,
-  ) {
-    this.port = new MockPort();
-  }
-}
-
-class MockBroadcastChannel {
-  private static channels = new Map<string, Set<MockBroadcastChannel>>();
-  private readonly listeners = new Set<(event: { data: any }) => void>();
-
-  constructor(private readonly name: string) {
-    const entries = MockBroadcastChannel.channels.get(name) ?? new Set();
-    entries.add(this);
-    MockBroadcastChannel.channels.set(name, entries);
-  }
-
-  static reset(): void {
-    MockBroadcastChannel.channels.clear();
-  }
-
-  postMessage(message: any): void {
-    const entries = MockBroadcastChannel.channels.get(this.name);
-    if (!entries) {
-      return;
-    }
-
-    for (const channel of entries) {
-      if (channel === this) {
-        continue;
-      }
-
-      queueMicrotask(() => {
-        for (const listener of channel.listeners) {
-          listener({ data: message });
-        }
-      });
-    }
-  }
-
-  addEventListener(
-    _type: "message",
-    listener: (event: { data: any }) => void,
-  ): void {
-    this.listeners.add(listener);
-  }
-
-  removeEventListener(
-    _type: "message",
-    listener: (event: { data: any }) => void,
-  ): void {
-    this.listeners.delete(listener);
-  }
-
-  close(): void {
-    const entries = MockBroadcastChannel.channels.get(this.name);
-    entries?.delete(this);
-    if (entries && entries.size === 0) {
-      MockBroadcastChannel.channels.delete(this.name);
-    }
-    this.listeners.clear();
-  }
-}
+import { FakeBroadcastChannel } from "./test-doubles/fake-broadcast-channel";
+import {
+  createFakeSharedWorkerCtor,
+  FakeSilentSharedWorker,
+} from "./test-doubles/fake-shared-worker";
 
 let mockWorkerBroker: BrowserWindowsSharedWorkerBroker;
+
+function sharedWorkerCtor() {
+  return createFakeSharedWorkerCtor((port) => {
+    mockWorkerBroker.attachPort(port);
+  });
+}
+
+const MockSharedWorker = sharedWorkerCtor();
+const SilentSharedWorker = FakeSilentSharedWorker;
+const MockBroadcastChannel = FakeBroadcastChannel;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -134,7 +25,7 @@ function sleep(ms: number): Promise<void> {
 describe("BrowserWindowsTransport shared worker", () => {
   beforeEach(() => {
     mockWorkerBroker = new BrowserWindowsSharedWorkerBroker();
-    MockBroadcastChannel.reset();
+    FakeBroadcastChannel.reset();
   });
 
   test("request round-trip resolves response payload", async () => {
