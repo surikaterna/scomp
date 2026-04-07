@@ -1,5 +1,10 @@
 import type { ITransport, ScompClientInvokeOptions } from "@scomp/core";
-import type { ScompTransportMessageMeta } from "@scomp/types";
+import type {
+  ScompTransportMessageMeta,
+  ScompTransportOperation,
+  ScompTransportPrincipal,
+  ScompTransportSecurityContext,
+} from "@scomp/types";
 import type {
   BrowserWindowsHostFeedStartMessage,
   BrowserWindowsHostFeedStopMessage,
@@ -16,6 +21,7 @@ import {
   createPayloadKey,
   createRequestId,
   mergeMeta,
+  toPrincipalMeta,
   toPriorityMeta,
 } from "./shared-worker-internal";
 import type {
@@ -216,7 +222,7 @@ export class BrowserWindowsTransport implements ITransport {
     options?: ScompClientInvokeOptions,
   ): Promise<unknown> {
     const requestId = createRequestId();
-    const meta = await this.composeMeta(options);
+    const { meta } = await this.composeMetaForOperation(route, "request", payload, options);
 
     const response = new Promise<unknown>((resolve, reject) => {
       this.pendingRequests.set(requestId, { resolve, reject });
@@ -241,6 +247,8 @@ export class BrowserWindowsTransport implements ITransport {
     payload: unknown,
     options?: ScompClientInvokeOptions,
   ): Promise<void> {
+    const { meta } = await this.composeMetaForOperation(route, "signal", payload, options);
+
     this.connector.postMessage({
       type: "invoke_signal",
       sourceId: this.participantId,
@@ -249,7 +257,7 @@ export class BrowserWindowsTransport implements ITransport {
       route,
       operation: "signal",
       payload,
-      meta: await this.composeMeta(options),
+      meta,
     });
   }
 
@@ -261,34 +269,39 @@ export class BrowserWindowsTransport implements ITransport {
     const requestId = createRequestId();
     const payloadKey = createPayloadKey(payload);
     const payloadHash = createPayloadHash(route, payload);
-    const state: FeedQueueState = {
-      queue: [],
-      waiters: [],
-      closed: false,
-      terminalError: undefined,
-      route,
-      payloadKey,
-      payloadHash,
-    };
-
-    this.feedStates.set(requestId, state);
 
     return {
       [Symbol.asyncIterator]: async function* (this: BrowserWindowsTransport) {
-        this.connector.postMessage({
-          type: "invoke_feed_start",
-          sourceId: this.participantId,
-          sentAtMs: Date.now(),
-          requestId,
+        const state: FeedQueueState = {
+          queue: [],
+          waiters: [],
+          closed: false,
+          terminalError: undefined,
           route,
-          operation: "feed_start",
-          payload,
           payloadKey,
           payloadHash,
-          meta: await this.composeMeta(options),
-        });
+        };
+        this.feedStates.set(requestId, state);
+
+        let feedStarted = false;
 
         try {
+          this.connector.postMessage({
+            meta: (
+              await this.composeMetaForOperation(route, "feed_start", payload, options)
+            ).meta,
+            type: "invoke_feed_start",
+            sourceId: this.participantId,
+            sentAtMs: Date.now(),
+            requestId,
+            route,
+            operation: "feed_start",
+            payload,
+            payloadKey,
+            payloadHash,
+          });
+          feedStarted = true;
+
           while (true) {
             if (state.queue.length > 0) {
               const nextValue = state.queue.shift();
@@ -321,17 +334,26 @@ export class BrowserWindowsTransport implements ITransport {
           }
         } finally {
           this.feedStates.delete(requestId);
-          this.connector.postMessage({
-            type: "invoke_feed_stop",
-            sourceId: this.participantId,
-            sentAtMs: Date.now(),
-            requestId,
-            route,
-            operation: "feed_stop",
-            payloadKey,
-            payloadHash,
-            meta: await this.composeMeta(options),
-          });
+          if (feedStarted) {
+            this.connector.postMessage({
+              meta: (
+                await this.composeMetaForOperation(
+                  route,
+                  "feed_stop",
+                  { payloadKey, payloadHash },
+                  options,
+                )
+              ).meta,
+              type: "invoke_feed_stop",
+              sourceId: this.participantId,
+              sentAtMs: Date.now(),
+              requestId,
+              route,
+              operation: "feed_stop",
+              payloadKey,
+              payloadHash,
+            });
+          }
         }
       }.bind(this),
     };
@@ -453,6 +475,13 @@ export class BrowserWindowsTransport implements ITransport {
     }
 
     try {
+      await this.assertInboundAllowed(
+        message.route,
+        "request",
+        message.payload,
+        message.meta,
+      );
+
       const parsedPayload = route.parser
         ? route.parser(message.payload)
         : message.payload;
@@ -494,6 +523,13 @@ export class BrowserWindowsTransport implements ITransport {
     }
 
     try {
+      await this.assertInboundAllowed(
+        message.route,
+        "signal",
+        message.payload,
+        message.meta,
+      );
+
       const parsedPayload = route.parser
         ? route.parser(message.payload)
         : message.payload;
@@ -541,11 +577,18 @@ export class BrowserWindowsTransport implements ITransport {
       return;
     }
 
-    const parsedPayload = route.parser
-      ? route.parser(message.payload)
-      : message.payload;
-
     try {
+      await this.assertInboundAllowed(
+        message.route,
+        "feed_start",
+        message.payload,
+        message.meta,
+      );
+
+      const parsedPayload = route.parser
+        ? route.parser(message.payload)
+        : message.payload;
+
       const produced = route.handler(parsedPayload);
       const asyncIterable = toAsyncIterable(produced);
       const hostedState: HostedFeedState = { stopped: false };
@@ -627,14 +670,7 @@ export class BrowserWindowsTransport implements ITransport {
   }
 
   private handleHostFeedStop(message: BrowserWindowsHostFeedStopMessage): void {
-    const hosted = this.hostedFeeds.get(message.requestId);
-    if (!hosted) {
-      return;
-    }
-
-    hosted.stopped = true;
-    hosted.unsubscribe?.();
-    this.hostedFeeds.delete(message.requestId);
+    void this.handleHostFeedStopAsync(message);
   }
 
   private async resolveConfigMeta(): Promise<ScompTransportMessageMeta | undefined> {
@@ -650,13 +686,110 @@ export class BrowserWindowsTransport implements ITransport {
     return meta;
   }
 
-  private async composeMeta(
+  /**
+   * Deterministic outbound meta precedence (websocket-browser parity):
+   * config.meta -> options.meta -> priority hints -> principal-derived auth context.
+   */
+  private async composeMetaForOperation(
+    route: string,
+    operation: ScompTransportOperation,
+    payload: unknown,
     options?: ScompClientInvokeOptions,
-  ): Promise<ScompTransportMessageMeta | undefined> {
+  ): Promise<{
+    meta: ScompTransportMessageMeta | undefined;
+    principal: ScompTransportPrincipal | undefined;
+  }> {
     const configMeta = await this.resolveConfigMeta();
     const optionsMeta = options?.meta;
     const priorityMeta = toPriorityMeta(options);
-    return mergeMeta(mergeMeta(configMeta, optionsMeta), priorityMeta);
+    const effectiveMeta = mergeMeta(mergeMeta(configMeta, optionsMeta), priorityMeta);
+    const { allowed, principal } = await this.checkSecurity({
+      direction: "outbound",
+      transport: "browser-windows",
+      route,
+      operation,
+      payload,
+      meta: effectiveMeta,
+    });
+
+    if (!allowed) {
+      throw new Error(`${operation} not authorized for route: ${route}`);
+    }
+
+    return {
+      meta: mergeMeta(effectiveMeta, toPrincipalMeta(principal)),
+      principal,
+    };
+  }
+
+  private async assertInboundAllowed(
+    route: string,
+    operation: ScompTransportOperation,
+    payload: unknown,
+    meta: ScompTransportMessageMeta | undefined,
+  ): Promise<void> {
+    const { allowed } = await this.checkSecurity({
+      direction: "inbound",
+      transport: "browser-windows",
+      route,
+      operation,
+      payload,
+      meta,
+    });
+
+    if (!allowed) {
+      throw new Error(`${operation} not authorized for route: ${route}`);
+    }
+  }
+
+  private async handleHostFeedStopAsync(
+    message: BrowserWindowsHostFeedStopMessage,
+  ): Promise<void> {
+    const hosted = this.hostedFeeds.get(message.requestId);
+    if (!hosted) {
+      return;
+    }
+
+    try {
+      await this.assertInboundAllowed(
+        message.route,
+        "feed_stop",
+        { payloadKey: message.payloadKey, payloadHash: message.payloadHash },
+        message.meta,
+      );
+    } catch {
+      return;
+    }
+
+    hosted.stopped = true;
+    hosted.unsubscribe?.();
+    this.hostedFeeds.delete(message.requestId);
+  }
+
+  private async checkSecurity(
+    ctx: Omit<ScompTransportSecurityContext, "principal">,
+  ): Promise<{ allowed: boolean; principal?: ScompTransportPrincipal }> {
+    const policy = this.config.security;
+    if (!policy) {
+      return { allowed: true };
+    }
+
+    const principal = policy.authenticate
+      ? await policy.authenticate(ctx)
+      : undefined;
+
+    if (!policy.authorize) {
+      return { allowed: true, principal: principal ?? undefined };
+    }
+
+    const allowed = Boolean(
+      await policy.authorize({
+        ...ctx,
+        principal: principal ?? undefined,
+      }),
+    );
+
+    return { allowed, principal: principal ?? undefined };
   }
 }
 
