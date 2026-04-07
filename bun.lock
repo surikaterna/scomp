@@ -87,6 +87,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@scomp/core": "workspace:*",
+        "@scomp/types": "workspace:*",
       },
     },
     "packages/transport-inprocess": {
