@@ -462,4 +462,159 @@ describe("BrowserWindowsTransport shared worker", () => {
     invokeB.close();
     host.close();
   });
+
+  test("applies deterministic metadata precedence with principal auth last", async () => {
+    let observedMeta: Record<string, unknown> | undefined;
+
+    const host = new BrowserWindowsTransport({
+      sharedWorkerCtor: MockSharedWorker as any,
+      security: {
+        authorize: ({ operation, meta }) => {
+          if (operation === "request") {
+            observedMeta = meta as Record<string, unknown> | undefined;
+          }
+          return true;
+        },
+      },
+    });
+
+    host.listen({
+      "svc.meta": {
+        route: "svc.meta",
+        kind: "request",
+        handler() {
+          return { ok: true };
+        },
+      },
+    });
+
+    const invoke = new BrowserWindowsTransport({
+      sharedWorkerCtor: MockSharedWorker as any,
+      meta: {
+        traceId: "cfg-trace",
+        tenantId: "cfg-tenant",
+        tags: { source: "config" },
+      },
+      security: {
+        authenticate: () => ({
+          subject: "subject:request",
+          tenantId: "tenant-principal",
+          claims: { via: "authn" },
+        }),
+        authorize: () => true,
+      },
+    });
+
+    const result = await invoke.request("svc.meta", { id: 1 }, {
+      meta: {
+        tenantId: "tenant-options",
+        auth: { source: "options" },
+      },
+      priority: "P0",
+      priorityClass: "P1",
+      deadlineAtMs: 200,
+      targetLatencyMs: 10,
+    });
+
+    expect(result).toEqual({ ok: true });
+    expect(observedMeta?.traceId).toBe("cfg-trace");
+    expect(observedMeta?.tenantId).toBe("tenant-principal");
+    expect(observedMeta?.priority).toBe("P0");
+    expect(observedMeta?.priorityClass).toBe("P1");
+    expect(observedMeta?.deadlineAtMs).toBe(200);
+    expect(observedMeta?.targetLatencyMs).toBe(10);
+    expect(observedMeta?.tags).toEqual({ source: "config" });
+    expect(observedMeta?.auth).toEqual({
+      subject: "subject:request",
+      tenantId: "tenant-principal",
+      scopes: undefined,
+      claims: { via: "authn" },
+      issuedAt: undefined,
+      expiresAt: undefined,
+      authType: undefined,
+    });
+
+    invoke.close();
+    host.close();
+  });
+
+  test("denies request/signal/feed operations with clear authorization errors", async () => {
+    const host = new BrowserWindowsTransport({
+      sharedWorkerCtor: MockSharedWorker as any,
+    });
+    host.listen({
+      "svc.secure": {
+        route: "svc.secure",
+        kind: "request",
+        handler() {
+          return { ok: true };
+        },
+      },
+      "svc.signal": {
+        route: "svc.signal",
+        kind: "signal",
+        async handler() {
+          return;
+        },
+      },
+      "svc.feed": {
+        route: "svc.feed",
+        kind: "feed",
+        handler() {
+          return {
+            async *[Symbol.asyncIterator]() {
+              yield 1;
+            },
+          };
+        },
+      },
+    });
+
+    const invoke = new BrowserWindowsTransport({
+      sharedWorkerCtor: MockSharedWorker as any,
+      security: {
+        authorize: () => false,
+      },
+    });
+
+    await expect(invoke.request("svc.secure", { id: 1 })).rejects.toThrow(
+      /request not authorized/i,
+    );
+    await expect(invoke.signal("svc.signal", { id: 1 })).rejects.toThrow(
+      /signal not authorized/i,
+    );
+
+    const iterator = invoke.feed("svc.feed", { id: 1 })[Symbol.asyncIterator]();
+    await expect(iterator.next()).rejects.toThrow(/feed_start not authorized/i);
+
+    invoke.close();
+    host.close();
+  });
+
+  test("works normally when no security policy is configured", async () => {
+    const host = new BrowserWindowsTransport({
+      sharedWorkerCtor: MockSharedWorker as any,
+    });
+
+    host.listen({
+      "svc.open": {
+        route: "svc.open",
+        kind: "request",
+        handler(payload: unknown) {
+          return payload;
+        },
+      },
+    });
+
+    const invoke = new BrowserWindowsTransport({
+      sharedWorkerCtor: MockSharedWorker as any,
+    });
+
+    await expect(invoke.request("svc.open", { ok: true })).resolves.toEqual({
+      ok: true,
+    });
+
+    invoke.close();
+    host.close();
+  });
 });

@@ -1,5 +1,9 @@
 import type { ScompClientInvokeOptions } from "@scomp/core";
-import { createFeedHash, type ScompTransportMessageMeta } from "@scomp/types";
+import {
+  createFeedHash,
+  type ScompTransportMessageMeta,
+  type ScompTransportPrincipal,
+} from "@scomp/types";
 import type {
   BrowserWindowsCanonicalPayloadHash,
   BrowserWindowsParticipantId,
@@ -90,5 +94,26 @@ export function mergeMeta(
   return {
     ...(baseMeta ?? {}),
     ...(overlayMeta ?? {}),
+  };
+}
+
+export function toPrincipalMeta(
+  principal: ScompTransportPrincipal | undefined,
+): ScompTransportMessageMeta | undefined {
+  if (!principal) {
+    return undefined;
+  }
+
+  return {
+    auth: {
+      subject: principal.subject,
+      tenantId: principal.tenantId,
+      scopes: principal.scopes,
+      claims: principal.claims,
+      issuedAt: principal.issuedAt,
+      expiresAt: principal.expiresAt,
+      authType: principal.authType,
+    },
+    tenantId: principal.tenantId,
   };
 }
