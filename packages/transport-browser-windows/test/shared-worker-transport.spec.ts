@@ -640,6 +640,71 @@ describe("BrowserWindowsTransport shared worker", () => {
     host.close();
   });
 
+  test("preserves inbound security meta parity for feed_start/feed_stop", async () => {
+    const seenByOperation = new Map<string, Array<Record<string, unknown> | undefined>>();
+
+    const host = new BrowserWindowsTransport({
+      sharedWorkerCtor: MockSharedWorker as any,
+      security: {
+        authorize: ({ operation, meta }) => {
+          const list = seenByOperation.get(operation) ?? [];
+          list.push(meta as Record<string, unknown> | undefined);
+          seenByOperation.set(operation, list);
+          return true;
+        },
+      },
+    });
+
+    host.listen({
+      "svc.secure-feed": {
+        route: "svc.secure-feed",
+        kind: "feed",
+        handler() {
+          let stopped = false;
+          return {
+            unsubscribe() {
+              stopped = true;
+            },
+            async *[Symbol.asyncIterator]() {
+              let n = 0;
+              while (!stopped && n < 3) {
+                await sleep(2);
+                yield n;
+                n += 1;
+              }
+            },
+          };
+        },
+      },
+    });
+
+    const invoke = new BrowserWindowsTransport({
+      sharedWorkerCtor: MockSharedWorker as any,
+      meta: {
+        traceId: "trace-feed-meta",
+        tenantId: "tenant-feed-meta",
+      },
+      security: {
+        authorize: () => true,
+      },
+    });
+
+    const iterator = invoke.feed("svc.secure-feed", { id: 1 })[Symbol.asyncIterator]();
+    await iterator.next();
+    await iterator.return?.(undefined);
+    await sleep(15);
+
+    const startMeta = seenByOperation.get("feed_start")?.[0];
+    const stopMeta = seenByOperation.get("feed_stop")?.[0];
+    expect(startMeta?.traceId).toBe("trace-feed-meta");
+    expect(startMeta?.tenantId).toBe("tenant-feed-meta");
+    expect(stopMeta?.traceId).toBe("trace-feed-meta");
+    expect(stopMeta?.tenantId).toBe("tenant-feed-meta");
+
+    invoke.close();
+    host.close();
+  });
+
   test("denies request/signal/feed operations with clear authorization errors", async () => {
     const host = new BrowserWindowsTransport({
       sharedWorkerCtor: MockSharedWorker as any,

@@ -42,6 +42,7 @@ export function handleInvokeRequest(
     hostId,
     route: message.route,
     createdAtMs: Date.now(),
+    meta: message.meta,
   });
 
   context.sendToParticipant(hostId, {
@@ -112,9 +113,11 @@ export function handleInvokeFeedStart(
     payloadKey: message.payloadKey,
     payloadHash: message.payloadHash,
     subscribersByRequestId: new Map(),
+    metaByRequestId: new Map(),
   };
 
   subscription.subscribersByRequestId.set(message.requestId, message.sourceId);
+  subscription.metaByRequestId.set(message.requestId, message.meta);
   context.state.feedSubscriptions.set(key, subscription);
 
   context.state.pendingRequests.set(message.requestId, {
@@ -123,6 +126,7 @@ export function handleInvokeFeedStart(
     hostId,
     route: message.route,
     createdAtMs: Date.now(),
+    meta: message.meta,
   });
 
   const activeUpstream = context.state.activeUpstreamFeeds.get(key);
@@ -261,6 +265,7 @@ export function handleHostFeedChunk(
   }
 
   for (const [subscriberRequestId, subscriberInvokeId] of subscription.subscribersByRequestId) {
+    const subscriberMeta = subscription.metaByRequestId.get(subscriberRequestId);
     context.sendToParticipant(subscriberInvokeId, {
       type: "invoke_feed_chunk",
       sourceId: "broker",
@@ -273,7 +278,7 @@ export function handleHostFeedChunk(
       chunkType: message.chunkType,
       payload: message.payload,
       message: message.message,
-      meta: message.meta,
+      meta: subscriberMeta,
     });
   }
 

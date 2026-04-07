@@ -3,6 +3,7 @@ import type {
   BrowserWindowsFeedSubscriptionKey,
 } from "./broker-state";
 import { createFeedKey, type BrokerContext } from "./shared-worker-broker-context";
+import { withBrokerSystemMeta } from "./shared-worker-broker-meta";
 
 export function failFeedSubscription(
   context: BrokerContext,
@@ -10,6 +11,7 @@ export function failFeedSubscription(
   errorMessage: string,
 ): void {
   for (const [subscriberRequestId, subscriberInvokeId] of subscription.subscribersByRequestId) {
+    const subscriberMeta = subscription.metaByRequestId.get(subscriberRequestId);
     context.sendToParticipant(subscriberInvokeId, {
       type: "invoke_feed_chunk",
       sourceId: "broker",
@@ -21,6 +23,7 @@ export function failFeedSubscription(
       payloadHash: subscription.payloadHash,
       chunkType: "error",
       message: errorMessage,
+      meta: withBrokerSystemMeta(subscriberMeta, "disconnect-cleanup-feed-error"),
     });
     context.state.pendingRequests.delete(subscriberRequestId);
   }
@@ -40,6 +43,7 @@ export function removeFeedSubscription(
   }
 
   subscription.subscribersByRequestId.delete(requestId);
+  subscription.metaByRequestId.delete(requestId);
 
   if (subscription.subscribersByRequestId.size === 0) {
     context.state.feedSubscriptions.delete(key);
