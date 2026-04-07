@@ -1,0 +1,194 @@
+# SCOMP LLM Guide (Contributor + Agent Quick Reference)
+
+This file is a practical, accuracy-first guide for using SCOMP across core APIs and transports.
+
+## 1) Mental model: request / signal / feed
+
+SCOMP operations are transport-agnostic and always route by `"service.method"`:
+
+- **request**: unary request/response (`Promise<T>`)
+- **signal**: fire-and-forget side effect (`Promise<void>` from caller perspective)
+- **feed**: stream (`AsyncIterable<T>`) with explicit `feed_start` and `feed_stop` under the hood
+
+If you are writing clients with `@scomp/client`, route intent must be known so calls map to the right transport operation.
+
+## 2) Modern default API usage (`@scomp/core` + `@scomp/client`)
+
+Use `@scomp/core` for service/router definitions and `@scomp/client` for typed client proxies.
+
+```ts
+import { createScompService } from "@scomp/core";
+import { createScompClient, type ClientRouteHints } from "@scomp/client";
+
+type ApiContract = {
+  users: {
+    get(input: { id: number }): Promise<{ id: number; name: string }>;
+    notifyLogin(input: { id: number; at: string }): Promise<void>;
+    liveUsers(input: { room: string }): AsyncIterable<{ id: number }>;
+  };
+};
+
+const users = createScompService<ApiContract["users"]>("users").implement({
+  requests: {
+    get: async ({ id }) => ({ id, name: `user-${id}` }),
+  },
+  signals: {
+    notifyLogin: async () => undefined,
+  },
+  feeds: {
+    liveUsers: async function* () {
+      yield { id: 1 };
+    },
+  },
+});
+
+const routeHints: ClientRouteHints = {
+  "users.get": "request",
+  "users.notifyLogin": "signal",
+  "users.liveUsers": "feed",
+};
+
+// transport is injected (websocket, rabbitmq, browser-windows, etc.)
+const client = createScompClient<ApiContract>({ transport, routeHints });
+```
+
+## 3) Route hints are required for signal/feed in `@scomp/client`
+
+Important behavior in `@scomp/client`:
+
+- Route type defaults to **`request`** when not specified.
+- Therefore `signal` and `feed` routes should be declared via `routeHints`.
+
+If you omit hints, a signal/feed route may be incorrectly invoked as request.
+
+## 4) Transport matrix and quick usage
+
+### `@scomp/transport-inprocess`
+
+- Factory: **`createInprocessTransport`**
+- Primary use: in-process calls directly against a legacy/core-compatible `ScompServiceDefinition` (`service.invoke(...)` shape).
+- Compatibility note: this transport follows legacy/core compatibility patterns (`request/observe/fireAndForget` mapping), not network wire semantics.
+
+```ts
+import { createLegacyScompService, createScompClient as createLegacyClient } from "@scomp/core";
+import { createInprocessTransport } from "@scomp/transport-inprocess";
+
+const service = createLegacyScompService()
+  .request("getUser", async (id: number) => ({ id }))
+  .build();
+
+const transport = createInprocessTransport(service);
+const client = createLegacyClient(service, transport);
+await client.getUser(1);
+```
+
+### `@scomp/transport-websocket-browser`
+
+- Factory: **`createWebSocketBrowserTransport`**
+- Runtime: browser-like environments (`WebSocket` available or provided via `webSocketCtor`).
+- Hosts routes? **No** (`listen()` throws). Use a server transport to host routes.
+
+```ts
+import { createWebSocketBrowserTransport } from "@scomp/transport-websocket-browser";
+
+const transport = createWebSocketBrowserTransport({
+  url: "ws://127.0.0.1:3399",
+});
+```
+
+### `@scomp/transport-websocket-client`
+
+- Factory: **`createWebSocketClientTransport`**
+- Runtime: Node/client process using `ws`.
+- Hosts routes? **No** (`listen()` throws).
+
+```ts
+import { createWebSocketClientTransport } from "@scomp/transport-websocket-client";
+
+const transport = createWebSocketClientTransport({
+  url: "ws://127.0.0.1:3399",
+});
+```
+
+### `@scomp/transport-websocket-server` (Bun)
+
+- Factory: **`createWebSocketServerTransport`**
+- Runtime: Bun (`Bun.serve`).
+- Use `listen(router)` to host routes.
+
+```ts
+import { createWebSocketServerTransport } from "@scomp/transport-websocket-server";
+
+const transport = createWebSocketServerTransport({ port: 3399, path: "/" });
+await transport.listen(router);
+```
+
+### `@scomp/transport-websocket-server-node` (Node)
+
+- Factory: **`createWebSocketServerTransport`**
+- Runtime: Node (`ws` + `http/https`).
+- Use `listen(router)` to host routes.
+
+```ts
+import { createWebSocketServerTransport } from "@scomp/transport-websocket-server-node";
+
+const transport = createWebSocketServerTransport({ port: 3399, path: "/" });
+await transport.listen(router);
+```
+
+### `@scomp/transport-rabbitmq`
+
+- Factory: **`createRabbitMqTransport`**
+- Runtime: Node/Bun process with RabbitMQ access.
+- Can host routes with `listen(router)` and invoke via request/signal/feed.
+
+```ts
+import { createRabbitMqTransport } from "@scomp/transport-rabbitmq";
+
+const transport = createRabbitMqTransport({
+  url: "amqp://guest:guest@localhost:5672",
+});
+await transport.listen(router);
+```
+
+### `@scomp/transport-browser-windows`
+
+- Factory: **`createBrowserWindowsTransport`**
+- Runtime: same-origin browser tabs/windows.
+- Broker mode: SharedWorker primary, BroadcastChannel fallback.
+
+```ts
+import { createBrowserWindowsTransport } from "@scomp/transport-browser-windows";
+
+const transport = createBrowserWindowsTransport({
+  channelName: "scomp-app",
+  mode: "auto",
+});
+```
+
+## 5) Security/meta guidance and caveats
+
+- Treat browser-side policy as **advisory**, not authoritative trust boundary.
+- Enforce identity/authorization in trusted server-side transports.
+- `meta.auth` is opaque transport metadata; validate it where trust exists.
+- Priority hints (`priority`, `priorityClass`, `deadlineAtMs`, `targetLatencyMs`) are metadata unless runtime policy enforces behavior.
+- Same-origin browser transports (`browser-windows`, browser websocket client side) are constrained by browser security model and lifecycle.
+
+## 6) Common mistakes and correct package/import choices
+
+- **Mistake**: using `@scomp/core` legacy client API for modern nested route proxies.
+  - **Use**: `createScompClient` from `@scomp/client` with `routeHints`.
+
+- **Mistake**: importing Node websocket server from Bun package.
+  - **Use (Node)**: `@scomp/transport-websocket-server-node`.
+  - **Use (Bun)**: `@scomp/transport-websocket-server`.
+
+- **Mistake**: trying to host routes on websocket client/browser client transports.
+  - `createWebSocketClientTransport` and `createWebSocketBrowserTransport` are client-side; they do not host routes.
+
+- **Mistake**: assuming `@scomp/transport-websocket-server-runtime` is the app entry package.
+  - It is an internal runtime helper package used by server transport implementations.
+  - Typical apps should import server transport factories from the Bun/Node server packages.
+
+- **Mistake**: omitting `routeHints` for signal/feed when using `@scomp/client`.
+  - Missing hints default to request semantics.
