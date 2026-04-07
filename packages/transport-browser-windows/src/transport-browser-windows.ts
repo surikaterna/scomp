@@ -49,6 +49,7 @@ import { processInvokeFeedChunk, processInvokeResponse } from "./transport-brows
 import { publishMessageWithHealth } from "./transport-browser-windows-publish";
 import { composeMetaWithHealth } from "./transport-browser-windows-meta";
 import { sendHello, shutdownTransport, syncRoutes } from "./transport-browser-windows-lifecycle";
+import { assertStrictRouteIntentAllowed } from "./transport-browser-windows-route-intents";
 export class BrowserWindowsTransport implements ITransport {
   private static readonly DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
   private static readonly DEFAULT_MAX_PENDING_REQUESTS = 1_000;
@@ -138,6 +139,12 @@ export class BrowserWindowsTransport implements ITransport {
       },
       reportHealth: (code, detail, status) => {
         this.health.report(code, detail, status);
+      },
+      assertOutboundAllowed: (
+        route: string,
+        operation: "request" | "signal" | "feed_start" | "feed_stop",
+      ) => {
+        this.assertOutboundAllowed(route, operation);
       },
       assertInboundAllowed: (
         route: string,
@@ -296,6 +303,18 @@ export class BrowserWindowsTransport implements ITransport {
       payload,
       options,
       (code, detail, status) => this.health.report(code, detail, status),
+    );
+  }
+
+  private assertOutboundAllowed(
+    route: string,
+    operation: ScompTransportOperation,
+  ): void {
+    assertStrictRouteIntentAllowed(
+      this.config.strictRouteIntents === true,
+      this.config.routeIntents,
+      route,
+      operation,
     );
   }
 }

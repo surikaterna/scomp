@@ -66,6 +66,55 @@ Set `sharedWorkerStrict: true` to make `mode: "shared-worker"` fail fast instead
 
 Use `channelName`, `workerUrl`, and `workerName` to isolate logical clusters when needed.
 
+## Strict route-intent safety (optional)
+
+By default, outbound invocations are backward-compatible and do not enforce a route allowlist.
+
+Set `strictRouteIntents: true` to fail fast **before send** when:
+
+- a route is missing from `routeIntents`
+- operation kind does not match (`request`/`signal`/`feed_start|feed_stop`)
+
+```ts
+const transport = createBrowserWindowsTransport({
+  strictRouteIntents: true,
+  routeIntents: {
+    "counter.get": "request",
+    "counter.notify": "signal",
+    "counter.watch": "feed",
+  },
+});
+```
+
+### Ergonomic helper from compiled router metadata
+
+Use helper utilities to derive route intents from compiled route maps and avoid manual drift:
+
+```ts
+import { createScompService } from "@scomp/core";
+import {
+  createBrowserWindowsTransport,
+  createRouteIntentsFromCompiledRouter,
+} from "@scomp/transport-browser-windows";
+
+const counterService = createScompService<{ get(input: { id: string }): Promise<{ id: string }> }>(
+  "counter",
+).implement({
+  requests: {
+    get: async ({ id }) => ({ id }),
+  },
+});
+
+const routeIntents = createRouteIntentsFromCompiledRouter(counterService.router);
+
+const transport = createBrowserWindowsTransport({
+  strictRouteIntents: true,
+  routeIntents,
+});
+```
+
+For multi-service setup, merge intents from many routers with `createRouteIntentsFromCompiledRouters([...])`.
+
 ## Health snapshots and degraded reason taxonomy
 
 The transport can emit runtime health snapshots for observability and alerting:

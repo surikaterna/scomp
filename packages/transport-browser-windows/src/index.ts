@@ -4,6 +4,9 @@ export {
 } from "./transport-browser-windows";
 
 export type {
+  BrowserWindowsRouteIntent,
+  BrowserWindowsRouteIntentKind,
+  BrowserWindowsRouteIntentMap,
   BrowserWindowsTransportHealthConfig,
   BrowserWindowsTransportHealthListener,
   BrowserWindowsTransportHealthReason,
@@ -15,5 +18,10 @@ export type {
   BrowserWindowsTransportModePreference,
   BrowserWindowsParticipantRole,
 } from "./types";
+
+export {
+  createRouteIntentsFromCompiledRouter,
+  createRouteIntentsFromCompiledRouters,
+} from "./transport-browser-windows-route-intents";
 
 export { DEFAULT_BROWSER_WINDOWS_WORKER_URL } from "./worker-url";
