@@ -1,5 +1,7 @@
+import { createScompService } from "@scomp/core";
 import { BrowserWindowsSharedWorkerBroker } from "../src/shared-worker-broker";
 import { BrowserWindowsTransport } from "../src/transport-browser-windows";
+import { createRouteIntentsFromCompiledRouter } from "../src";
 import { FakeBroadcastChannel } from "./test-doubles/fake-broadcast-channel";
 import {
   createFakeSharedWorkerCtor,
@@ -781,6 +783,123 @@ describe("BrowserWindowsTransport shared worker", () => {
     await expect(invoke.request("svc.open", { ok: true })).resolves.toEqual({
       ok: true,
     });
+
+    invoke.close();
+    host.close();
+  });
+
+  test("strict route intents rejects unknown route before send", async () => {
+    const host = new BrowserWindowsTransport({
+      sharedWorkerCtor: MockSharedWorker as any,
+    });
+    host.listen({
+      "svc.known": {
+        route: "svc.known",
+        kind: "request",
+        handler(payload: unknown) {
+          return payload;
+        },
+      },
+    });
+
+    const invoke = new BrowserWindowsTransport({
+      sharedWorkerCtor: MockSharedWorker as any,
+      strictRouteIntents: true,
+      routeIntents: {
+        "svc.known": "request",
+      },
+    });
+
+    await expect(invoke.request("svc.unknown", { ok: true })).rejects.toThrow(
+      /unknown route/i,
+    );
+
+    invoke.close();
+    host.close();
+  });
+
+  test("strict route intents rejects operation-kind mismatch before send", async () => {
+    const host = new BrowserWindowsTransport({
+      sharedWorkerCtor: MockSharedWorker as any,
+    });
+    host.listen({
+      "svc.kind": {
+        route: "svc.kind",
+        kind: "request",
+        async handler(payload: unknown) {
+          return payload;
+        },
+      },
+    });
+
+    const invoke = new BrowserWindowsTransport({
+      sharedWorkerCtor: MockSharedWorker as any,
+      strictRouteIntents: true,
+      routeIntents: {
+        "svc.kind": "request",
+      },
+    });
+
+    await expect(invoke.signal("svc.kind", { ok: true })).rejects.toThrow(
+      /allows "request" but attempted "signal"/i,
+    );
+
+    invoke.close();
+    host.close();
+  });
+
+  test("helper-generated intents are accepted by strict mode", async () => {
+    const handlerInvocations: Array<string> = [];
+    const service = createScompService<{
+      get(input: { id: number }): Promise<{ id: number }>;
+      notify(input: { message: string }): Promise<void>;
+      stream(input: { from: number }): AsyncIterable<number>;
+    }>("svc.strict").implement({
+      requests: {
+        get: async ({ id }) => ({ id }),
+      },
+      signals: {
+        notify: async ({ message }) => {
+          handlerInvocations.push(message);
+        },
+      },
+      feeds: {
+        stream: {
+          strategy: "exclusive",
+          handler: ({ from }) => ({
+            async *[Symbol.asyncIterator]() {
+              yield from;
+              yield from + 1;
+            },
+          }),
+        },
+      },
+    });
+    const strictIntents = createRouteIntentsFromCompiledRouter(service.router);
+
+    const host = new BrowserWindowsTransport({
+      sharedWorkerCtor: MockSharedWorker as any,
+    });
+    host.listen(service.router);
+
+    const invoke = new BrowserWindowsTransport({
+      sharedWorkerCtor: MockSharedWorker as any,
+      strictRouteIntents: true,
+      routeIntents: strictIntents,
+    });
+
+    const response = await invoke.request("svc.strict.get", { id: 4 });
+    expect(response).toEqual({ id: 4 });
+
+    await expect(invoke.signal("svc.strict.notify", { message: "ok" })).resolves.toBeUndefined();
+    await sleep(0);
+    expect(handlerInvocations).toEqual(["ok"]);
+
+    const chunks: Array<number> = [];
+    for await (const chunk of invoke.feed("svc.strict.stream", { from: 2 })) {
+      chunks.push(chunk as number);
+    }
+    expect(chunks).toEqual([2, 3]);
 
     invoke.close();
     host.close();

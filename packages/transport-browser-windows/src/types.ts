@@ -54,9 +54,22 @@ export type BrowserWindowsPayloadKey = string;
 
 export type BrowserWindowsCanonicalPayloadHash = string;
 
+export type BrowserWindowsRouteIntentKind = "request" | "signal" | "feed";
+
+export interface BrowserWindowsRouteIntent {
+  route: string;
+  kind: BrowserWindowsRouteIntentKind;
+}
+
+export type BrowserWindowsRouteIntentMap = Readonly<
+  Record<string, BrowserWindowsRouteIntentKind>
+>;
+
 export interface BrowserWindowsTransportConfig {
   mode?: BrowserWindowsTransportModePreference;
   sharedWorkerStrict?: boolean;
+  strictRouteIntents?: boolean;
+  routeIntents?: BrowserWindowsRouteIntentMap | ReadonlyArray<BrowserWindowsRouteIntent>;
   channelName?: string;
   workerUrl?: string;
   workerName?: string;

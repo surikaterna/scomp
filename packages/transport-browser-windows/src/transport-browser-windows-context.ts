@@ -1,5 +1,6 @@
 import type { ScompClientInvokeOptions } from "@scomp/core";
 import type { ScompTransportMessageMeta } from "@scomp/types";
+import type { ScompTransportOperation } from "@scomp/types";
 import type {
   BrowserWindowsParticipantId,
   BrowserWindowsRequestId,
@@ -54,6 +55,7 @@ export interface BrowserWindowsClientContextInput {
     detail: string | undefined,
     status: BrowserWindowsTransportHealthStatus,
   ): void;
+  assertOutboundAllowed(route: string, operation: ScompTransportOperation): void;
   composeMetaForOperation(
     route: string,
     operation: "request" | "signal" | "feed_start" | "feed_stop",
@@ -75,6 +77,7 @@ export function createClientContext(input: BrowserWindowsClientContextInput) {
     feedStates: input.feedStates,
     postMessage: input.postMessage,
     reportHealth: input.reportHealth,
+    assertOutboundAllowed: input.assertOutboundAllowed,
     composeMetaForOperation: input.composeMetaForOperation,
   };
 }
@@ -97,6 +100,7 @@ export interface BrowserWindowsTransportContextInput {
     detail: string | undefined,
     status: BrowserWindowsTransportHealthStatus,
   ): void;
+  assertOutboundAllowed(route: string, operation: ScompTransportOperation): void;
   assertInboundAllowed(
     route: string,
     operation: "request" | "signal" | "feed_start" | "feed_stop",
@@ -135,6 +139,7 @@ export function createTransportContexts(input: BrowserWindowsTransportContextInp
       feedStates: input.feedStates,
       postMessage: input.postMessage,
       reportHealth: input.reportHealth,
+      assertOutboundAllowed: input.assertOutboundAllowed,
       composeMetaForOperation: input.composeMetaForOperation,
     }),
   };

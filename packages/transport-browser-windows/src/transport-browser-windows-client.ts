@@ -37,6 +37,7 @@ export interface BrowserWindowsTransportClientContext {
     detail: string | undefined,
     status: BrowserWindowsTransportHealthStatus,
   ): void;
+  assertOutboundAllowed(route: string, operation: "request" | "signal" | "feed_start" | "feed_stop"): void;
   composeMetaForOperation(
     route: string,
     operation: "request" | "signal" | "feed_start" | "feed_stop",
@@ -64,6 +65,7 @@ export async function requestWithContext(
   context.incrementPreparingRequests();
   let meta: ScompTransportMessageMeta | undefined;
   try {
+    context.assertOutboundAllowed(route, "request");
     meta = (await context.composeMetaForOperation(route, "request", payload, options)).meta;
   } finally {
     context.decrementPreparingRequests();
@@ -114,6 +116,7 @@ export async function signalWithContext(
   payload: unknown,
   options?: ScompClientInvokeOptions,
 ): Promise<void> {
+  context.assertOutboundAllowed(route, "signal");
   const { meta } = await context.composeMetaForOperation(route, "signal", payload, options);
 
   context.postMessage({
@@ -156,6 +159,7 @@ export function feedWithContext(
       let feedStarted = false;
 
       try {
+        context.assertOutboundAllowed(route, "feed_start");
         const feedStartMeta = (
           await context.composeMetaForOperation(route, "feed_start", payload, options)
         ).meta;
@@ -206,6 +210,7 @@ export function feedWithContext(
       } finally {
         context.feedStates.delete(requestId);
         if (feedStarted && !state.stopSent) {
+          context.assertOutboundAllowed(route, "feed_stop");
           const feedStopMeta = (
             await context.composeMetaForOperation(
               route,
