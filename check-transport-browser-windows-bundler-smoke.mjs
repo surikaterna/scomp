@@ -1,10 +1,22 @@
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const repoRoot = process.cwd();
+const scriptPath = fileURLToPath(import.meta.url);
+const repoRoot = dirname(scriptPath);
 const fixtureRoot = join(repoRoot, "guardrail-fixtures", "transport-browser-windows-smoke");
 const appDir = join(fixtureRoot, "app");
 const packageRoot = resolve(repoRoot, "packages/transport-browser-windows");
+
+function runBunCommand(args, cwd) {
+  return Bun.spawnSync([process.execPath, ...args], {
+    cwd,
+    stdout: "pipe",
+    stderr: "pipe",
+    env: process.env,
+  });
+}
 
 rmSync(fixtureRoot, { recursive: true, force: true });
 mkdirSync(appDir, { recursive: true });
@@ -67,11 +79,7 @@ writeFileSync(
 );
 
 const run = async () => {
-  const buildPackage = Bun.spawnSync(["bunx", "tsc", "-b", "tsconfig.json"], {
-    cwd: packageRoot,
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+  const buildPackage = runBunCommand(["x", "tsc", "-b", "tsconfig.json"], packageRoot);
 
   if (buildPackage.exitCode !== 0) {
     throw new Error(
@@ -83,12 +91,7 @@ const run = async () => {
     );
   }
 
-  const bundleResult = Bun.spawnSync(["bunx", "rollup", "-c"], {
-    cwd: appDir,
-    stdout: "pipe",
-    stderr: "pipe",
-    env: process.env,
-  });
+  const bundleResult = runBunCommand(["x", "rollup", "-c"], appDir);
 
   if (bundleResult.exitCode !== 0) {
     throw new Error(
