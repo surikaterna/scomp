@@ -18,6 +18,12 @@ const MockSharedWorker = sharedWorkerCtor();
 const SilentSharedWorker = FakeSilentSharedWorker;
 const MockBroadcastChannel = FakeBroadcastChannel;
 
+class MissingBroadcastChannel {
+  constructor(_name: string) {
+    throw new Error("BroadcastChannel unavailable in test runtime.");
+  }
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -366,12 +372,63 @@ describe("BrowserWindowsTransport shared worker", () => {
 
     await new Promise((resolve) => setTimeout(resolve, 30));
     expect(hasReasonCode(host, "shared-worker-unavailable")).toBe(true);
-    expect(snapshots[0]).toBe("degraded");
+    expect(snapshots).toContain("degraded");
     const response = await invoke.request("svc.double", { value: 9 });
     expect(response).toEqual({ value: 18 });
 
     invoke.close();
     host.close();
+  });
+
+  test("mode=broadcast-channel reports broadcast-channel-unavailable before throw", () => {
+    const snapshots: Array<{ status: string; codes: Array<string> }> = [];
+
+    expect(
+      () =>
+        new BrowserWindowsTransport({
+          mode: "broadcast-channel",
+          broadcastChannelCtor: MissingBroadcastChannel as any,
+          health: {
+            onSnapshot(snapshot) {
+              snapshots.push({
+                status: snapshot.status,
+                codes: snapshot.reasons.map((reason) => reason.code),
+              });
+            },
+          },
+        }),
+    ).toThrow(/broadcast-channel-unavailable/i);
+
+    expect(snapshots.length).toBeGreaterThan(0);
+    const latest = snapshots[snapshots.length - 1];
+    expect(latest?.status).toBe("unavailable");
+    expect(latest?.codes).toContain("broadcast-channel-unavailable");
+  });
+
+  test("shared-worker fallback failure reports broadcast-channel-unavailable before throw", () => {
+    const snapshots: Array<{ status: string; codes: Array<string> }> = [];
+
+    expect(
+      () =>
+        new BrowserWindowsTransport({
+          mode: "auto",
+          sharedWorkerCtor: undefined,
+          broadcastChannelCtor: MissingBroadcastChannel as any,
+          health: {
+            onSnapshot(snapshot) {
+              snapshots.push({
+                status: snapshot.status,
+                codes: snapshot.reasons.map((reason) => reason.code),
+              });
+            },
+          },
+        }),
+    ).toThrow(/broadcast-channel-unavailable/i);
+
+    expect(snapshots.length).toBeGreaterThan(0);
+    const latest = snapshots[snapshots.length - 1];
+    expect(latest?.status).toBe("unavailable");
+    expect(latest?.codes).toContain("broadcast-channel-unavailable");
   });
 
   test("broadcast mode failover recovers subsequent requests", async () => {

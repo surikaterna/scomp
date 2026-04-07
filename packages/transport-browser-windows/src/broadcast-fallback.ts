@@ -6,6 +6,12 @@ import type {
   BrowserWindowsTransportConfig,
 } from "./types";
 import {
+  emitFallbackRuntimeEvent,
+  type BrowserWindowsFallbackConnector,
+  type BrowserWindowsFallbackRuntimeEvent,
+  isProtocolMessage,
+} from "./broadcast-fallback-runtime";
+import {
   createLeaderAnnounceFrame,
   createLeaderHeartbeatFrame,
   createLeaderRetireFrame,
@@ -21,26 +27,10 @@ import {
 } from "./broadcast-fallback-frames";
 import { BrokerPortLike, InMemoryBrokerPort } from "./broadcast-fallback-port";
 
-
-export interface BrowserWindowsFallbackConnector {
-  addMessageListener(listener: (data: unknown) => void): void;
-  removeMessageListener(listener: (data: unknown) => void): void;
-  addRuntimeEventListener(listener: (event: BrowserWindowsFallbackRuntimeEvent) => void): void;
-  removeRuntimeEventListener(listener: (event: BrowserWindowsFallbackRuntimeEvent) => void): void;
-  postMessage(message: unknown): void;
-  close(): void;
-}
-
-export interface BrowserWindowsFallbackRuntimeEvent {
-  type: "leader-failover";
-  previousLeaderId: string;
-  nextLeaderId: string;
-  atMs: number;
-}
-
-function isProtocolMessage(value: unknown): value is BrowserWindowsProtocolMessage {
-  return typeof value === "object" && value !== null && "type" in value;
-}
+export type {
+  BrowserWindowsFallbackConnector,
+  BrowserWindowsFallbackRuntimeEvent,
+} from "./broadcast-fallback-runtime";
 
 export function createBroadcastFallbackConnector(
   config: BrowserWindowsTransportConfig,
@@ -155,15 +145,12 @@ export function createBroadcastFallbackConnector(
     leaderId = nextLeaderId;
     leaderLeaseUntilMs = leaseUntilMs;
     if (changed && previousLeaderId && previousLeaderId !== nextLeaderId) {
-      const event: BrowserWindowsFallbackRuntimeEvent = {
+      emitFallbackRuntimeEvent(runtimeListeners, {
         type: "leader-failover",
         previousLeaderId,
         nextLeaderId,
         atMs: Date.now(),
-      };
-      for (const listener of runtimeListeners) {
-        listener(event);
-      }
+      });
     }
     if (changed && nextLeaderId !== participantId) {
       syncLocalStateToBroker();

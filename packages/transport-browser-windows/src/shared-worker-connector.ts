@@ -8,6 +8,10 @@ import {
   type BrowserWindowsFallbackRuntimeEvent,
 } from "./broadcast-fallback";
 import { DEFAULT_BROWSER_WINDOWS_WORKER_URL } from "./worker-url";
+import {
+  toErrorMessage,
+  toUnavailableDetail,
+} from "./shared-worker-connector-errors";
 
 export interface BrowserWindowsRuntimeConnector {
   addMessageListener(listener: (data: unknown) => void): void;
@@ -22,6 +26,11 @@ export type BrowserWindowsRuntimeEvent =
   | BrowserWindowsFallbackRuntimeEvent
   | {
       type: "shared-worker-unavailable";
+      detail: string;
+      atMs: number;
+    }
+  | {
+      type: "broadcast-channel-unavailable";
       detail: string;
       atMs: number;
     };
@@ -52,7 +61,7 @@ function resolveBroadcastChannelCtor(
   const ctor = (globalThis as { BroadcastChannel?: BrowserWindowsBroadcastChannelCtor })
     .BroadcastChannel;
   if (!ctor) {
-    throw new Error("broadcast-channel-unavailable: BroadcastChannel is not available in this runtime.");
+    throw new Error("BroadcastChannel is not available in this runtime.");
   }
 
   return ctor;
@@ -140,25 +149,45 @@ export function createRuntimeConnector(
   participantId: string,
 ): BrowserWindowsRuntimeConnector {
   if (shouldUseBroadcastFallback(config)) {
-    const ChannelCtor = resolveBroadcastChannelCtor(config);
-    return createBroadcastFallbackConnector(config, participantId, ChannelCtor);
+    try {
+      const ChannelCtor = resolveBroadcastChannelCtor(config);
+      return createBroadcastFallbackConnector(config, participantId, ChannelCtor);
+    } catch (error) {
+      const detail = toErrorMessage(error, "BroadcastChannel initialization failed.");
+      throw new Error(toUnavailableDetail("broadcast-channel-unavailable", detail));
+    }
   }
 
   try {
     return createSharedWorkerConnector(config);
   } catch (error) {
-    const ChannelCtor = resolveBroadcastChannelCtor(config);
-    const fallbackConnector = createBroadcastFallbackConnector(
-      config,
-      participantId,
-      ChannelCtor,
-    );
-    const detail = error instanceof Error ? error.message : "SharedWorker initialization failed.";
+    const sharedWorkerDetail = toErrorMessage(error, "SharedWorker initialization failed.");
 
-    return withInitialRuntimeEvent(fallbackConnector, {
-      type: "shared-worker-unavailable",
-      detail,
-      atMs: Date.now(),
-    });
+    try {
+      const ChannelCtor = resolveBroadcastChannelCtor(config);
+      const fallbackConnector = createBroadcastFallbackConnector(
+        config,
+        participantId,
+        ChannelCtor,
+      );
+
+      return withInitialRuntimeEvent(fallbackConnector, {
+        type: "shared-worker-unavailable",
+        detail: sharedWorkerDetail,
+        atMs: Date.now(),
+      });
+    } catch (broadcastError) {
+      const broadcastDetail = toErrorMessage(
+        broadcastError,
+        "BroadcastChannel fallback initialization failed.",
+      );
+
+      throw new Error(
+        toUnavailableDetail(
+          "broadcast-channel-unavailable",
+          `SharedWorker failed (${sharedWorkerDetail}); fallback failed (${broadcastDetail})`,
+        ),
+      );
+    }
   }
 }

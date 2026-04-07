@@ -23,7 +23,6 @@ import {
   type FeedQueueState,
   type PendingRequestState,
   type RuntimeRoute,
-  rejectPendingRequest,
 } from "./transport-browser-windows-state";
 import {
   handleHostFeedStart,
@@ -41,8 +40,14 @@ import { createTransportHealthStore } from "./transport-browser-windows-health";
 import type { BrowserWindowsRuntimeEvent } from "./shared-worker-connector";
 import { createTransportContexts } from "./transport-browser-windows-context";
 import { dispatchIncomingMessage } from "./transport-browser-windows-dispatch";
-import { reportAuthDeniedError, reportRuntimeHealthEvent } from "./transport-browser-windows-health-events";
+import {
+  reportRuntimeHealthEvent,
+  reportUnavailableConnectorError,
+} from "./transport-browser-windows-health-events";
 import { processInvokeFeedChunk, processInvokeResponse } from "./transport-browser-windows-invoke";
+import { publishMessageWithHealth } from "./transport-browser-windows-publish";
+import { composeMetaWithHealth } from "./transport-browser-windows-meta";
+import { sendHello, shutdownTransport, syncRoutes } from "./transport-browser-windows-lifecycle";
 export class BrowserWindowsTransport implements ITransport {
   private static readonly DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
   private static readonly DEFAULT_MAX_PENDING_REQUESTS = 1_000;
@@ -62,7 +67,7 @@ export class BrowserWindowsTransport implements ITransport {
   private readonly feedStates = new Map<BrowserWindowsRequestId, FeedQueueState>();
   private readonly hostedFeeds = new Map<BrowserWindowsRequestId, HostedFeedState>();
   private readonly security: BrowserWindowsTransportSecurity;
-  private readonly health = createTransportHealthStore();
+  private readonly health: ReturnType<typeof createTransportHealthStore>;
   private readonly hostContext: ReturnType<typeof createTransportContexts>["hostContext"];
   private readonly clientContext: ReturnType<typeof createTransportContexts>["clientContext"];
   private router: Record<string, RuntimeRoute> = {};
@@ -91,7 +96,15 @@ export class BrowserWindowsTransport implements ITransport {
     );
     this.participantId = createParticipantId(this.config);
     this.security = new BrowserWindowsTransportSecurity(config);
-    this.connector = createRuntimeConnector(this.config, this.participantId);
+    this.health = createTransportHealthStore(this.config.health?.onSnapshot);
+    try {
+      this.connector = createRuntimeConnector(this.config, this.participantId);
+    } catch (error) {
+      reportUnavailableConnectorError((code, detail, status) => {
+        this.health.report(code, detail, status);
+      }, error);
+      throw error;
+    }
     this.connector.addMessageListener(this.messageHandler);
     this.connector.addRuntimeEventListener?.(this.runtimeEventHandler);
     const { hostContext, clientContext } = createTransportContexts({
@@ -140,97 +153,30 @@ export class BrowserWindowsTransport implements ITransport {
     });
     this.hostContext = hostContext;
     this.clientContext = clientContext;
-    if (this.config.health?.onSnapshot) {
-      this.subscribeHealth(this.config.health.onSnapshot);
-    }
-    this.publishMessage({
-      type: "hello",
-      sourceId: this.participantId,
-      sentAtMs: Date.now(),
-    });
+    sendHello(this.participantId, (message) => this.publishMessage(message));
   }
+
   listen(router: Record<string, unknown>): void {
     const previousRoutes = Object.keys(this.router);
-    if (previousRoutes.length > 0) {
-      this.publishMessage({
-        type: "routes_unregister",
-        sourceId: this.participantId,
-        sentAtMs: Date.now(),
-        routes: previousRoutes,
-      });
-    }
-
-    this.router = router as Record<string, RuntimeRoute>;
-    const nextRoutes = Object.keys(this.router);
-    if (nextRoutes.length > 0) {
-      this.publishMessage({
-        type: "routes_register",
-        sourceId: this.participantId,
-        sentAtMs: Date.now(),
-        routes: nextRoutes,
-      });
-    }
+    const nextRouter = router as Record<string, RuntimeRoute>;
+    const nextRoutes = Object.keys(nextRouter);
+    syncRoutes(this.participantId, previousRoutes, nextRoutes, (message) => this.publishMessage(message));
+    this.router = nextRouter;
   }
+
   close(): void {
-    const routes = Object.keys(this.router);
-    if (routes.length > 0) {
-      this.publishMessage({
-        type: "routes_unregister",
-        sourceId: this.participantId,
-        sentAtMs: Date.now(),
-        routes,
-      });
-    }
-
-    this.router = {};
-
-    this.publishMessage({
-      type: "participant_disconnect",
-      sourceId: this.participantId,
-      sentAtMs: Date.now(),
+    shutdownTransport({
+      participantId: this.participantId,
+      routes: Object.keys(this.router),
+      pendingRequests: this.pendingRequests,
+      feedStates: this.feedStates,
+      hostedFeeds: this.hostedFeeds,
+      publishMessage: (message) => this.publishMessage(message),
+      removeMessageListener: () => this.connector.removeMessageListener(this.messageHandler),
+      removeRuntimeEventListener: () => this.connector.removeRuntimeEventListener?.(this.runtimeEventHandler),
+      closeConnector: () => this.connector.close(),
     });
-
-    this.connector.removeMessageListener(this.messageHandler);
-    this.connector.removeRuntimeEventListener?.(this.runtimeEventHandler);
-
-    for (const [requestId, pending] of this.pendingRequests.entries()) {
-      rejectPendingRequest(
-        requestId,
-        pending,
-        new Error("BrowserWindowsTransport closed."),
-      );
-    }
-    this.pendingRequests.clear();
-
-    for (const [requestId, feed] of this.feedStates.entries()) {
-      feed.closed = true;
-      feed.terminalError = new Error("BrowserWindowsTransport closed.");
-      feed.queue.length = 0;
-      while (feed.waiters.length > 0) {
-        feed.waiters.shift()?.();
-      }
-      if (!feed.stopSent) {
-        this.publishMessage({
-          type: "invoke_feed_stop",
-          sourceId: this.participantId,
-          sentAtMs: Date.now(),
-          requestId,
-          route: feed.route,
-          operation: "feed_stop",
-          payloadKey: feed.payloadKey,
-          payloadHash: feed.payloadHash,
-        });
-        feed.stopSent = true;
-      }
-    }
-    this.feedStates.clear();
-
-    for (const hostedFeed of this.hostedFeeds.values()) {
-      hostedFeed.stopped = true;
-      hostedFeed.unsubscribe?.();
-    }
-    this.hostedFeeds.clear();
-    this.connector.close();
+    this.router = {};
   }
   subscribeHealth(listener: BrowserWindowsTransportHealthListener): () => void {
     return this.health.subscribe(listener);
@@ -300,12 +246,13 @@ export class BrowserWindowsTransport implements ITransport {
   }
 
   private publishMessage(message: unknown): void {
-    try {
-      this.connector.postMessage(message);
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
-      this.health.report("publish-failed", detail, "unavailable");
-    }
+    publishMessageWithHealth(
+      (nextMessage) => this.connector.postMessage(nextMessage),
+      (code, detail, status) => {
+        this.health.report(code, detail, status);
+      },
+      message,
+    );
   }
   private async handleHostRequest(message: Parameters<typeof handleHostRequest>[1]): Promise<void> {
     await handleHostRequest(this.hostContext, message);
@@ -318,23 +265,25 @@ export class BrowserWindowsTransport implements ITransport {
   ): Promise<void> {
     await handleHostFeedStart(this.hostContext, message);
   }
+
   private handleHostFeedStop(message: BrowserWindowsHostFeedStopMessage): void {
     void handleHostFeedStop(this.hostContext, message);
   }
+
   private async composeMetaForOperation(
     route: string,
     operation: ScompTransportOperation,
     payload: unknown,
     options?: ScompClientInvokeOptions,
   ) {
-    try {
-      return await this.security.composeMetaForOperation(route, operation, payload, options);
-    } catch (error) {
-      reportAuthDeniedError((code, detail, status) => {
-        this.health.report(code, detail, status);
-      }, error);
-      throw error;
-    }
+    return composeMetaWithHealth(
+      this.security,
+      route,
+      operation,
+      payload,
+      options,
+      (code, detail, status) => this.health.report(code, detail, status),
+    );
   }
 }
 

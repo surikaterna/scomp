@@ -21,6 +21,11 @@ export function reportRuntimeHealthEvent(
   reportHealth: HealthReporter,
   event: BrowserWindowsRuntimeEvent,
 ): void {
+  if (event.type === "broadcast-channel-unavailable") {
+    reportHealth("broadcast-channel-unavailable", event.detail, "unavailable");
+    return;
+  }
+
   if (event.type === "shared-worker-unavailable") {
     reportHealth("shared-worker-unavailable", event.detail, "degraded");
     return;
@@ -32,5 +37,15 @@ export function reportRuntimeHealthEvent(
       `Leader changed from ${event.previousLeaderId} to ${event.nextLeaderId}`,
       "degraded",
     );
+  }
+}
+
+export function reportUnavailableConnectorError(
+  reportHealth: HealthReporter,
+  error: unknown,
+): void {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/broadcast-channel-unavailable:/i.test(message)) {
+    reportHealth("broadcast-channel-unavailable", message, "unavailable");
   }
 }
