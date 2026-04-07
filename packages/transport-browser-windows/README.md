@@ -54,6 +54,45 @@ console.log(result.value);
 
 Use `channelName`, `workerUrl`, and `workerName` to isolate logical clusters when needed.
 
+## SharedWorker script integration (`workerUrl`)
+
+`workerUrl` defaults to `"./scomp-browser-windows.worker.js"`.
+That default is a placeholder path, not an auto-hosted worker file. Your app must bundle or host a SharedWorker script and pass its URL.
+
+`@scomp/transport-browser-windows` now provides a concrete worker entry module at:
+
+- `@scomp/transport-browser-windows/src/worker-entry`
+
+Bundle that module as a SharedWorker asset in your app, then pass the emitted URL to `createBrowserWindowsTransport`.
+
+```ts
+import {
+  DEFAULT_BROWSER_WINDOWS_WORKER_URL,
+  createBrowserWindowsTransport,
+} from "@scomp/transport-browser-windows";
+
+const workerUrl = new URL(
+  "@scomp/transport-browser-windows/src/worker-entry.ts",
+  import.meta.url,
+);
+
+const transport = createBrowserWindowsTransport({
+  channelName: "scomp-app",
+  workerUrl: workerUrl.toString(),
+});
+
+// Optional: keep using the package default placeholder if your build copies
+// the worker to that path.
+createBrowserWindowsTransport({
+  workerUrl: DEFAULT_BROWSER_WINDOWS_WORKER_URL,
+});
+```
+
+Exact worker bundling syntax depends on your toolchain (Vite/Webpack/Rollup/Parcel), but the key requirement is:
+
+1. Build/host the worker-entry script as a SharedWorker file.
+2. Pass that runtime URL via `workerUrl`.
+
 ## Security guidance
 
 This transport is designed for **same-origin trust domains**.
