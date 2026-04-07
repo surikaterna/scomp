@@ -64,6 +64,11 @@ export class BrowserWindowsSharedWorkerBroker {
     port.start?.();
   }
 
+  disconnectParticipant(participantId: BrowserWindowsParticipantId): void {
+    this.portsByParticipant.delete(participantId);
+    this.unregisterAllRoutes(participantId);
+  }
+
   private handleMessage(
     sourcePort: BrowserWindowsMessagePortLike,
     message: BrowserWindowsProtocolMessage,
@@ -152,6 +157,26 @@ export class BrowserWindowsSharedWorkerBroker {
 
     for (const route of routes) {
       participantRoutes.delete(route);
+      const hosts = this.state.routeHosts.get(route);
+      if (!hosts) {
+        continue;
+      }
+
+      hosts.delete(participantId);
+      if (hosts.size === 0) {
+        this.state.routeHosts.delete(route);
+      }
+    }
+  }
+
+  private unregisterAllRoutes(participantId: BrowserWindowsParticipantId): void {
+    const participantRoutes = this.routesByParticipant.get(participantId);
+    if (!participantRoutes) {
+      return;
+    }
+
+    this.routesByParticipant.delete(participantId);
+    for (const route of participantRoutes) {
       const hosts = this.state.routeHosts.get(route);
       if (!hosts) {
         continue;

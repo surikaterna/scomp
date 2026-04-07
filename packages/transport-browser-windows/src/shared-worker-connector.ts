@@ -1,11 +1,15 @@
 import type {
+  BrowserWindowsBroadcastChannelCtor,
+  BrowserWindowsBroadcastChannelLike,
   BrowserWindowsSharedWorkerCtor,
-  BrowserWindowsSharedWorkerPortLike,
   BrowserWindowsTransportConfig,
 } from "./types";
+import {
+  createBroadcastFallbackConnector,
+  type BrowserWindowsFallbackConnector,
+} from "./broadcast-fallback";
 
-export interface BrowserWindowsSharedWorkerConnector {
-  readonly port: BrowserWindowsSharedWorkerPortLike;
+export interface BrowserWindowsRuntimeConnector {
   addMessageListener(listener: (data: unknown) => void): void;
   removeMessageListener(listener: (data: unknown) => void): void;
   postMessage(message: unknown): void;
@@ -28,9 +32,25 @@ function resolveSharedWorkerCtor(
   return ctor;
 }
 
+function resolveBroadcastChannelCtor(
+  config: BrowserWindowsTransportConfig,
+): BrowserWindowsBroadcastChannelCtor {
+  if (config.broadcastChannelCtor) {
+    return config.broadcastChannelCtor;
+  }
+
+  const ctor = (globalThis as { BroadcastChannel?: BrowserWindowsBroadcastChannelCtor })
+    .BroadcastChannel;
+  if (!ctor) {
+    throw new Error("BroadcastChannel is not available in this runtime.");
+  }
+
+  return ctor;
+}
+
 export function createSharedWorkerConnector(
   config: BrowserWindowsTransportConfig,
-): BrowserWindowsSharedWorkerConnector {
+): BrowserWindowsRuntimeConnector {
   const WorkerCtor = resolveSharedWorkerCtor(config);
   const workerUrl = config.workerUrl ?? "./scomp-browser-windows.worker.js";
   const workerName = config.workerName ?? config.channelName;
@@ -45,7 +65,6 @@ export function createSharedWorkerConnector(
   port.start?.();
 
   return {
-    port,
     addMessageListener(listener) {
       const wrapped = (event: { data: unknown }) => {
         listener(event.data);
@@ -74,3 +93,31 @@ export function createSharedWorkerConnector(
     },
   };
 }
+
+function shouldUseBroadcastFallback(config: BrowserWindowsTransportConfig): boolean {
+  return config.mode === "broadcast-channel";
+}
+
+export function createRuntimeConnector(
+  config: BrowserWindowsTransportConfig,
+  participantId: string,
+): BrowserWindowsRuntimeConnector {
+  if (shouldUseBroadcastFallback(config)) {
+    const ChannelCtor = resolveBroadcastChannelCtor(config);
+    return createBroadcastFallbackConnector(config, participantId, ChannelCtor);
+  }
+
+  try {
+    return createSharedWorkerConnector(config);
+  } catch (error) {
+    const ChannelCtor = resolveBroadcastChannelCtor(config);
+    return createBroadcastFallbackConnector(
+      config,
+      participantId,
+      ChannelCtor,
+      error instanceof Error ? error : undefined,
+    );
+  }
+}
+
+export type { BrowserWindowsFallbackConnector };

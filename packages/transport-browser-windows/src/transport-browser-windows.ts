@@ -9,7 +9,7 @@ import type {
   BrowserWindowsInvokeResponseMessage,
   BrowserWindowsProtocolMessage,
 } from "./protocol";
-import { createSharedWorkerConnector } from "./shared-worker-connector";
+import { createRuntimeConnector } from "./shared-worker-connector";
 import {
   createParticipantId,
   createPayloadHash,
@@ -115,7 +115,7 @@ interface RuntimeRoute {
 export class BrowserWindowsTransport implements ITransport {
   private readonly config: BrowserWindowsTransportConfig;
   private readonly participantId: BrowserWindowsParticipantId;
-  private readonly connector: ReturnType<typeof createSharedWorkerConnector>;
+  private readonly connector: ReturnType<typeof createRuntimeConnector>;
   private readonly pendingRequests = new Map<
     BrowserWindowsRequestId,
     PendingRequestState
@@ -129,14 +129,8 @@ export class BrowserWindowsTransport implements ITransport {
 
   constructor(config: BrowserWindowsTransportConfig = {}) {
     this.config = config;
-    if (this.config.mode === "broadcast-channel") {
-      throw new Error(
-        "BroadcastChannel mode is not implemented yet. Use SharedWorker mode for this bead.",
-      );
-    }
-
     this.participantId = createParticipantId(this.config);
-    this.connector = createSharedWorkerConnector(this.config);
+    this.connector = createRuntimeConnector(this.config, this.participantId);
     this.connector.addMessageListener(this.messageHandler);
     this.connector.postMessage({
       type: "hello",
