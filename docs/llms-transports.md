@@ -2,6 +2,12 @@
 
 Companion to root `llms.txt`. This page focuses on concise setup patterns by runtime.
 
+## Validation gates for transport readiness
+
+- Run repository gates: `npm run lint` and `npm test`.
+- Validate browser-windows resilience suite directly: `bun run --filter='@scomp/transport-browser-windows' test`.
+- Validate package-level lint gates directly: `bun run --filter='@scomp/transport-browser-windows' lint` plus websocket-adjacent package lint scripts.
+
 ## 1) Bun websocket server + browser client
 
 ```ts
