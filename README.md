@@ -82,6 +82,7 @@ Fragment composition rejects duplicate methods across fragments.
 - `@scomp/client` – typed client proxy API with per-call invocation options.
 - `@scomp/core` – service/router primitives.
 - `@scomp/transport-rabbitmq` – RabbitMQ transport.
+- `@scomp/transport-browser-windows` – same-origin browser tab/window transport (SharedWorker primary, BroadcastChannel fallback).
 - `@scomp/transport-websocket-server` – WebSocket server transport for hosting routes.
 - `@scomp/transport-websocket-server-node` – Node (`ws` + `http`) WebSocket server transport.
 - `@scomp/transport-websocket-browser` – browser WebSocket client transport.
