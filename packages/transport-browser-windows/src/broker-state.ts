@@ -17,8 +17,10 @@ export interface BrowserWindowsFeedSubscriptionState {
   route: string;
   payloadKey: BrowserWindowsPayloadKey;
   payloadHash: BrowserWindowsCanonicalPayloadHash;
-  requestIds: Set<BrowserWindowsRequestId>;
-  invokeIds: Set<BrowserWindowsParticipantId>;
+  subscribersByRequestId: Map<
+    BrowserWindowsRequestId,
+    BrowserWindowsParticipantId
+  >;
 }
 
 export interface BrowserWindowsUpstreamFeedOwnerState {

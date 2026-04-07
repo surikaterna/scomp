@@ -116,6 +116,10 @@ class MockBroadcastChannel {
 
 let mockWorkerBroker: BrowserWindowsSharedWorkerBroker;
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 describe("BrowserWindowsTransport shared worker", () => {
   beforeEach(() => {
     mockWorkerBroker = new BrowserWindowsSharedWorkerBroker();
@@ -226,6 +230,68 @@ describe("BrowserWindowsTransport shared worker", () => {
     host.close();
   });
 
+  test("feed multiplexes subscribers and stops upstream once", async () => {
+    let feedStarts = 0;
+    let feedStops = 0;
+    let stopped = false;
+
+    const host = new BrowserWindowsTransport({
+      sharedWorkerCtor: MockSharedWorker as any,
+    });
+
+    host.listen({
+      "svc.mux": {
+        route: "svc.mux",
+        kind: "feed",
+        handler() {
+          feedStarts += 1;
+          let index = 0;
+          return {
+            unsubscribe() {
+              stopped = true;
+              feedStops += 1;
+            },
+            async *[Symbol.asyncIterator]() {
+              await sleep(15);
+              while (!stopped) {
+                await sleep(2);
+                yield index;
+                index += 1;
+              }
+            },
+          };
+        },
+      },
+    });
+
+    const invokeA = new BrowserWindowsTransport({
+      sharedWorkerCtor: MockSharedWorker as any,
+    });
+    const invokeB = new BrowserWindowsTransport({
+      sharedWorkerCtor: MockSharedWorker as any,
+    });
+
+    const iteratorA = invokeA.feed("svc.mux", { key: "same" })[Symbol.asyncIterator]();
+    const iteratorB = invokeB.feed("svc.mux", { key: "same" })[Symbol.asyncIterator]();
+
+    const [firstA, firstB] = await Promise.all([iteratorA.next(), iteratorB.next()]);
+    expect(firstA.value).toBe(0);
+    expect(firstB.value).toBe(0);
+    expect(feedStarts).toBe(1);
+
+    await iteratorA.return?.(undefined);
+    await sleep(10);
+    expect(feedStops).toBe(0);
+
+    await iteratorB.return?.(undefined);
+    await sleep(10);
+    expect(feedStops).toBe(1);
+
+    invokeA.close();
+    invokeB.close();
+    host.close();
+  });
+
   test("broadcast fallback activates when SharedWorker is unavailable", async () => {
     const host = new BrowserWindowsTransport({
       nodeId: "node-host",
@@ -314,6 +380,86 @@ describe("BrowserWindowsTransport shared worker", () => {
     expect(afterFailover).toEqual({ value: "after" });
 
     invoke.close();
+    host.close();
+  });
+
+  test("broadcast mode multiplexes same feed hash across subscribers", async () => {
+    const channelName = "test-broadcast-feed-multiplex";
+    let feedStarts = 0;
+    let feedStops = 0;
+    let stopped = false;
+
+    const host = new BrowserWindowsTransport({
+      mode: "broadcast-channel",
+      nodeId: "node-host",
+      channelName,
+      broadcastChannelCtor: MockBroadcastChannel as any,
+      heartbeatIntervalMs: 10,
+      heartbeatTimeoutMs: 40,
+    });
+
+    host.listen({
+      "svc.mux": {
+        route: "svc.mux",
+        kind: "feed",
+        handler() {
+          feedStarts += 1;
+          let index = 0;
+          return {
+            unsubscribe() {
+              stopped = true;
+              feedStops += 1;
+            },
+            async *[Symbol.asyncIterator]() {
+              await sleep(15);
+              while (!stopped) {
+                await sleep(2);
+                yield index;
+                index += 1;
+              }
+            },
+          };
+        },
+      },
+    });
+
+    const invokeA = new BrowserWindowsTransport({
+      mode: "broadcast-channel",
+      nodeId: "node-a",
+      channelName,
+      broadcastChannelCtor: MockBroadcastChannel as any,
+      heartbeatIntervalMs: 10,
+      heartbeatTimeoutMs: 40,
+    });
+    const invokeB = new BrowserWindowsTransport({
+      mode: "broadcast-channel",
+      nodeId: "node-b",
+      channelName,
+      broadcastChannelCtor: MockBroadcastChannel as any,
+      heartbeatIntervalMs: 10,
+      heartbeatTimeoutMs: 40,
+    });
+
+    await sleep(50);
+
+    const iteratorA = invokeA.feed("svc.mux", { key: "same" })[Symbol.asyncIterator]();
+    const iteratorB = invokeB.feed("svc.mux", { key: "same" })[Symbol.asyncIterator]();
+
+    const [firstA, firstB] = await Promise.all([iteratorA.next(), iteratorB.next()]);
+    expect(firstA.value).toBe(0);
+    expect(firstB.value).toBe(0);
+    expect(feedStarts).toBe(1);
+
+    await iteratorA.return?.(undefined);
+    await sleep(10);
+    expect(feedStops).toBe(0);
+
+    await iteratorB.return?.(undefined);
+    await sleep(10);
+    expect(feedStops).toBe(1);
+
+    invokeA.close();
+    invokeB.close();
     host.close();
   });
 });
