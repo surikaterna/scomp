@@ -2,6 +2,7 @@ import type {
   BrowserWindowsBroadcastChannelCtor,
   BrowserWindowsSharedWorkerCtor,
   BrowserWindowsTransportConfig,
+  BrowserWindowsTransportMode,
 } from "./types";
 import {
   createBroadcastFallbackConnector,
@@ -14,6 +15,7 @@ import {
 } from "./shared-worker-connector-errors";
 
 export interface BrowserWindowsRuntimeConnector {
+  readonly activeMode: BrowserWindowsTransportMode;
   addMessageListener(listener: (data: unknown) => void): void;
   removeMessageListener(listener: (data: unknown) => void): void;
   addRuntimeEventListener?(listener: (event: BrowserWindowsRuntimeEvent) => void): void;
@@ -24,6 +26,11 @@ export interface BrowserWindowsRuntimeConnector {
 
 export type BrowserWindowsRuntimeEvent =
   | BrowserWindowsFallbackRuntimeEvent
+  | {
+      type: "active-mode-changed";
+      mode: BrowserWindowsTransportMode;
+      atMs: number;
+    }
   | {
       type: "shared-worker-unavailable";
       detail: string;
@@ -84,6 +91,7 @@ export function createSharedWorkerConnector(
   port.start?.();
 
   return {
+    activeMode: "shared-worker",
     addMessageListener(listener) {
       const wrapped = (event: { data: unknown }) => {
         listener(event.data);
@@ -113,15 +121,20 @@ export function createSharedWorkerConnector(
   };
 }
 
-function shouldUseBroadcastFallback(config: BrowserWindowsTransportConfig): boolean {
-  return config.mode === "broadcast-channel";
+function createBroadcastChannelConnector(
+  config: BrowserWindowsTransportConfig,
+  participantId: string,
+): BrowserWindowsRuntimeConnector {
+  const ChannelCtor = resolveBroadcastChannelCtor(config);
+  return createBroadcastFallbackConnector(config, participantId, ChannelCtor);
 }
 
 function withInitialRuntimeEvent(
-  connector: ReturnType<typeof createBroadcastFallbackConnector>,
-  initialEvent: BrowserWindowsRuntimeEvent,
+  connector: BrowserWindowsRuntimeConnector,
+  initialEvents: ReadonlyArray<BrowserWindowsRuntimeEvent>,
 ): BrowserWindowsRuntimeConnector {
   return {
+    activeMode: connector.activeMode,
     addMessageListener(listener) {
       connector.addMessageListener(listener);
     },
@@ -129,11 +142,13 @@ function withInitialRuntimeEvent(
       connector.removeMessageListener(listener);
     },
     addRuntimeEventListener(listener) {
-      listener(initialEvent);
-      connector.addRuntimeEventListener(listener);
+      for (const event of initialEvents) {
+        listener(event);
+      }
+      connector.addRuntimeEventListener?.(listener);
     },
     removeRuntimeEventListener(listener) {
-      connector.removeRuntimeEventListener(listener);
+      connector.removeRuntimeEventListener?.(listener);
     },
     postMessage(message) {
       connector.postMessage(message);
@@ -144,14 +159,23 @@ function withInitialRuntimeEvent(
   };
 }
 
+function resolveModePreference(config: BrowserWindowsTransportConfig): "auto" | BrowserWindowsTransportMode {
+  return config.mode ?? "auto";
+}
+
+function strictSharedWorkerMode(config: BrowserWindowsTransportConfig): boolean {
+  return config.sharedWorkerStrict === true;
+}
+
 export function createRuntimeConnector(
   config: BrowserWindowsTransportConfig,
   participantId: string,
 ): BrowserWindowsRuntimeConnector {
-  if (shouldUseBroadcastFallback(config)) {
+  const modePreference = resolveModePreference(config);
+
+  if (modePreference === "broadcast-channel") {
     try {
-      const ChannelCtor = resolveBroadcastChannelCtor(config);
-      return createBroadcastFallbackConnector(config, participantId, ChannelCtor);
+      return createBroadcastChannelConnector(config, participantId);
     } catch (error) {
       const detail = toErrorMessage(error, "BroadcastChannel initialization failed.");
       throw new Error(toUnavailableDetail("broadcast-channel-unavailable", detail));
@@ -163,19 +187,26 @@ export function createRuntimeConnector(
   } catch (error) {
     const sharedWorkerDetail = toErrorMessage(error, "SharedWorker initialization failed.");
 
-    try {
-      const ChannelCtor = resolveBroadcastChannelCtor(config);
-      const fallbackConnector = createBroadcastFallbackConnector(
-        config,
-        participantId,
-        ChannelCtor,
-      );
+    if (modePreference === "shared-worker" && strictSharedWorkerMode(config)) {
+      throw new Error(toUnavailableDetail("shared-worker-unavailable", sharedWorkerDetail));
+    }
 
-      return withInitialRuntimeEvent(fallbackConnector, {
-        type: "shared-worker-unavailable",
-        detail: sharedWorkerDetail,
-        atMs: Date.now(),
-      });
+    try {
+      const fallbackConnector = createBroadcastChannelConnector(config, participantId);
+      const fallbackAtMs = Date.now();
+
+      return withInitialRuntimeEvent(fallbackConnector, [
+        {
+          type: "shared-worker-unavailable",
+          detail: sharedWorkerDetail,
+          atMs: fallbackAtMs,
+        },
+        {
+          type: "active-mode-changed",
+          mode: "broadcast-channel",
+          atMs: fallbackAtMs,
+        },
+      ]);
     } catch (broadcastError) {
       const broadcastDetail = toErrorMessage(
         broadcastError,

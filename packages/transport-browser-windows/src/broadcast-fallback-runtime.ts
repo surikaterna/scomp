@@ -1,6 +1,8 @@
+import type { BrowserWindowsTransportMode } from "./types";
 import type { BrowserWindowsProtocolMessage } from "./protocol";
 
 export interface BrowserWindowsFallbackConnector {
+  readonly activeMode: BrowserWindowsTransportMode;
   addMessageListener(listener: (data: unknown) => void): void;
   removeMessageListener(listener: (data: unknown) => void): void;
   addRuntimeEventListener(listener: (event: BrowserWindowsFallbackRuntimeEvent) => void): void;

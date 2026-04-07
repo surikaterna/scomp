@@ -32,6 +32,7 @@ export interface BrowserWindowsTransportHealthReason {
 export interface BrowserWindowsTransportHealthSnapshot {
   status: BrowserWindowsTransportHealthStatus;
   reasons: Array<BrowserWindowsTransportHealthReason>;
+  activeMode?: BrowserWindowsTransportMode;
   updatedAtMs: number;
 }
 
@@ -55,6 +56,7 @@ export type BrowserWindowsCanonicalPayloadHash = string;
 
 export interface BrowserWindowsTransportConfig {
   mode?: BrowserWindowsTransportModePreference;
+  sharedWorkerStrict?: boolean;
   channelName?: string;
   workerUrl?: string;
   workerName?: string;

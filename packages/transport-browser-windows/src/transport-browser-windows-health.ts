@@ -1,4 +1,5 @@
 import type {
+  BrowserWindowsTransportMode,
   BrowserWindowsTransportHealthListener,
   BrowserWindowsTransportHealthReason,
   BrowserWindowsTransportHealthReasonCode,
@@ -14,6 +15,7 @@ export interface BrowserWindowsTransportHealthStore {
     detail: string | undefined,
     status: BrowserWindowsTransportHealthStatus,
   ): void;
+  setActiveMode(mode: BrowserWindowsTransportMode): void;
 }
 
 export function createTransportHealthStore(
@@ -66,7 +68,20 @@ export function createTransportHealthStore(
       current = {
         status,
         reasons,
+        activeMode: current.activeMode,
         updatedAtMs: atMs,
+      };
+      emit();
+    },
+    setActiveMode(mode) {
+      if (current.activeMode === mode) {
+        return;
+      }
+
+      current = {
+        ...current,
+        activeMode: mode,
+        updatedAtMs: Date.now(),
       };
       emit();
     },

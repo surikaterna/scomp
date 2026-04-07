@@ -44,13 +44,25 @@ console.log(result.value);
 
 ## Runtime behavior: SharedWorker primary, BroadcastChannel fallback
 
-- `mode: "auto"` (default):
-  - Tries SharedWorker first (single broker process per origin/worker URL).
-  - Falls back to BroadcastChannel if SharedWorker is unavailable or fails to initialize.
-- `mode: "shared-worker"`:
-  - Intended SharedWorker-first mode; implementation still degrades to BroadcastChannel when SharedWorker cannot be used in the runtime.
-- `mode: "broadcast-channel"`:
-  - Forces BroadcastChannel fallback mode.
+- `mode: "auto"` (default): tries SharedWorker first, then BroadcastChannel fallback.
+- `mode: "shared-worker"`: SharedWorker-first. By default it can fall back to BroadcastChannel.
+- `mode: "broadcast-channel"`: forces BroadcastChannel and never attempts SharedWorker.
+
+### Deterministic mode resolution matrix
+
+| `mode` | SharedWorker available | BroadcastChannel available | `sharedWorkerStrict` | Result |
+| --- | --- | --- | --- | --- |
+| `auto` | yes | yes/no | n/a | uses `shared-worker` |
+| `auto` | no | yes | n/a | falls back to `broadcast-channel` (degraded health: `shared-worker-unavailable`) |
+| `auto` | no | no | n/a | throws `broadcast-channel-unavailable` |
+| `shared-worker` | yes | yes/no | `false` (default) | uses `shared-worker` |
+| `shared-worker` | no | yes | `false` (default) | falls back to `broadcast-channel` (degraded health: `shared-worker-unavailable`) |
+| `shared-worker` | no | yes/no | `true` | fail-fast with `shared-worker-unavailable` |
+| `shared-worker` | no | no | `false` (default) | throws `broadcast-channel-unavailable` |
+| `broadcast-channel` | yes/no | yes | n/a | uses `broadcast-channel` |
+| `broadcast-channel` | yes/no | no | n/a | throws `broadcast-channel-unavailable` |
+
+Set `sharedWorkerStrict: true` to make `mode: "shared-worker"` fail fast instead of allowing fallback.
 
 Use `channelName`, `workerUrl`, and `workerName` to isolate logical clusters when needed.
 
@@ -74,6 +86,13 @@ const unsubscribe = transport.subscribeHealth((snapshot) => {
 
 const now = transport.healthSnapshot();
 unsubscribe();
+```
+
+You can also read the currently selected runtime mode directly:
+
+```ts
+const mode = transport.activeMode();
+const snapshotMode = transport.healthSnapshot().activeMode;
 ```
 
 Snapshot status model:

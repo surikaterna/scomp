@@ -17,6 +17,7 @@ import {
   type BrowserWindowsTransportConfig,
   type BrowserWindowsTransportHealthListener,
   type BrowserWindowsTransportHealthSnapshot,
+  type BrowserWindowsTransportMode,
 } from "./types";
 import {
   type HostedFeedState,
@@ -68,6 +69,7 @@ export class BrowserWindowsTransport implements ITransport {
   private readonly hostedFeeds = new Map<BrowserWindowsRequestId, HostedFeedState>();
   private readonly security: BrowserWindowsTransportSecurity;
   private readonly health: ReturnType<typeof createTransportHealthStore>;
+  private activeRuntimeMode!: BrowserWindowsTransportMode;
   private readonly hostContext: ReturnType<typeof createTransportContexts>["hostContext"];
   private readonly clientContext: ReturnType<typeof createTransportContexts>["clientContext"];
   private router: Record<string, RuntimeRoute> = {};
@@ -75,6 +77,12 @@ export class BrowserWindowsTransport implements ITransport {
     this.handleIncoming(data as BrowserWindowsProtocolMessage);
   };
   private readonly runtimeEventHandler = (event: BrowserWindowsRuntimeEvent) => {
+    if (event.type === "active-mode-changed") {
+      this.activeRuntimeMode = event.mode;
+      this.health.setActiveMode(event.mode);
+      return;
+    }
+
     reportRuntimeHealthEvent((code, detail, status) => {
       this.health.report(code, detail, status);
     }, event);
@@ -105,6 +113,8 @@ export class BrowserWindowsTransport implements ITransport {
       }, error);
       throw error;
     }
+    this.activeRuntimeMode = this.connector.activeMode;
+    this.health.setActiveMode(this.activeRuntimeMode);
     this.connector.addMessageListener(this.messageHandler);
     this.connector.addRuntimeEventListener?.(this.runtimeEventHandler);
     const { hostContext, clientContext } = createTransportContexts({
@@ -183,6 +193,9 @@ export class BrowserWindowsTransport implements ITransport {
   }
   healthSnapshot(): BrowserWindowsTransportHealthSnapshot {
     return this.health.snapshot();
+  }
+  activeMode(): BrowserWindowsTransportMode {
+    return this.activeRuntimeMode;
   }
   async request(
     route: string,

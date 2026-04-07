@@ -283,6 +283,7 @@ export function createBroadcastFallbackConnector(
   syncLocalStateToBroker();
 
   return {
+    activeMode: "broadcast-channel",
     addMessageListener(listener) {
       listeners.add(listener);
     },
