@@ -25,8 +25,17 @@ import { BrokerPortLike, InMemoryBrokerPort } from "./broadcast-fallback-port";
 export interface BrowserWindowsFallbackConnector {
   addMessageListener(listener: (data: unknown) => void): void;
   removeMessageListener(listener: (data: unknown) => void): void;
+  addRuntimeEventListener(listener: (event: BrowserWindowsFallbackRuntimeEvent) => void): void;
+  removeRuntimeEventListener(listener: (event: BrowserWindowsFallbackRuntimeEvent) => void): void;
   postMessage(message: unknown): void;
   close(): void;
+}
+
+export interface BrowserWindowsFallbackRuntimeEvent {
+  type: "leader-failover";
+  previousLeaderId: string;
+  nextLeaderId: string;
+  atMs: number;
 }
 
 function isProtocolMessage(value: unknown): value is BrowserWindowsProtocolMessage {
@@ -41,6 +50,9 @@ export function createBroadcastFallbackConnector(
   const channelName = config.channelName ?? "scomp-browser-windows";
   const channel: BrowserWindowsBroadcastChannelLike = new ChannelCtor(channelName);
   const listeners = new Set<(data: unknown) => void>();
+  const runtimeListeners = new Set<
+    (event: BrowserWindowsFallbackRuntimeEvent) => void
+  >();
   const knownParticipants = new Map<string, number>();
   const routes = new Set<string>();
   const heartbeatIntervalMs = config.heartbeatIntervalMs ?? 250;
@@ -134,6 +146,7 @@ export function createBroadcastFallbackConnector(
   };
 
   const adoptLeader = (nextLeaderId: string, leaseUntilMs: number): void => {
+    const previousLeaderId = leaderId;
     const changed = leaderId !== nextLeaderId;
     if (nextLeaderId !== participantId && leaderId === participantId) {
       stepDown();
@@ -141,6 +154,17 @@ export function createBroadcastFallbackConnector(
 
     leaderId = nextLeaderId;
     leaderLeaseUntilMs = leaseUntilMs;
+    if (changed && previousLeaderId && previousLeaderId !== nextLeaderId) {
+      const event: BrowserWindowsFallbackRuntimeEvent = {
+        type: "leader-failover",
+        previousLeaderId,
+        nextLeaderId,
+        atMs: Date.now(),
+      };
+      for (const listener of runtimeListeners) {
+        listener(event);
+      }
+    }
     if (changed && nextLeaderId !== participantId) {
       syncLocalStateToBroker();
     }
@@ -278,6 +302,12 @@ export function createBroadcastFallbackConnector(
     removeMessageListener(listener) {
       listeners.delete(listener);
     },
+    addRuntimeEventListener(listener) {
+      runtimeListeners.add(listener);
+    },
+    removeRuntimeEventListener(listener) {
+      runtimeListeners.delete(listener);
+    },
     postMessage(message) {
       if (!isProtocolMessage(message)) {
         return;
@@ -319,6 +349,7 @@ export function createBroadcastFallbackConnector(
       }
 
       listeners.clear();
+      runtimeListeners.clear();
       participantPorts.clear();
       channel.removeEventListener("message", onChannelMessage);
       channel.close();

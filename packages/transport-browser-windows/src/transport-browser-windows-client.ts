@@ -1,5 +1,9 @@
 import type { ScompClientInvokeOptions } from "@scomp/core";
 import type { ScompTransportMessageMeta } from "@scomp/types";
+import type {
+  BrowserWindowsTransportHealthReasonCode,
+  BrowserWindowsTransportHealthStatus,
+} from "./types";
 import {
   createPayloadHash,
   createPayloadKey,
@@ -28,6 +32,11 @@ export interface BrowserWindowsTransportClientContext {
   pendingRequests: Map<BrowserWindowsRequestId, PendingRequestState>;
   feedStates: Map<BrowserWindowsRequestId, FeedQueueState>;
   postMessage(message: unknown): void;
+  reportHealth(
+    code: BrowserWindowsTransportHealthReasonCode,
+    detail: string | undefined,
+    status: BrowserWindowsTransportHealthStatus,
+  ): void;
   composeMetaForOperation(
     route: string,
     operation: "request" | "signal" | "feed_start" | "feed_stop",
@@ -68,6 +77,11 @@ export async function requestWithContext(
       }
 
       context.pendingRequests.delete(requestId);
+      context.reportHealth(
+        "request-timeout",
+        `Request timed out for route: ${route}`,
+        "degraded",
+      );
       rejectPendingRequest(
         requestId,
         pending,
@@ -215,6 +229,11 @@ export function feedWithContext(
 export function handleInvokeResponseMessage(
   pendingRequests: Map<BrowserWindowsRequestId, PendingRequestState>,
   message: BrowserWindowsInvokeResponseMessage,
+  reportHealth: (
+    code: BrowserWindowsTransportHealthReasonCode,
+    detail: string | undefined,
+    status: BrowserWindowsTransportHealthStatus,
+  ) => void,
 ): void {
   const pending = pendingRequests.get(message.requestId);
   if (!pending) {
@@ -227,6 +246,9 @@ export function handleInvokeResponseMessage(
   }
 
   if (message.error) {
+    if (/host disconnected/i.test(message.error)) {
+      reportHealth("host-disconnected", message.error, "degraded");
+    }
     pending.reject(new Error(message.error));
     return;
   }
@@ -240,6 +262,11 @@ export function handleInvokeFeedChunkMessage(
   maxBufferedFeedChunksPerSubscriber: number,
   participantId: string,
   postMessage: (message: unknown) => void,
+  reportHealth: (
+    code: BrowserWindowsTransportHealthReasonCode,
+    detail: string | undefined,
+    status: BrowserWindowsTransportHealthStatus,
+  ) => void,
 ): void {
   const state = feedStates.get(message.requestId);
   if (!state) {
@@ -263,6 +290,9 @@ export function handleInvokeFeedChunkMessage(
 
     state.queue.push(message.payload);
   } else if (message.chunkType === "error") {
+    if (typeof message.message === "string" && /host disconnected/i.test(message.message)) {
+      reportHealth("host-disconnected", message.message, "degraded");
+    }
     terminateFeedState(
       message.requestId,
       state,

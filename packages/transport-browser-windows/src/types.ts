@@ -9,6 +9,40 @@ export type BrowserWindowsTransportModePreference =
   | BrowserWindowsTransportMode
   | "auto";
 
+export type BrowserWindowsTransportHealthStatus =
+  | "healthy"
+  | "degraded"
+  | "unavailable";
+
+export type BrowserWindowsTransportHealthReasonCode =
+  | "shared-worker-unavailable"
+  | "broadcast-channel-unavailable"
+  | "leader-failover"
+  | "host-disconnected"
+  | "auth-denied"
+  | "request-timeout"
+  | "publish-failed";
+
+export interface BrowserWindowsTransportHealthReason {
+  code: BrowserWindowsTransportHealthReasonCode;
+  detail?: string;
+  atMs: number;
+}
+
+export interface BrowserWindowsTransportHealthSnapshot {
+  status: BrowserWindowsTransportHealthStatus;
+  reasons: Array<BrowserWindowsTransportHealthReason>;
+  updatedAtMs: number;
+}
+
+export type BrowserWindowsTransportHealthListener = (
+  snapshot: BrowserWindowsTransportHealthSnapshot,
+) => void;
+
+export interface BrowserWindowsTransportHealthConfig {
+  onSnapshot?: BrowserWindowsTransportHealthListener;
+}
+
 export type BrowserWindowsParticipantRole = "broker" | "host" | "invoke";
 
 export type BrowserWindowsParticipantId = string;
@@ -36,6 +70,7 @@ export interface BrowserWindowsTransportConfig {
     | ScompTransportMessageMeta
     | (() => ScompTransportMessageMeta | Promise<ScompTransportMessageMeta>);
   security?: ScompTransportSecurityPolicy;
+  health?: BrowserWindowsTransportHealthConfig;
 }
 
 export interface BrowserWindowsBroadcastChannelLike {

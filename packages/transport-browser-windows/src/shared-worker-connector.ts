@@ -1,21 +1,30 @@
 import type {
   BrowserWindowsBroadcastChannelCtor,
-  BrowserWindowsBroadcastChannelLike,
   BrowserWindowsSharedWorkerCtor,
   BrowserWindowsTransportConfig,
 } from "./types";
 import {
   createBroadcastFallbackConnector,
-  type BrowserWindowsFallbackConnector,
+  type BrowserWindowsFallbackRuntimeEvent,
 } from "./broadcast-fallback";
 import { DEFAULT_BROWSER_WINDOWS_WORKER_URL } from "./worker-url";
 
 export interface BrowserWindowsRuntimeConnector {
   addMessageListener(listener: (data: unknown) => void): void;
   removeMessageListener(listener: (data: unknown) => void): void;
+  addRuntimeEventListener?(listener: (event: BrowserWindowsRuntimeEvent) => void): void;
+  removeRuntimeEventListener?(listener: (event: BrowserWindowsRuntimeEvent) => void): void;
   postMessage(message: unknown): void;
   close(): void;
 }
+
+export type BrowserWindowsRuntimeEvent =
+  | BrowserWindowsFallbackRuntimeEvent
+  | {
+      type: "shared-worker-unavailable";
+      detail: string;
+      atMs: number;
+    };
 
 function resolveSharedWorkerCtor(
   config: BrowserWindowsTransportConfig,
@@ -43,7 +52,7 @@ function resolveBroadcastChannelCtor(
   const ctor = (globalThis as { BroadcastChannel?: BrowserWindowsBroadcastChannelCtor })
     .BroadcastChannel;
   if (!ctor) {
-    throw new Error("BroadcastChannel is not available in this runtime.");
+    throw new Error("broadcast-channel-unavailable: BroadcastChannel is not available in this runtime.");
   }
 
   return ctor;
@@ -99,6 +108,33 @@ function shouldUseBroadcastFallback(config: BrowserWindowsTransportConfig): bool
   return config.mode === "broadcast-channel";
 }
 
+function withInitialRuntimeEvent(
+  connector: ReturnType<typeof createBroadcastFallbackConnector>,
+  initialEvent: BrowserWindowsRuntimeEvent,
+): BrowserWindowsRuntimeConnector {
+  return {
+    addMessageListener(listener) {
+      connector.addMessageListener(listener);
+    },
+    removeMessageListener(listener) {
+      connector.removeMessageListener(listener);
+    },
+    addRuntimeEventListener(listener) {
+      listener(initialEvent);
+      connector.addRuntimeEventListener(listener);
+    },
+    removeRuntimeEventListener(listener) {
+      connector.removeRuntimeEventListener(listener);
+    },
+    postMessage(message) {
+      connector.postMessage(message);
+    },
+    close() {
+      connector.close();
+    },
+  };
+}
+
 export function createRuntimeConnector(
   config: BrowserWindowsTransportConfig,
   participantId: string,
@@ -110,14 +146,19 @@ export function createRuntimeConnector(
 
   try {
     return createSharedWorkerConnector(config);
-  } catch {
+  } catch (error) {
     const ChannelCtor = resolveBroadcastChannelCtor(config);
-    return createBroadcastFallbackConnector(
+    const fallbackConnector = createBroadcastFallbackConnector(
       config,
       participantId,
       ChannelCtor,
     );
+    const detail = error instanceof Error ? error.message : "SharedWorker initialization failed.";
+
+    return withInitialRuntimeEvent(fallbackConnector, {
+      type: "shared-worker-unavailable",
+      detail,
+      atMs: Date.now(),
+    });
   }
 }
-
-export type { BrowserWindowsFallbackConnector };
