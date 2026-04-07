@@ -1,13 +1,20 @@
 import type { ITransport, ScompClientInvokeOptions } from "@scomp/core";
+import type { BrowserWindowsTransportConfig } from "./types";
 
 export class BrowserWindowsTransport implements ITransport {
+  private readonly config: BrowserWindowsTransportConfig;
   private router?: Record<string, unknown>;
+
+  constructor(config: BrowserWindowsTransportConfig = {}) {
+    this.config = config;
+  }
 
   listen(router: Record<string, unknown>): void {
     this.router = router;
   }
 
   close(): void {
+    void this.config;
     // no-op scaffold behavior for now
   }
 
@@ -36,6 +43,8 @@ export class BrowserWindowsTransport implements ITransport {
   }
 }
 
-export function createBrowserWindowsTransport(): BrowserWindowsTransport {
-  return new BrowserWindowsTransport();
+export function createBrowserWindowsTransport(
+  config: BrowserWindowsTransportConfig = {},
+): BrowserWindowsTransport {
+  return new BrowserWindowsTransport(config);
 }
