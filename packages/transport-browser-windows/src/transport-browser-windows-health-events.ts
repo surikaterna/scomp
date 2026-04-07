@@ -21,6 +21,10 @@ export function reportRuntimeHealthEvent(
   reportHealth: HealthReporter,
   event: BrowserWindowsRuntimeEvent,
 ): void {
+  if (event.type === "active-mode-changed") {
+    return;
+  }
+
   if (event.type === "broadcast-channel-unavailable") {
     reportHealth("broadcast-channel-unavailable", event.detail, "unavailable");
     return;
@@ -45,6 +49,11 @@ export function reportUnavailableConnectorError(
   error: unknown,
 ): void {
   const message = error instanceof Error ? error.message : String(error);
+  if (/shared-worker-unavailable:/i.test(message)) {
+    reportHealth("shared-worker-unavailable", message, "unavailable");
+    return;
+  }
+
   if (/broadcast-channel-unavailable:/i.test(message)) {
     reportHealth("broadcast-channel-unavailable", message, "unavailable");
   }
