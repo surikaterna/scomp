@@ -33,12 +33,14 @@ import type {
 interface PendingRequestState {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
+  timeoutId?: ReturnType<typeof setTimeout>;
 }
 
 interface FeedQueueState {
-  queue: Array<unknown | Promise<never>>;
+  queue: Array<unknown>;
   waiters: Array<() => void>;
   closed: boolean;
+  stopSent: boolean;
   terminalError?: Error;
   route: string;
   payloadKey: string;
@@ -119,13 +121,21 @@ interface RuntimeRoute {
 }
 
 export class BrowserWindowsTransport implements ITransport {
+  private static readonly DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+  private static readonly DEFAULT_MAX_PENDING_REQUESTS = 1_000;
+  private static readonly DEFAULT_MAX_BUFFERED_FEED_CHUNKS_PER_SUBSCRIBER = 256;
+
   private readonly config: BrowserWindowsTransportConfig;
   private readonly participantId: BrowserWindowsParticipantId;
   private readonly connector: ReturnType<typeof createRuntimeConnector>;
+  private readonly requestTimeoutMs: number;
+  private readonly maxPendingRequests: number;
+  private readonly maxBufferedFeedChunksPerSubscriber: number;
   private readonly pendingRequests = new Map<
     BrowserWindowsRequestId,
     PendingRequestState
   >();
+  private preparingRequests = 0;
   private readonly feedStates = new Map<BrowserWindowsRequestId, FeedQueueState>();
   private readonly hostedFeeds = new Map<BrowserWindowsRequestId, HostedFeedState>();
   private router: Record<string, RuntimeRoute> = {};
@@ -135,6 +145,19 @@ export class BrowserWindowsTransport implements ITransport {
 
   constructor(config: BrowserWindowsTransportConfig = {}) {
     this.config = config;
+    this.requestTimeoutMs = Math.max(
+      1,
+      config.requestTimeoutMs ?? BrowserWindowsTransport.DEFAULT_REQUEST_TIMEOUT_MS,
+    );
+    this.maxPendingRequests = Math.max(
+      1,
+      config.maxPendingRequests ?? BrowserWindowsTransport.DEFAULT_MAX_PENDING_REQUESTS,
+    );
+    this.maxBufferedFeedChunksPerSubscriber = Math.max(
+      1,
+      config.maxBufferedFeedChunksPerSubscriber ??
+        BrowserWindowsTransport.DEFAULT_MAX_BUFFERED_FEED_CHUNKS_PER_SUBSCRIBER,
+    );
     this.participantId = createParticipantId(this.config);
     this.connector = createRuntimeConnector(this.config, this.participantId);
     this.connector.addMessageListener(this.messageHandler);
@@ -180,31 +203,27 @@ export class BrowserWindowsTransport implements ITransport {
     }
 
     this.router = {};
+
+    this.connector.postMessage({
+      type: "participant_disconnect",
+      sourceId: this.participantId,
+      sentAtMs: Date.now(),
+    });
+
     this.connector.removeMessageListener(this.messageHandler);
 
-    for (const pending of this.pendingRequests.values()) {
-      pending.reject(new Error("BrowserWindowsTransport closed."));
+    for (const [requestId, pending] of this.pendingRequests.entries()) {
+      this.rejectPendingRequest(requestId, pending, new Error("BrowserWindowsTransport closed."));
     }
     this.pendingRequests.clear();
 
     for (const [requestId, feed] of this.feedStates.entries()) {
-      feed.closed = true;
-      feed.terminalError = new Error("BrowserWindowsTransport closed.");
-      feed.queue.push(Promise.reject(feed.terminalError));
-      while (feed.waiters.length > 0) {
-        feed.waiters.shift()?.();
-      }
-
-      this.connector.postMessage({
-        type: "invoke_feed_stop",
-        sourceId: this.participantId,
-        sentAtMs: Date.now(),
+      this.terminateFeedState(
         requestId,
-        route: feed.route,
-        operation: "feed_stop",
-        payloadKey: feed.payloadKey,
-        payloadHash: feed.payloadHash,
-      });
+        feed,
+        new Error("BrowserWindowsTransport closed."),
+        true,
+      );
     }
     this.feedStates.clear();
 
@@ -221,11 +240,39 @@ export class BrowserWindowsTransport implements ITransport {
     payload: unknown,
     options?: ScompClientInvokeOptions,
   ): Promise<unknown> {
+    if (this.pendingRequests.size + this.preparingRequests >= this.maxPendingRequests) {
+      throw new Error(
+        `BrowserWindowsTransport max pending requests exceeded (${this.maxPendingRequests}).`,
+      );
+    }
+
     const requestId = createRequestId();
-    const { meta } = await this.composeMetaForOperation(route, "request", payload, options);
+    this.preparingRequests += 1;
+    let meta: ScompTransportMessageMeta | undefined;
+    try {
+      meta = (await this.composeMetaForOperation(route, "request", payload, options)).meta;
+    } finally {
+      this.preparingRequests -= 1;
+    }
 
     const response = new Promise<unknown>((resolve, reject) => {
-      this.pendingRequests.set(requestId, { resolve, reject });
+      const timeoutId = setTimeout(() => {
+        const pending = this.pendingRequests.get(requestId);
+        if (!pending) {
+          return;
+        }
+
+        this.pendingRequests.delete(requestId);
+        this.rejectPendingRequest(
+          requestId,
+          pending,
+          new Error(
+            `BrowserWindowsTransport request timed out after ${this.requestTimeoutMs}ms for route ${route}.`,
+          ),
+        );
+      }, this.requestTimeoutMs);
+
+      this.pendingRequests.set(requestId, { resolve, reject, timeoutId });
     });
 
     this.connector.postMessage({
@@ -276,6 +323,7 @@ export class BrowserWindowsTransport implements ITransport {
           queue: [],
           waiters: [],
           closed: false,
+          stopSent: false,
           terminalError: undefined,
           route,
           payloadKey,
@@ -305,9 +353,7 @@ export class BrowserWindowsTransport implements ITransport {
           while (true) {
             if (state.queue.length > 0) {
               const nextValue = state.queue.shift();
-              if (nextValue instanceof Promise) {
-                await nextValue;
-              } else if (nextValue !== undefined) {
+              if (nextValue !== undefined) {
                 yield nextValue;
               }
 
@@ -334,13 +380,13 @@ export class BrowserWindowsTransport implements ITransport {
           }
         } finally {
           this.feedStates.delete(requestId);
-          if (feedStarted) {
+          if (feedStarted && !state.stopSent) {
             this.connector.postMessage({
               meta: (
                 await this.composeMetaForOperation(
                   route,
                   "feed_stop",
-                  { payloadKey, payloadHash },
+                  { payloadKey: state.payloadKey, payloadHash: state.payloadHash },
                   options,
                 )
               ).meta,
@@ -350,9 +396,10 @@ export class BrowserWindowsTransport implements ITransport {
               requestId,
               route,
               operation: "feed_stop",
-              payloadKey,
-              payloadHash,
+              payloadKey: state.payloadKey,
+              payloadHash: state.payloadHash,
             });
+            state.stopSent = true;
           }
         }
       }.bind(this),
@@ -385,6 +432,7 @@ export class BrowserWindowsTransport implements ITransport {
         return;
       case "hello":
       case "hello_ack":
+      case "participant_disconnect":
       case "heartbeat":
       case "routes_register":
       case "routes_unregister":
@@ -408,6 +456,9 @@ export class BrowserWindowsTransport implements ITransport {
     }
 
     this.pendingRequests.delete(message.requestId);
+    if (pending.timeoutId) {
+      clearTimeout(pending.timeoutId);
+    }
 
     if (message.error) {
       pending.reject(new Error(message.error));
@@ -426,15 +477,30 @@ export class BrowserWindowsTransport implements ITransport {
     }
 
     if (message.chunkType === "next") {
+      if (state.queue.length >= this.maxBufferedFeedChunksPerSubscriber) {
+        this.terminateFeedState(
+          message.requestId,
+          state,
+          new Error(
+            `BrowserWindowsTransport feed buffer exceeded ${this.maxBufferedFeedChunksPerSubscriber} chunks for route ${state.route}.`,
+          ),
+          true,
+        );
+        return;
+      }
+
       state.queue.push(message.payload);
     } else if (message.chunkType === "error") {
-      const error = new Error(message.message ?? "Feed error.");
-      state.closed = true;
-      state.terminalError = error;
-      state.queue.push(Promise.reject(error));
+      this.terminateFeedState(
+        message.requestId,
+        state,
+        new Error(message.message ?? "Feed error."),
+        false,
+      );
+      return;
     } else {
-      state.closed = true;
-      state.terminalError = undefined;
+      this.terminateFeedState(message.requestId, state, undefined, false);
+      return;
     }
 
     while (state.waiters.length > 0) {
@@ -790,6 +856,54 @@ export class BrowserWindowsTransport implements ITransport {
     );
 
     return { allowed, principal: principal ?? undefined };
+  }
+
+  private rejectPendingRequest(
+    _requestId: BrowserWindowsRequestId,
+    pending: PendingRequestState,
+    error: Error,
+  ): void {
+    if (pending.timeoutId) {
+      clearTimeout(pending.timeoutId);
+    }
+    pending.reject(error);
+  }
+
+  private terminateFeedState(
+    requestId: BrowserWindowsRequestId,
+    state: FeedQueueState,
+    error: Error | undefined,
+    shouldNotifyStop: boolean,
+  ): void {
+    if (state.closed) {
+      return;
+    }
+
+    state.closed = true;
+    state.terminalError = error;
+    state.queue.length = 0;
+
+    while (state.waiters.length > 0) {
+      state.waiters.shift()?.();
+    }
+
+    if (shouldNotifyStop) {
+      if (state.stopSent) {
+        return;
+      }
+
+      this.connector.postMessage({
+        type: "invoke_feed_stop",
+        sourceId: this.participantId,
+        sentAtMs: Date.now(),
+        requestId,
+        route: state.route,
+        operation: "feed_stop",
+        payloadKey: state.payloadKey,
+        payloadHash: state.payloadHash,
+      });
+      state.stopSent = true;
+    }
   }
 }
 
