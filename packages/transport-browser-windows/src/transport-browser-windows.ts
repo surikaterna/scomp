@@ -1,15 +1,10 @@
 import type { ITransport, ScompClientInvokeOptions } from "@scomp/core";
 import type {
-  ScompTransportMessageMeta,
   ScompTransportOperation,
-  ScompTransportPrincipal,
-  ScompTransportSecurityContext,
+  ScompTransportMessageMeta,
 } from "@scomp/types";
 import type {
-  BrowserWindowsHostFeedStartMessage,
   BrowserWindowsHostFeedStopMessage,
-  BrowserWindowsHostRequestMessage,
-  BrowserWindowsHostSignalMessage,
   BrowserWindowsInvokeFeedChunkMessage,
   BrowserWindowsInvokeResponseMessage,
   BrowserWindowsProtocolMessage,
@@ -17,108 +12,33 @@ import type {
 import { createRuntimeConnector } from "./shared-worker-connector";
 import {
   createParticipantId,
-  createPayloadHash,
-  createPayloadKey,
-  createRequestId,
-  mergeMeta,
-  toPrincipalMeta,
-  toPriorityMeta,
 } from "./shared-worker-internal";
-import type {
-  BrowserWindowsParticipantId,
-  BrowserWindowsRequestId,
-  BrowserWindowsTransportConfig,
+import {
+  type BrowserWindowsParticipantId,
+  type BrowserWindowsRequestId,
+  type BrowserWindowsTransportConfig,
 } from "./types";
-
-interface PendingRequestState {
-  resolve: (value: unknown) => void;
-  reject: (error: Error) => void;
-  timeoutId?: ReturnType<typeof setTimeout>;
-}
-
-interface FeedQueueState {
-  queue: Array<unknown>;
-  waiters: Array<() => void>;
-  closed: boolean;
-  stopSent: boolean;
-  terminalError?: Error;
-  route: string;
-  payloadKey: string;
-  payloadHash: string;
-}
-
-interface HostedFeedState {
-  stopped: boolean;
-  unsubscribe?: () => void;
-}
-
-function toError(error: unknown, fallback: string): Error {
-  if (error instanceof Error) {
-    return error;
-  }
-
-  if (typeof error === "string" && error.length > 0) {
-    return new Error(error);
-  }
-
-  return new Error(fallback);
-}
-
-function isAsyncIterable(value: unknown): value is AsyncIterable<unknown> {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    Symbol.asyncIterator in value &&
-    typeof (value as AsyncIterable<unknown>)[Symbol.asyncIterator] === "function"
-  );
-}
-
-function isIterable(value: unknown): value is Iterable<unknown> {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    Symbol.iterator in value &&
-    typeof (value as Iterable<unknown>)[Symbol.iterator] === "function"
-  );
-}
-
-function toAsyncIterable(value: unknown): AsyncIterable<unknown> {
-  if (isAsyncIterable(value)) {
-    return value;
-  }
-
-  if (isIterable(value)) {
-    return {
-      async *[Symbol.asyncIterator]() {
-        for (const nextValue of value) {
-          yield nextValue;
-        }
-      },
-    };
-  }
-
-  throw new Error("Feed handler did not return an iterable value.");
-}
-
-function routeOperation(route: unknown): "request" | "signal" | "feed" {
-  const routeRecord = route as { kind?: string };
-  if (routeRecord?.kind === "signal") {
-    return "signal";
-  }
-
-  if (routeRecord?.kind === "feed") {
-    return "feed";
-  }
-
-  return "request";
-}
-
-interface RuntimeRoute {
-  parser?: (payload: unknown) => unknown;
-  handler: (payload: unknown) => unknown;
-  kind?: "request" | "signal" | "feed";
-  hashKey?: (payload: unknown) => string;
-}
+import {
+  type HostedFeedState,
+  type FeedQueueState,
+  type PendingRequestState,
+  type RuntimeRoute,
+  rejectPendingRequest,
+} from "./transport-browser-windows-state";
+import {
+  handleHostFeedStart,
+  handleHostFeedStop,
+  handleHostRequest,
+  handleHostSignal,
+} from "./transport-browser-windows-host";
+import { BrowserWindowsTransportSecurity } from "./transport-browser-windows-security";
+import {
+  feedWithContext,
+  handleInvokeFeedChunkMessage,
+  handleInvokeResponseMessage,
+  requestWithContext,
+  signalWithContext,
+} from "./transport-browser-windows-client";
 
 export class BrowserWindowsTransport implements ITransport {
   private static readonly DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
@@ -138,6 +58,7 @@ export class BrowserWindowsTransport implements ITransport {
   private preparingRequests = 0;
   private readonly feedStates = new Map<BrowserWindowsRequestId, FeedQueueState>();
   private readonly hostedFeeds = new Map<BrowserWindowsRequestId, HostedFeedState>();
+  private readonly security: BrowserWindowsTransportSecurity;
   private router: Record<string, RuntimeRoute> = {};
   private readonly messageHandler = (data: unknown) => {
     this.handleIncoming(data as BrowserWindowsProtocolMessage);
@@ -159,6 +80,7 @@ export class BrowserWindowsTransport implements ITransport {
         BrowserWindowsTransport.DEFAULT_MAX_BUFFERED_FEED_CHUNKS_PER_SUBSCRIBER,
     );
     this.participantId = createParticipantId(this.config);
+    this.security = new BrowserWindowsTransportSecurity(config);
     this.connector = createRuntimeConnector(this.config, this.participantId);
     this.connector.addMessageListener(this.messageHandler);
     this.connector.postMessage({
@@ -213,17 +135,34 @@ export class BrowserWindowsTransport implements ITransport {
     this.connector.removeMessageListener(this.messageHandler);
 
     for (const [requestId, pending] of this.pendingRequests.entries()) {
-      this.rejectPendingRequest(requestId, pending, new Error("BrowserWindowsTransport closed."));
+      rejectPendingRequest(
+        requestId,
+        pending,
+        new Error("BrowserWindowsTransport closed."),
+      );
     }
     this.pendingRequests.clear();
 
     for (const [requestId, feed] of this.feedStates.entries()) {
-      this.terminateFeedState(
-        requestId,
-        feed,
-        new Error("BrowserWindowsTransport closed."),
-        true,
-      );
+      feed.closed = true;
+      feed.terminalError = new Error("BrowserWindowsTransport closed.");
+      feed.queue.length = 0;
+      while (feed.waiters.length > 0) {
+        feed.waiters.shift()?.();
+      }
+      if (!feed.stopSent) {
+        this.connector.postMessage({
+          type: "invoke_feed_stop",
+          sourceId: this.participantId,
+          sentAtMs: Date.now(),
+          requestId,
+          route: feed.route,
+          operation: "feed_stop",
+          payloadKey: feed.payloadKey,
+          payloadHash: feed.payloadHash,
+        });
+        feed.stopSent = true;
+      }
     }
     this.feedStates.clear();
 
@@ -240,53 +179,7 @@ export class BrowserWindowsTransport implements ITransport {
     payload: unknown,
     options?: ScompClientInvokeOptions,
   ): Promise<unknown> {
-    if (this.pendingRequests.size + this.preparingRequests >= this.maxPendingRequests) {
-      throw new Error(
-        `BrowserWindowsTransport max pending requests exceeded (${this.maxPendingRequests}).`,
-      );
-    }
-
-    const requestId = createRequestId();
-    this.preparingRequests += 1;
-    let meta: ScompTransportMessageMeta | undefined;
-    try {
-      meta = (await this.composeMetaForOperation(route, "request", payload, options)).meta;
-    } finally {
-      this.preparingRequests -= 1;
-    }
-
-    const response = new Promise<unknown>((resolve, reject) => {
-      const timeoutId = setTimeout(() => {
-        const pending = this.pendingRequests.get(requestId);
-        if (!pending) {
-          return;
-        }
-
-        this.pendingRequests.delete(requestId);
-        this.rejectPendingRequest(
-          requestId,
-          pending,
-          new Error(
-            `BrowserWindowsTransport request timed out after ${this.requestTimeoutMs}ms for route ${route}.`,
-          ),
-        );
-      }, this.requestTimeoutMs);
-
-      this.pendingRequests.set(requestId, { resolve, reject, timeoutId });
-    });
-
-    this.connector.postMessage({
-      type: "invoke_request",
-      sourceId: this.participantId,
-      sentAtMs: Date.now(),
-      requestId,
-      route,
-      operation: "request",
-      payload,
-      meta,
-    });
-
-    return response;
+    return requestWithContext(this.clientContext(), route, payload, options);
   }
 
   async signal(
@@ -294,18 +187,7 @@ export class BrowserWindowsTransport implements ITransport {
     payload: unknown,
     options?: ScompClientInvokeOptions,
   ): Promise<void> {
-    const { meta } = await this.composeMetaForOperation(route, "signal", payload, options);
-
-    this.connector.postMessage({
-      type: "invoke_signal",
-      sourceId: this.participantId,
-      sentAtMs: Date.now(),
-      requestId: createRequestId(),
-      route,
-      operation: "signal",
-      payload,
-      meta,
-    });
+    await signalWithContext(this.clientContext(), route, payload, options);
   }
 
   feed(
@@ -313,97 +195,7 @@ export class BrowserWindowsTransport implements ITransport {
     payload: unknown,
     options?: ScompClientInvokeOptions,
   ): AsyncIterable<unknown> {
-    const requestId = createRequestId();
-    const payloadKey = createPayloadKey(payload);
-    const payloadHash = createPayloadHash(route, payload);
-
-    return {
-      [Symbol.asyncIterator]: async function* (this: BrowserWindowsTransport) {
-        const state: FeedQueueState = {
-          queue: [],
-          waiters: [],
-          closed: false,
-          stopSent: false,
-          terminalError: undefined,
-          route,
-          payloadKey,
-          payloadHash,
-        };
-        this.feedStates.set(requestId, state);
-
-        let feedStarted = false;
-
-        try {
-          this.connector.postMessage({
-            meta: (
-              await this.composeMetaForOperation(route, "feed_start", payload, options)
-            ).meta,
-            type: "invoke_feed_start",
-            sourceId: this.participantId,
-            sentAtMs: Date.now(),
-            requestId,
-            route,
-            operation: "feed_start",
-            payload,
-            payloadKey,
-            payloadHash,
-          });
-          feedStarted = true;
-
-          while (true) {
-            if (state.queue.length > 0) {
-              const nextValue = state.queue.shift();
-              if (nextValue !== undefined) {
-                yield nextValue;
-              }
-
-              if (state.closed && state.queue.length === 0) {
-                if (state.terminalError) {
-                  throw state.terminalError;
-                }
-                return;
-              }
-
-              continue;
-            }
-
-            if (state.closed) {
-              if (state.terminalError) {
-                throw state.terminalError;
-              }
-              return;
-            }
-
-            await new Promise<void>((resolve) => {
-              state.waiters.push(resolve);
-            });
-          }
-        } finally {
-          this.feedStates.delete(requestId);
-          if (feedStarted && !state.stopSent) {
-            this.connector.postMessage({
-              meta: (
-                await this.composeMetaForOperation(
-                  route,
-                  "feed_stop",
-                  { payloadKey: state.payloadKey, payloadHash: state.payloadHash },
-                  options,
-                )
-              ).meta,
-              type: "invoke_feed_stop",
-              sourceId: this.participantId,
-              sentAtMs: Date.now(),
-              requestId,
-              route,
-              operation: "feed_stop",
-              payloadKey: state.payloadKey,
-              payloadHash: state.payloadHash,
-            });
-            state.stopSent = true;
-          }
-        }
-      }.bind(this),
-    };
+    return feedWithContext(this.clientContext(), route, payload, options);
   }
 
   private handleIncoming(message: BrowserWindowsProtocolMessage): void {
@@ -450,460 +242,97 @@ export class BrowserWindowsTransport implements ITransport {
   }
 
   private handleInvokeResponse(message: BrowserWindowsInvokeResponseMessage): void {
-    const pending = this.pendingRequests.get(message.requestId);
-    if (!pending) {
-      return;
-    }
-
-    this.pendingRequests.delete(message.requestId);
-    if (pending.timeoutId) {
-      clearTimeout(pending.timeoutId);
-    }
-
-    if (message.error) {
-      pending.reject(new Error(message.error));
-      return;
-    }
-
-    pending.resolve(message.payload);
+    handleInvokeResponseMessage(this.pendingRequests, message);
   }
 
-  private handleInvokeFeedChunk(
-    message: BrowserWindowsInvokeFeedChunkMessage,
-  ): void {
-    const state = this.feedStates.get(message.requestId);
-    if (!state) {
-      return;
-    }
-
-    if (message.chunkType === "next") {
-      if (state.queue.length >= this.maxBufferedFeedChunksPerSubscriber) {
-        this.terminateFeedState(
-          message.requestId,
-          state,
-          new Error(
-            `BrowserWindowsTransport feed buffer exceeded ${this.maxBufferedFeedChunksPerSubscriber} chunks for route ${state.route}.`,
-          ),
-          true,
-        );
-        return;
-      }
-
-      state.queue.push(message.payload);
-    } else if (message.chunkType === "error") {
-      this.terminateFeedState(
-        message.requestId,
-        state,
-        new Error(message.message ?? "Feed error."),
-        false,
-      );
-      return;
-    } else {
-      this.terminateFeedState(message.requestId, state, undefined, false);
-      return;
-    }
-
-    while (state.waiters.length > 0) {
-      state.waiters.shift()?.();
-    }
+  private handleInvokeFeedChunk(message: BrowserWindowsInvokeFeedChunkMessage): void {
+    handleInvokeFeedChunkMessage(
+      this.feedStates,
+      message,
+      this.maxBufferedFeedChunksPerSubscriber,
+      this.participantId,
+      (payload) => this.connector.postMessage(payload),
+    );
   }
 
-  private async handleHostRequest(
-    message: BrowserWindowsHostRequestMessage,
-  ): Promise<void> {
-    const route = this.router[message.route];
-    if (!route) {
-      this.connector.postMessage({
-        type: "host_response",
-        sourceId: this.participantId,
-        sentAtMs: Date.now(),
-        requestId: message.requestId,
-        invokeId: message.invokeId,
-        hostId: this.participantId,
-        error: `No route handler registered for ${message.route}`,
-        meta: message.meta,
-      });
-      return;
-    }
-
-    if (routeOperation(route) !== "request") {
-      this.connector.postMessage({
-        type: "host_response",
-        sourceId: this.participantId,
-        sentAtMs: Date.now(),
-        requestId: message.requestId,
-        invokeId: message.invokeId,
-        hostId: this.participantId,
-        error: `Route ${message.route} does not support request operation`,
-        meta: message.meta,
-      });
-      return;
-    }
-
-    try {
-      await this.assertInboundAllowed(
-        message.route,
-        "request",
-        message.payload,
-        message.meta,
-      );
-
-      const parsedPayload = route.parser
-        ? route.parser(message.payload)
-        : message.payload;
-      const response = await route.handler(parsedPayload);
-      this.connector.postMessage({
-        type: "host_response",
-        sourceId: this.participantId,
-        sentAtMs: Date.now(),
-        requestId: message.requestId,
-        invokeId: message.invokeId,
-        hostId: this.participantId,
-        payload: response,
-        meta: message.meta,
-      });
-    } catch (error) {
-      this.connector.postMessage({
-        type: "host_response",
-        sourceId: this.participantId,
-        sentAtMs: Date.now(),
-        requestId: message.requestId,
-        invokeId: message.invokeId,
-        hostId: this.participantId,
-        error: toError(error, "Request failed.").message,
-        meta: message.meta,
-      });
-    }
+  private async handleHostRequest(message: Parameters<typeof handleHostRequest>[1]): Promise<void> {
+    await handleHostRequest(this.hostContext(), message);
   }
 
-  private async handleHostSignal(
-    message: BrowserWindowsHostSignalMessage,
-  ): Promise<void> {
-    const route = this.router[message.route];
-    if (!route) {
-      return;
-    }
-
-    if (routeOperation(route) !== "signal") {
-      return;
-    }
-
-    try {
-      await this.assertInboundAllowed(
-        message.route,
-        "signal",
-        message.payload,
-        message.meta,
-      );
-
-      const parsedPayload = route.parser
-        ? route.parser(message.payload)
-        : message.payload;
-      await route.handler(parsedPayload);
-    } catch {
-      // signal has no response path
-    }
+  private async handleHostSignal(message: Parameters<typeof handleHostSignal>[1]): Promise<void> {
+    await handleHostSignal(this.hostContext(), message);
   }
 
   private async handleHostFeedStart(
-    message: BrowserWindowsHostFeedStartMessage,
+    message: Parameters<typeof handleHostFeedStart>[1],
   ): Promise<void> {
-    const route = this.router[message.route];
-    if (!route) {
-      this.connector.postMessage({
-        type: "host_feed_chunk",
-        sourceId: this.participantId,
-        sentAtMs: Date.now(),
-        requestId: message.requestId,
-        invokeId: message.invokeId,
-        hostId: this.participantId,
-        payloadKey: message.payloadKey,
-        payloadHash: message.payloadHash,
-        chunkType: "error",
-        message: `No feed handler registered for ${message.route}`,
-        meta: message.meta,
-      });
-      return;
-    }
-
-    if (routeOperation(route) !== "feed") {
-      this.connector.postMessage({
-        type: "host_feed_chunk",
-        sourceId: this.participantId,
-        sentAtMs: Date.now(),
-        requestId: message.requestId,
-        invokeId: message.invokeId,
-        hostId: this.participantId,
-        payloadKey: message.payloadKey,
-        payloadHash: message.payloadHash,
-        chunkType: "error",
-        message: `Route ${message.route} does not support feed operation`,
-        meta: message.meta,
-      });
-      return;
-    }
-
-    try {
-      await this.assertInboundAllowed(
-        message.route,
-        "feed_start",
-        message.payload,
-        message.meta,
-      );
-
-      const parsedPayload = route.parser
-        ? route.parser(message.payload)
-        : message.payload;
-
-      const produced = route.handler(parsedPayload);
-      const asyncIterable = toAsyncIterable(produced);
-      const hostedState: HostedFeedState = { stopped: false };
-
-      if (
-        typeof produced === "object" &&
-        produced !== null &&
-        "unsubscribe" in produced &&
-        typeof (produced as { unsubscribe?: () => void }).unsubscribe === "function"
-      ) {
-        hostedState.unsubscribe = () => {
-          (produced as { unsubscribe: () => void }).unsubscribe();
-        };
-      }
-
-      this.hostedFeeds.set(message.requestId, hostedState);
-
-      this.connector.postMessage({
-        type: "host_feed_started",
-        sourceId: this.participantId,
-        sentAtMs: Date.now(),
-        requestId: message.requestId,
-        invokeId: message.invokeId,
-        hostId: this.participantId,
-        payloadKey: message.payloadKey,
-        payloadHash: message.payloadHash,
-        meta: message.meta,
-      });
-
-      for await (const chunk of asyncIterable) {
-        if (hostedState.stopped) {
-          break;
-        }
-
-        this.connector.postMessage({
-          type: "host_feed_chunk",
-          sourceId: this.participantId,
-          sentAtMs: Date.now(),
-          requestId: message.requestId,
-          invokeId: message.invokeId,
-          hostId: this.participantId,
-          payloadKey: message.payloadKey,
-          payloadHash: message.payloadHash,
-          chunkType: "next",
-          payload: chunk,
-          meta: message.meta,
-        });
-      }
-
-      this.connector.postMessage({
-        type: "host_feed_chunk",
-        sourceId: this.participantId,
-        sentAtMs: Date.now(),
-        requestId: message.requestId,
-        invokeId: message.invokeId,
-        hostId: this.participantId,
-        payloadKey: message.payloadKey,
-        payloadHash: message.payloadHash,
-        chunkType: "done",
-        meta: message.meta,
-      });
-    } catch (error) {
-      this.connector.postMessage({
-        type: "host_feed_chunk",
-        sourceId: this.participantId,
-        sentAtMs: Date.now(),
-        requestId: message.requestId,
-        invokeId: message.invokeId,
-        hostId: this.participantId,
-        payloadKey: message.payloadKey,
-        payloadHash: message.payloadHash,
-        chunkType: "error",
-        message: toError(error, "Feed failed.").message,
-        meta: message.meta,
-      });
-    } finally {
-      this.hostedFeeds.delete(message.requestId);
-    }
+    await handleHostFeedStart(this.hostContext(), message);
   }
 
   private handleHostFeedStop(message: BrowserWindowsHostFeedStopMessage): void {
-    void this.handleHostFeedStopAsync(message);
+    void handleHostFeedStop(this.hostContext(), message);
   }
 
-  private async resolveConfigMeta(): Promise<ScompTransportMessageMeta | undefined> {
-    const { meta } = this.config;
-    if (!meta) {
-      return undefined;
-    }
-
-    if (typeof meta === "function") {
-      return meta();
-    }
-
-    return meta;
+  private hostContext() {
+    return {
+      participantId: this.participantId,
+      router: this.router,
+      hostedFeeds: this.hostedFeeds,
+      postMessage: (message: unknown) => {
+        this.connector.postMessage(message);
+      },
+      assertInboundAllowed: (
+        route: string,
+        operation: "request" | "signal" | "feed_start" | "feed_stop",
+        payload: unknown,
+        meta: unknown,
+      ) => {
+        return this.security.assertInboundAllowed(
+          route,
+          operation,
+          payload,
+          meta as ScompTransportMessageMeta | undefined,
+        );
+      },
+    };
   }
 
-  /**
-   * Deterministic outbound meta precedence (websocket-browser parity):
-   * config.meta -> options.meta -> priority hints -> principal-derived auth context.
-   */
+  private clientContext() {
+    return {
+      participantId: this.participantId,
+      requestTimeoutMs: this.requestTimeoutMs,
+      maxPendingRequests: this.maxPendingRequests,
+      maxBufferedFeedChunksPerSubscriber: this.maxBufferedFeedChunksPerSubscriber,
+      getPreparingRequests: () => this.preparingRequests,
+      incrementPreparingRequests: () => {
+        this.preparingRequests += 1;
+      },
+      decrementPreparingRequests: () => {
+        this.preparingRequests -= 1;
+      },
+      pendingRequests: this.pendingRequests,
+      feedStates: this.feedStates,
+      postMessage: (message: unknown) => {
+        this.connector.postMessage(message);
+      },
+      composeMetaForOperation: (
+        route: string,
+        operation: "request" | "signal" | "feed_start" | "feed_stop",
+        payload: unknown,
+        options?: ScompClientInvokeOptions,
+      ) => {
+        return this.composeMetaForOperation(route, operation, payload, options);
+      },
+    };
+  }
+
   private async composeMetaForOperation(
     route: string,
     operation: ScompTransportOperation,
     payload: unknown,
     options?: ScompClientInvokeOptions,
-  ): Promise<{
-    meta: ScompTransportMessageMeta | undefined;
-    principal: ScompTransportPrincipal | undefined;
-  }> {
-    const configMeta = await this.resolveConfigMeta();
-    const optionsMeta = options?.meta;
-    const priorityMeta = toPriorityMeta(options);
-    const effectiveMeta = mergeMeta(mergeMeta(configMeta, optionsMeta), priorityMeta);
-    const { allowed, principal } = await this.checkSecurity({
-      direction: "outbound",
-      transport: "browser-windows",
-      route,
-      operation,
-      payload,
-      meta: effectiveMeta,
-    });
-
-    if (!allowed) {
-      throw new Error(`${operation} not authorized for route: ${route}`);
-    }
-
-    return {
-      meta: mergeMeta(effectiveMeta, toPrincipalMeta(principal)),
-      principal,
-    };
-  }
-
-  private async assertInboundAllowed(
-    route: string,
-    operation: ScompTransportOperation,
-    payload: unknown,
-    meta: ScompTransportMessageMeta | undefined,
-  ): Promise<void> {
-    const { allowed } = await this.checkSecurity({
-      direction: "inbound",
-      transport: "browser-windows",
-      route,
-      operation,
-      payload,
-      meta,
-    });
-
-    if (!allowed) {
-      throw new Error(`${operation} not authorized for route: ${route}`);
-    }
-  }
-
-  private async handleHostFeedStopAsync(
-    message: BrowserWindowsHostFeedStopMessage,
-  ): Promise<void> {
-    const hosted = this.hostedFeeds.get(message.requestId);
-    if (!hosted) {
-      return;
-    }
-
-    try {
-      await this.assertInboundAllowed(
-        message.route,
-        "feed_stop",
-        { payloadKey: message.payloadKey, payloadHash: message.payloadHash },
-        message.meta,
-      );
-    } catch {
-      return;
-    }
-
-    hosted.stopped = true;
-    hosted.unsubscribe?.();
-    this.hostedFeeds.delete(message.requestId);
-  }
-
-  private async checkSecurity(
-    ctx: Omit<ScompTransportSecurityContext, "principal">,
-  ): Promise<{ allowed: boolean; principal?: ScompTransportPrincipal }> {
-    const policy = this.config.security;
-    if (!policy) {
-      return { allowed: true };
-    }
-
-    const principal = policy.authenticate
-      ? await policy.authenticate(ctx)
-      : undefined;
-
-    if (!policy.authorize) {
-      return { allowed: true, principal: principal ?? undefined };
-    }
-
-    const allowed = Boolean(
-      await policy.authorize({
-        ...ctx,
-        principal: principal ?? undefined,
-      }),
-    );
-
-    return { allowed, principal: principal ?? undefined };
-  }
-
-  private rejectPendingRequest(
-    _requestId: BrowserWindowsRequestId,
-    pending: PendingRequestState,
-    error: Error,
-  ): void {
-    if (pending.timeoutId) {
-      clearTimeout(pending.timeoutId);
-    }
-    pending.reject(error);
-  }
-
-  private terminateFeedState(
-    requestId: BrowserWindowsRequestId,
-    state: FeedQueueState,
-    error: Error | undefined,
-    shouldNotifyStop: boolean,
-  ): void {
-    if (state.closed) {
-      return;
-    }
-
-    state.closed = true;
-    state.terminalError = error;
-    state.queue.length = 0;
-
-    while (state.waiters.length > 0) {
-      state.waiters.shift()?.();
-    }
-
-    if (shouldNotifyStop) {
-      if (state.stopSent) {
-        return;
-      }
-
-      this.connector.postMessage({
-        type: "invoke_feed_stop",
-        sourceId: this.participantId,
-        sentAtMs: Date.now(),
-        requestId,
-        route: state.route,
-        operation: "feed_stop",
-        payloadKey: state.payloadKey,
-        payloadHash: state.payloadHash,
-      });
-      state.stopSent = true;
-    }
+  ) {
+    return this.security.composeMetaForOperation(route, operation, payload, options);
   }
 }
 

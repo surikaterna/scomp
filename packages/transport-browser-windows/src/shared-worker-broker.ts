@@ -1,19 +1,23 @@
-import type {
-  BrowserWindowsFeedSubscriptionState,
-  BrowserWindowsBrokerState,
-  BrowserWindowsFeedSubscriptionKey,
-} from "./broker-state";
-import type {
-  BrowserWindowsHostFeedChunkMessage,
-  BrowserWindowsHostFeedStartedMessage,
-  BrowserWindowsHostResponseMessage,
-  BrowserWindowsInvokeFeedStartMessage,
-  BrowserWindowsInvokeFeedStopMessage,
-  BrowserWindowsInvokeRequestMessage,
-  BrowserWindowsInvokeSignalMessage,
-  BrowserWindowsProtocolMessage,
-} from "./protocol";
+import type { BrowserWindowsProtocolMessage } from "./protocol";
 import type { BrowserWindowsParticipantId } from "./types";
+import {
+  createBrokerState,
+  type BrokerContext,
+} from "./shared-worker-broker-context";
+import { cleanupDisconnectedParticipant } from "./shared-worker-broker-disconnect";
+import {
+  handleHostFeedChunk,
+  handleHostFeedStarted,
+  handleHostResponse,
+  handleInvokeFeedStart,
+  handleInvokeFeedStop,
+  handleInvokeRequest,
+  handleInvokeSignal,
+} from "./shared-worker-broker-dispatch";
+import {
+  registerRoutes,
+  unregisterRoutes,
+} from "./shared-worker-broker-routes";
 
 export interface BrowserWindowsMessagePortLike {
   postMessage(message: BrowserWindowsProtocolMessage): void;
@@ -28,33 +32,23 @@ export interface BrowserWindowsMessagePortLike {
   start?(): void;
 }
 
-function createBrokerState(): BrowserWindowsBrokerState {
-  return {
-    routeHosts: new Map(),
-    pendingRequests: new Map(),
-    feedSubscriptions: new Map(),
-    activeUpstreamFeeds: new Map(),
-  };
-}
-
-function createFeedKey(
-  route: string,
-  payloadKey: string,
-  payloadHash: string,
-): BrowserWindowsFeedSubscriptionKey {
-  return `${route}:${payloadKey}:${payloadHash}`;
-}
-
-function cloneSet<T>(value: Set<T>): Array<T> {
-  return Array.from(value);
-}
-
 export class BrowserWindowsSharedWorkerBroker {
-  private readonly state = createBrokerState();
-  private readonly portsByParticipant =
-    new Map<BrowserWindowsParticipantId, BrowserWindowsMessagePortLike>();
-  private readonly routesByParticipant =
-    new Map<BrowserWindowsParticipantId, Set<string>>();
+  private readonly context: BrokerContext = {
+    state: createBrokerState(),
+    portsByParticipant: new Map(),
+    routesByParticipant: new Map(),
+    sendToParticipant: (participantId, message) => {
+      const port = this.context.portsByParticipant.get(participantId);
+      if (!port) {
+        return;
+      }
+
+      this.context.sendTo(port, message);
+    },
+    sendTo: (port, message) => {
+      port.postMessage(message);
+    },
+  };
 
   attachPort(port: BrowserWindowsMessagePortLike): void {
     const listener = (event: { data: BrowserWindowsProtocolMessage }) => {
@@ -66,89 +60,8 @@ export class BrowserWindowsSharedWorkerBroker {
   }
 
   disconnectParticipant(participantId: BrowserWindowsParticipantId): void {
-    this.portsByParticipant.delete(participantId);
-    this.cleanupDisconnectedParticipant(participantId);
-  }
-
-  private cleanupDisconnectedParticipant(
-    participantId: BrowserWindowsParticipantId,
-  ): void {
-    this.unregisterAllRoutes(participantId);
-
-    for (const [key, subscription] of this.state.feedSubscriptions.entries()) {
-      for (const [requestId, invokeId] of subscription.subscribersByRequestId.entries()) {
-        if (invokeId !== participantId) {
-          continue;
-        }
-
-        subscription.subscribersByRequestId.delete(requestId);
-        this.state.pendingRequests.delete(requestId);
-      }
-
-      if (subscription.subscribersByRequestId.size > 0) {
-        continue;
-      }
-
-      this.state.feedSubscriptions.delete(key);
-      const activeUpstream = this.state.activeUpstreamFeeds.get(key);
-      if (!activeUpstream) {
-        continue;
-      }
-
-      this.sendToParticipant(activeUpstream.ownerHostId, {
-        type: "host_feed_stop",
-        sourceId: "broker",
-        targetId: activeUpstream.ownerHostId,
-        sentAtMs: Date.now(),
-        invokeId: participantId,
-        requestId: activeUpstream.sourceRequestId,
-        route: activeUpstream.route,
-        operation: "feed_stop",
-        payloadKey: activeUpstream.payloadKey,
-        payloadHash: activeUpstream.payloadHash,
-      });
-
-      this.state.activeUpstreamFeeds.delete(key);
-      this.state.pendingRequests.delete(activeUpstream.sourceRequestId);
-    }
-
-    for (const [key, activeUpstream] of this.state.activeUpstreamFeeds.entries()) {
-      if (activeUpstream.ownerHostId !== participantId) {
-        continue;
-      }
-
-      const subscription = this.state.feedSubscriptions.get(key);
-      if (subscription) {
-        this.failFeedSubscription(
-          subscription,
-          `Feed host disconnected for route: ${activeUpstream.route}`,
-        );
-        this.state.feedSubscriptions.delete(key);
-      }
-
-      this.state.activeUpstreamFeeds.delete(key);
-      this.state.pendingRequests.delete(activeUpstream.sourceRequestId);
-    }
-
-    for (const [requestId, pending] of this.state.pendingRequests.entries()) {
-      if (pending.invokeId === participantId) {
-        this.state.pendingRequests.delete(requestId);
-        continue;
-      }
-
-      if (pending.hostId === participantId) {
-        this.sendToParticipant(pending.invokeId, {
-          type: "invoke_response",
-          sourceId: "broker",
-          targetId: pending.invokeId,
-          sentAtMs: Date.now(),
-          requestId: pending.requestId,
-          hostId: participantId,
-          error: `Host disconnected for route: ${pending.route}`,
-        });
-        this.state.pendingRequests.delete(requestId);
-      }
-    }
+    this.context.portsByParticipant.delete(participantId);
+    cleanupDisconnectedParticipant(this.context, participantId);
   }
 
   private handleMessage(
@@ -159,11 +72,11 @@ export class BrowserWindowsSharedWorkerBroker {
       return;
     }
 
-    this.portsByParticipant.set(message.sourceId, sourcePort);
+    this.context.portsByParticipant.set(message.sourceId, sourcePort);
 
     switch (message.type) {
       case "hello":
-        this.sendTo(sourcePort, {
+        this.context.sendTo(sourcePort, {
           type: "hello_ack",
           sourceId: "broker",
           targetId: message.sourceId,
@@ -172,35 +85,35 @@ export class BrowserWindowsSharedWorkerBroker {
         });
         return;
       case "routes_register":
-        this.registerRoutes(message.sourceId, message.routes);
+        registerRoutes(this.context, message.sourceId, message.routes);
         return;
       case "routes_unregister":
-        this.unregisterRoutes(message.sourceId, message.routes);
+        unregisterRoutes(this.context, message.sourceId, message.routes);
         return;
       case "participant_disconnect":
-        this.cleanupDisconnectedParticipant(message.sourceId);
-        this.portsByParticipant.delete(message.sourceId);
+        cleanupDisconnectedParticipant(this.context, message.sourceId);
+        this.context.portsByParticipant.delete(message.sourceId);
         return;
       case "invoke_request":
-        this.handleInvokeRequest(message);
+        handleInvokeRequest(this.context, message);
         return;
       case "invoke_signal":
-        this.handleInvokeSignal(message);
+        handleInvokeSignal(this.context, message);
         return;
       case "invoke_feed_start":
-        this.handleInvokeFeedStart(message);
+        handleInvokeFeedStart(this.context, message);
         return;
       case "invoke_feed_stop":
-        this.handleInvokeFeedStop(message);
+        handleInvokeFeedStop(this.context, message);
         return;
       case "host_response":
-        this.handleHostResponse(message);
+        handleHostResponse(this.context, message);
         return;
       case "host_feed_started":
-        this.handleHostFeedStarted(message);
+        handleHostFeedStarted(this.context, message);
         return;
       case "host_feed_chunk":
-        this.handleHostFeedChunk(message);
+        handleHostFeedChunk(this.context, message);
         return;
       case "heartbeat":
       case "hello_ack":
@@ -214,401 +127,5 @@ export class BrowserWindowsSharedWorkerBroker {
       default:
         return;
     }
-  }
-
-  private registerRoutes(
-    participantId: BrowserWindowsParticipantId,
-    routes: Array<string>,
-  ): void {
-    const participantRoutes =
-      this.routesByParticipant.get(participantId) ?? new Set<string>();
-    this.routesByParticipant.set(participantId, participantRoutes);
-
-    for (const route of routes) {
-      participantRoutes.add(route);
-      const hosts = this.state.routeHosts.get(route) ?? new Set();
-      hosts.add(participantId);
-      this.state.routeHosts.set(route, hosts);
-    }
-  }
-
-  private unregisterRoutes(
-    participantId: BrowserWindowsParticipantId,
-    routes: Array<string>,
-  ): void {
-    const participantRoutes = this.routesByParticipant.get(participantId);
-    if (!participantRoutes) {
-      return;
-    }
-
-    for (const route of routes) {
-      participantRoutes.delete(route);
-      const hosts = this.state.routeHosts.get(route);
-      if (!hosts) {
-        continue;
-      }
-
-      hosts.delete(participantId);
-      if (hosts.size === 0) {
-        this.state.routeHosts.delete(route);
-      }
-    }
-  }
-
-  private unregisterAllRoutes(participantId: BrowserWindowsParticipantId): void {
-    const participantRoutes = this.routesByParticipant.get(participantId);
-    if (!participantRoutes) {
-      return;
-    }
-
-    this.routesByParticipant.delete(participantId);
-    for (const route of participantRoutes) {
-      const hosts = this.state.routeHosts.get(route);
-      if (!hosts) {
-        continue;
-      }
-
-      hosts.delete(participantId);
-      if (hosts.size === 0) {
-        this.state.routeHosts.delete(route);
-      }
-    }
-  }
-
-  private pickHost(route: string): BrowserWindowsParticipantId | undefined {
-    const hosts = this.state.routeHosts.get(route);
-    if (!hosts || hosts.size === 0) {
-      return undefined;
-    }
-
-    return cloneSet(hosts)[0];
-  }
-
-  private handleInvokeRequest(message: BrowserWindowsInvokeRequestMessage): void {
-    const hostId = this.pickHost(message.route);
-    if (!hostId) {
-      this.sendToParticipant(message.sourceId, {
-        type: "invoke_response",
-        sourceId: "broker",
-        targetId: message.sourceId,
-        sentAtMs: Date.now(),
-        requestId: message.requestId,
-        hostId: "broker",
-        error: `No host registered for route: ${message.route}`,
-        meta: message.meta,
-      });
-      return;
-    }
-
-    this.state.pendingRequests.set(message.requestId, {
-      requestId: message.requestId,
-      invokeId: message.sourceId,
-      hostId,
-      route: message.route,
-      createdAtMs: Date.now(),
-    });
-
-    this.sendToParticipant(hostId, {
-      type: "host_request",
-      sourceId: "broker",
-      targetId: hostId,
-      sentAtMs: Date.now(),
-      invokeId: message.sourceId,
-      requestId: message.requestId,
-      route: message.route,
-      operation: "request",
-      payload: message.payload,
-      meta: message.meta,
-    });
-  }
-
-  private handleInvokeSignal(message: BrowserWindowsInvokeSignalMessage): void {
-    const hosts = this.state.routeHosts.get(message.route);
-    if (!hosts || hosts.size === 0) {
-      return;
-    }
-
-    for (const hostId of hosts) {
-      this.sendToParticipant(hostId, {
-        type: "host_signal",
-        sourceId: "broker",
-        targetId: hostId,
-        sentAtMs: Date.now(),
-        invokeId: message.sourceId,
-        requestId: message.requestId,
-        route: message.route,
-        operation: "signal",
-        payload: message.payload,
-        meta: message.meta,
-      });
-    }
-  }
-
-  private handleInvokeFeedStart(
-    message: BrowserWindowsInvokeFeedStartMessage,
-  ): void {
-    const hostId = this.pickHost(message.route);
-    if (!hostId) {
-      this.sendToParticipant(message.sourceId, {
-        type: "invoke_feed_chunk",
-        sourceId: "broker",
-        targetId: message.sourceId,
-        sentAtMs: Date.now(),
-        requestId: message.requestId,
-        hostId: "broker",
-        payloadKey: message.payloadKey,
-        payloadHash: message.payloadHash,
-        chunkType: "error",
-        message: `No host registered for route: ${message.route}`,
-        meta: message.meta,
-      });
-      return;
-    }
-
-    const key = createFeedKey(
-      message.route,
-      message.payloadKey,
-      message.payloadHash,
-    );
-
-    const subscription = this.state.feedSubscriptions.get(key) ?? {
-      route: message.route,
-      payloadKey: message.payloadKey,
-      payloadHash: message.payloadHash,
-      subscribersByRequestId: new Map(),
-    };
-
-    subscription.subscribersByRequestId.set(message.requestId, message.sourceId);
-    this.state.feedSubscriptions.set(key, subscription);
-
-    this.state.pendingRequests.set(message.requestId, {
-      requestId: message.requestId,
-      invokeId: message.sourceId,
-      hostId,
-      route: message.route,
-      createdAtMs: Date.now(),
-    });
-
-    const activeUpstream = this.state.activeUpstreamFeeds.get(key);
-    if (activeUpstream) {
-      return;
-    }
-
-    this.state.activeUpstreamFeeds.set(key, {
-      route: message.route,
-      payloadKey: message.payloadKey,
-      payloadHash: message.payloadHash,
-      ownerHostId: hostId,
-      sourceRequestId: message.requestId,
-      startedAtMs: 0,
-    });
-
-    this.sendToParticipant(hostId, {
-      type: "host_feed_start",
-      sourceId: "broker",
-      targetId: hostId,
-      sentAtMs: Date.now(),
-      invokeId: message.sourceId,
-      requestId: message.requestId,
-      route: message.route,
-      operation: "feed_start",
-      payload: message.payload,
-      payloadKey: message.payloadKey,
-      payloadHash: message.payloadHash,
-      meta: message.meta,
-    });
-  }
-
-  private handleInvokeFeedStop(message: BrowserWindowsInvokeFeedStopMessage): void {
-    const pending = this.state.pendingRequests.get(message.requestId);
-    if (!pending?.hostId) {
-      return;
-    }
-
-    const key = this.removeFeedSubscription(
-      pending.route,
-      message.payloadKey,
-      message.payloadHash,
-      message.requestId,
-    );
-
-    this.state.pendingRequests.delete(message.requestId);
-
-    if (!key) {
-      return;
-    }
-
-    const activeUpstream = this.state.activeUpstreamFeeds.get(key);
-    if (!activeUpstream) {
-      return;
-    }
-
-    this.sendToParticipant(activeUpstream.ownerHostId, {
-      type: "host_feed_stop",
-      sourceId: "broker",
-      targetId: activeUpstream.ownerHostId,
-      sentAtMs: Date.now(),
-      invokeId: pending.invokeId,
-      requestId: activeUpstream.sourceRequestId,
-      route: activeUpstream.route,
-      operation: "feed_stop",
-      payloadKey: activeUpstream.payloadKey,
-      payloadHash: activeUpstream.payloadHash,
-      meta: message.meta,
-    });
-
-    this.state.activeUpstreamFeeds.delete(key);
-  }
-
-  private handleHostResponse(message: BrowserWindowsHostResponseMessage): void {
-    const pending = this.state.pendingRequests.get(message.requestId);
-    if (!pending) {
-      return;
-    }
-
-    this.sendToParticipant(pending.invokeId, {
-      type: "invoke_response",
-      sourceId: "broker",
-      targetId: pending.invokeId,
-      sentAtMs: Date.now(),
-      requestId: message.requestId,
-      hostId: message.hostId,
-      payload: message.payload,
-      error: message.error,
-      meta: message.meta,
-    });
-
-    this.state.pendingRequests.delete(message.requestId);
-  }
-
-  private handleHostFeedStarted(message: BrowserWindowsHostFeedStartedMessage): void {
-    const pending = this.state.pendingRequests.get(message.requestId);
-    if (!pending) {
-      return;
-    }
-
-    const key = createFeedKey(pending.route, message.payloadKey, message.payloadHash);
-    const existing = this.state.activeUpstreamFeeds.get(key);
-    if (!existing) {
-      return;
-    }
-
-    this.state.activeUpstreamFeeds.set(key, {
-      ...existing,
-      ownerHostId: message.hostId,
-      startedAtMs: Date.now(),
-    });
-  }
-
-  private handleHostFeedChunk(message: BrowserWindowsHostFeedChunkMessage): void {
-    const key = this.findUpstreamKeyBySourceRequestId(message.requestId);
-    if (!key) {
-      return;
-    }
-
-    const subscription = this.state.feedSubscriptions.get(key);
-    if (!subscription) {
-      return;
-    }
-
-    for (const [subscriberRequestId, subscriberInvokeId] of subscription.subscribersByRequestId) {
-      this.sendToParticipant(subscriberInvokeId, {
-        type: "invoke_feed_chunk",
-        sourceId: "broker",
-        targetId: subscriberInvokeId,
-        sentAtMs: Date.now(),
-        requestId: subscriberRequestId,
-        hostId: message.hostId,
-        payloadKey: message.payloadKey,
-        payloadHash: message.payloadHash,
-        chunkType: message.chunkType,
-        payload: message.payload,
-        message: message.message,
-        meta: message.meta,
-      });
-    }
-
-    if (message.chunkType === "done" || message.chunkType === "error") {
-      for (const subscriberRequestId of subscription.subscribersByRequestId.keys()) {
-        this.state.pendingRequests.delete(subscriberRequestId);
-      }
-
-      this.state.feedSubscriptions.delete(key);
-      this.state.activeUpstreamFeeds.delete(key);
-    }
-  }
-
-  private failFeedSubscription(
-    subscription: BrowserWindowsFeedSubscriptionState,
-    errorMessage: string,
-  ): void {
-    for (const [subscriberRequestId, subscriberInvokeId] of subscription.subscribersByRequestId) {
-      this.sendToParticipant(subscriberInvokeId, {
-        type: "invoke_feed_chunk",
-        sourceId: "broker",
-        targetId: subscriberInvokeId,
-        sentAtMs: Date.now(),
-        requestId: subscriberRequestId,
-        hostId: "broker",
-        payloadKey: subscription.payloadKey,
-        payloadHash: subscription.payloadHash,
-        chunkType: "error",
-        message: errorMessage,
-      });
-      this.state.pendingRequests.delete(subscriberRequestId);
-    }
-  }
-
-  private removeFeedSubscription(
-    route: string,
-    payloadKey: string,
-    payloadHash: string,
-    requestId: string,
-  ): BrowserWindowsFeedSubscriptionKey | undefined {
-    const key = createFeedKey(route, payloadKey, payloadHash);
-    const subscription = this.state.feedSubscriptions.get(key);
-    if (!subscription) {
-      return undefined;
-    }
-
-    subscription.subscribersByRequestId.delete(requestId);
-
-    if (subscription.subscribersByRequestId.size === 0) {
-      this.state.feedSubscriptions.delete(key);
-      return key;
-    }
-
-    return undefined;
-  }
-
-  private findUpstreamKeyBySourceRequestId(
-    requestId: string,
-  ): BrowserWindowsFeedSubscriptionKey | undefined {
-    for (const [key, state] of this.state.activeUpstreamFeeds.entries()) {
-      if (state.sourceRequestId === requestId) {
-        return key;
-      }
-    }
-
-    return undefined;
-  }
-
-  private sendToParticipant(
-    participantId: BrowserWindowsParticipantId,
-    message: BrowserWindowsProtocolMessage,
-  ): void {
-    const port = this.portsByParticipant.get(participantId);
-    if (!port) {
-      return;
-    }
-
-    this.sendTo(port, message);
-  }
-
-  private sendTo(
-    port: BrowserWindowsMessagePortLike,
-    message: BrowserWindowsProtocolMessage,
-  ): void {
-    port.postMessage(message);
   }
 }
