@@ -279,14 +279,6 @@ export class BrowserWindowsSharedWorkerBroker {
       return;
     }
 
-    this.state.pendingRequests.set(message.requestId, {
-      requestId: message.requestId,
-      invokeId: message.sourceId,
-      hostId,
-      route: message.route,
-      createdAtMs: Date.now(),
-    });
-
     const key = createFeedKey(
       message.route,
       message.payloadKey,
@@ -297,13 +289,33 @@ export class BrowserWindowsSharedWorkerBroker {
       route: message.route,
       payloadKey: message.payloadKey,
       payloadHash: message.payloadHash,
-      requestIds: new Set(),
-      invokeIds: new Set(),
+      subscribersByRequestId: new Map(),
     };
 
-    subscription.requestIds.add(message.requestId);
-    subscription.invokeIds.add(message.sourceId);
+    subscription.subscribersByRequestId.set(message.requestId, message.sourceId);
     this.state.feedSubscriptions.set(key, subscription);
+
+    this.state.pendingRequests.set(message.requestId, {
+      requestId: message.requestId,
+      invokeId: message.sourceId,
+      hostId,
+      route: message.route,
+      createdAtMs: Date.now(),
+    });
+
+    const activeUpstream = this.state.activeUpstreamFeeds.get(key);
+    if (activeUpstream) {
+      return;
+    }
+
+    this.state.activeUpstreamFeeds.set(key, {
+      route: message.route,
+      payloadKey: message.payloadKey,
+      payloadHash: message.payloadHash,
+      ownerHostId: hostId,
+      sourceRequestId: message.requestId,
+      startedAtMs: 0,
+    });
 
     this.sendToParticipant(hostId, {
       type: "host_feed_start",
@@ -327,30 +339,39 @@ export class BrowserWindowsSharedWorkerBroker {
       return;
     }
 
-    const hostId = pending.hostId;
-    this.sendToParticipant(hostId, {
-      type: "host_feed_stop",
-      sourceId: "broker",
-      targetId: hostId,
-      sentAtMs: Date.now(),
-      invokeId: pending.invokeId,
-      requestId: message.requestId,
-      route: pending.route,
-      operation: "feed_stop",
-      payloadKey: message.payloadKey,
-      payloadHash: message.payloadHash,
-      meta: message.meta,
-    });
-
-    this.removeFeedSubscription(
+    const key = this.removeFeedSubscription(
       pending.route,
       message.payloadKey,
       message.payloadHash,
       message.requestId,
-      pending.invokeId,
     );
 
     this.state.pendingRequests.delete(message.requestId);
+
+    if (!key) {
+      return;
+    }
+
+    const activeUpstream = this.state.activeUpstreamFeeds.get(key);
+    if (!activeUpstream) {
+      return;
+    }
+
+    this.sendToParticipant(activeUpstream.ownerHostId, {
+      type: "host_feed_stop",
+      sourceId: "broker",
+      targetId: activeUpstream.ownerHostId,
+      sentAtMs: Date.now(),
+      invokeId: pending.invokeId,
+      requestId: activeUpstream.sourceRequestId,
+      route: activeUpstream.route,
+      operation: "feed_stop",
+      payloadKey: activeUpstream.payloadKey,
+      payloadHash: activeUpstream.payloadHash,
+      meta: message.meta,
+    });
+
+    this.state.activeUpstreamFeeds.delete(key);
   }
 
   private handleHostResponse(message: BrowserWindowsHostResponseMessage): void {
@@ -375,52 +396,59 @@ export class BrowserWindowsSharedWorkerBroker {
   }
 
   private handleHostFeedStarted(message: BrowserWindowsHostFeedStartedMessage): void {
-    const key = createFeedKey(
-      this.state.pendingRequests.get(message.requestId)?.route ?? "",
-      message.payloadKey,
-      message.payloadHash,
-    );
-
-    this.state.activeUpstreamFeeds.set(key, {
-      route: this.state.pendingRequests.get(message.requestId)?.route ?? "",
-      payloadKey: message.payloadKey,
-      payloadHash: message.payloadHash,
-      ownerHostId: message.hostId,
-      sourceRequestId: message.requestId,
-      startedAtMs: Date.now(),
-    });
-  }
-
-  private handleHostFeedChunk(message: BrowserWindowsHostFeedChunkMessage): void {
     const pending = this.state.pendingRequests.get(message.requestId);
     if (!pending) {
       return;
     }
 
-    this.sendToParticipant(pending.invokeId, {
-      type: "invoke_feed_chunk",
-      sourceId: "broker",
-      targetId: pending.invokeId,
-      sentAtMs: Date.now(),
-      requestId: message.requestId,
-      hostId: message.hostId,
-      payloadKey: message.payloadKey,
-      payloadHash: message.payloadHash,
-      chunkType: message.chunkType,
-      payload: message.payload,
-      message: message.message,
-      meta: message.meta,
+    const key = createFeedKey(pending.route, message.payloadKey, message.payloadHash);
+    const existing = this.state.activeUpstreamFeeds.get(key);
+    if (!existing) {
+      return;
+    }
+
+    this.state.activeUpstreamFeeds.set(key, {
+      ...existing,
+      ownerHostId: message.hostId,
+      startedAtMs: Date.now(),
     });
+  }
+
+  private handleHostFeedChunk(message: BrowserWindowsHostFeedChunkMessage): void {
+    const key = this.findUpstreamKeyBySourceRequestId(message.requestId);
+    if (!key) {
+      return;
+    }
+
+    const subscription = this.state.feedSubscriptions.get(key);
+    if (!subscription) {
+      return;
+    }
+
+    for (const [subscriberRequestId, subscriberInvokeId] of subscription.subscribersByRequestId) {
+      this.sendToParticipant(subscriberInvokeId, {
+        type: "invoke_feed_chunk",
+        sourceId: "broker",
+        targetId: subscriberInvokeId,
+        sentAtMs: Date.now(),
+        requestId: subscriberRequestId,
+        hostId: message.hostId,
+        payloadKey: message.payloadKey,
+        payloadHash: message.payloadHash,
+        chunkType: message.chunkType,
+        payload: message.payload,
+        message: message.message,
+        meta: message.meta,
+      });
+    }
 
     if (message.chunkType === "done" || message.chunkType === "error") {
-      this.removeFeedSubscription(
-        pending.route,
-        message.payloadKey,
-        message.payloadHash,
-        message.requestId,
-        pending.invokeId,
-      );
-      this.state.pendingRequests.delete(message.requestId);
+      for (const subscriberRequestId of subscription.subscribersByRequestId.keys()) {
+        this.state.pendingRequests.delete(subscriberRequestId);
+      }
+
+      this.state.feedSubscriptions.delete(key);
+      this.state.activeUpstreamFeeds.delete(key);
     }
   }
 
@@ -429,21 +457,33 @@ export class BrowserWindowsSharedWorkerBroker {
     payloadKey: string,
     payloadHash: string,
     requestId: string,
-    invokeId: string,
-  ): void {
+  ): BrowserWindowsFeedSubscriptionKey | undefined {
     const key = createFeedKey(route, payloadKey, payloadHash);
     const subscription = this.state.feedSubscriptions.get(key);
     if (!subscription) {
-      return;
+      return undefined;
     }
 
-    subscription.requestIds.delete(requestId);
-    subscription.invokeIds.delete(invokeId);
+    subscription.subscribersByRequestId.delete(requestId);
 
-    if (subscription.requestIds.size === 0) {
+    if (subscription.subscribersByRequestId.size === 0) {
       this.state.feedSubscriptions.delete(key);
-      this.state.activeUpstreamFeeds.delete(key);
+      return key;
     }
+
+    return undefined;
+  }
+
+  private findUpstreamKeyBySourceRequestId(
+    requestId: string,
+  ): BrowserWindowsFeedSubscriptionKey | undefined {
+    for (const [key, state] of this.state.activeUpstreamFeeds.entries()) {
+      if (state.sourceRequestId === requestId) {
+        return key;
+      }
+    }
+
+    return undefined;
   }
 
   private sendToParticipant(
