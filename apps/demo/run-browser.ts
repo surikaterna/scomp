@@ -4,7 +4,7 @@ import {
 } from "@scomp/client";
 import { createScompService } from "@scomp/core";
 import { createWebSocketBrowserTransport } from "@scomp/transport-websocket-browser";
-import { createWebSocketServerTransport } from "@scomp/transport-websocket-server";
+import { createWebSocketServerTransport } from "@scomp/transport-websocket-server-node";
 import type {
   ScompTransportSecurityContext,
   ScompTransportSecurityPolicy,
