@@ -9,6 +9,13 @@ Typed service contract + transport toolkit.
 - [llms.txt](llms.txt) — practical SCOMP mental model, modern API usage, transport matrix, security caveats, and common mistakes.
 - [docs/llms-transports.md](docs/llms-transports.md) — concise runnable transport setup patterns.
 
+## Validation commands (browser transport quality gates)
+
+- `npm run lint`
+- `npm test`
+- `bun run --filter='@scomp/transport-browser-windows' test`
+- `bun run --filter='@scomp/transport-browser-windows' lint`
+
 ## Default authoring model (strict + grouped)
 
 SCOMP defaults to **strict, grouped service authoring** with three operation sections:
