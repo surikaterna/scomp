@@ -98,6 +98,7 @@ export function shutdownTransport(options: {
         operation: "feed_stop",
         payloadKey: feed.payloadKey,
         payloadHash: feed.payloadHash,
+        meta: feed.meta,
       });
       feed.stopSent = true;
     }

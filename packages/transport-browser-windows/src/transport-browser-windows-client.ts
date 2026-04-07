@@ -149,15 +149,20 @@ export function feedWithContext(
         route,
         payloadKey,
         payloadHash,
+        meta: undefined,
       };
       context.feedStates.set(requestId, state);
 
       let feedStarted = false;
 
       try {
+        const feedStartMeta = (
+          await context.composeMetaForOperation(route, "feed_start", payload, options)
+        ).meta;
+        state.meta = feedStartMeta;
+
         context.postMessage({
-          meta: (await context.composeMetaForOperation(route, "feed_start", payload, options))
-            .meta,
+          meta: feedStartMeta,
           type: "invoke_feed_start",
           sourceId: context.participantId,
           sentAtMs: Date.now(),
@@ -201,15 +206,18 @@ export function feedWithContext(
       } finally {
         context.feedStates.delete(requestId);
         if (feedStarted && !state.stopSent) {
+          const feedStopMeta = (
+            await context.composeMetaForOperation(
+              route,
+              "feed_stop",
+              { payloadKey: state.payloadKey, payloadHash: state.payloadHash },
+              options,
+            )
+          ).meta;
+          state.meta = feedStopMeta;
+
           context.postMessage({
-            meta: (
-              await context.composeMetaForOperation(
-                route,
-                "feed_stop",
-                { payloadKey: state.payloadKey, payloadHash: state.payloadHash },
-                options,
-              )
-            ).meta,
+            meta: feedStopMeta,
             type: "invoke_feed_stop",
             sourceId: context.participantId,
             sentAtMs: Date.now(),

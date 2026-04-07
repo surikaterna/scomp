@@ -1,3 +1,4 @@
+import type { ScompTransportMessageMeta } from "@scomp/types";
 import type {
   BrowserWindowsCanonicalPayloadHash,
   BrowserWindowsParticipantId,
@@ -11,6 +12,7 @@ export interface BrowserWindowsPendingRequestState {
   hostId?: BrowserWindowsParticipantId;
   route: string;
   createdAtMs: number;
+  meta?: ScompTransportMessageMeta;
 }
 
 export interface BrowserWindowsFeedSubscriptionState {
@@ -21,6 +23,7 @@ export interface BrowserWindowsFeedSubscriptionState {
     BrowserWindowsRequestId,
     BrowserWindowsParticipantId
   >;
+  metaByRequestId: Map<BrowserWindowsRequestId, ScompTransportMessageMeta | undefined>;
 }
 
 export interface BrowserWindowsUpstreamFeedOwnerState {

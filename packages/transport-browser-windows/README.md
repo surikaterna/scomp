@@ -159,6 +159,23 @@ This transport is designed for **same-origin trust domains**.
 - If identity/authorization is needed, provide `security.authenticate` and `security.authorize` hooks.
 - Validate and enforce sensitive auth decisions in trusted backend/server transports.
 
+## Metadata policy for teardown/disconnect cleanup
+
+Metadata is preserved deterministically for normal invoke/host paths (`request`, `signal`, `feed_start`, `feed_stop`).
+
+For broker-generated cleanup/disconnect system messages:
+
+- Broker keeps invoke metadata when routing host disconnect errors back to callers.
+- Cleanup-generated feed error/stop notifications include broker system tags:
+  - `tags["scomp.broker.system"] = "true"`
+  - `tags["scomp.broker.reason"]` in:
+    - `disconnect-cleanup-feed-stop`
+    - `disconnect-cleanup-feed-error`
+    - `disconnect-host-response-error`
+- Host-originated feed chunks are fanned out using each subscriber’s original feed metadata (subscriber parity), so one subscriber’s metadata is not leaked to another.
+
+Security checks remain enforced on inbound host operations, including `feed_stop` during teardown.
+
 ## Explicit non-goals
 
 - Cross-origin communication.

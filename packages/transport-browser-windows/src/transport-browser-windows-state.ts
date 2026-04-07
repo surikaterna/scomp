@@ -1,3 +1,4 @@
+import type { ScompTransportMessageMeta } from "@scomp/types";
 import type { BrowserWindowsRequestId } from "./types";
 
 export interface PendingRequestState {
@@ -15,6 +16,7 @@ export interface FeedQueueState {
   route: string;
   payloadKey: string;
   payloadHash: string;
+  meta?: ScompTransportMessageMeta;
 }
 
 export interface HostedFeedState {
@@ -66,6 +68,7 @@ export function terminateFeedState(
     operation: "feed_stop";
     payloadKey: string;
     payloadHash: string;
+    meta?: ScompTransportMessageMeta;
   }) => void,
   participantId: string,
 ): void {
@@ -95,6 +98,7 @@ export function terminateFeedState(
       operation: "feed_stop",
       payloadKey: state.payloadKey,
       payloadHash: state.payloadHash,
+      meta: state.meta,
     });
     state.stopSent = true;
   }

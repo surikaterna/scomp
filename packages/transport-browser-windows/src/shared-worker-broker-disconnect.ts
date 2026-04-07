@@ -1,6 +1,7 @@
 import {
   failFeedSubscription,
 } from "./shared-worker-broker-feed";
+import { withBrokerSystemMeta } from "./shared-worker-broker-meta";
 import { unregisterAllRoutes } from "./shared-worker-broker-routes";
 import type { BrowserWindowsParticipantId } from "./types";
 import { type BrokerContext } from "./shared-worker-broker-context";
@@ -12,12 +13,19 @@ export function cleanupDisconnectedParticipant(
   unregisterAllRoutes(context, participantId);
 
   for (const [key, subscription] of context.state.feedSubscriptions.entries()) {
+    const activeUpstream = context.state.activeUpstreamFeeds.get(key);
+    const sourceRequestMeta = activeUpstream
+      ? (context.state.pendingRequests.get(activeUpstream.sourceRequestId)?.meta ??
+        subscription.metaByRequestId.get(activeUpstream.sourceRequestId))
+      : undefined;
+
     for (const [requestId, invokeId] of subscription.subscribersByRequestId.entries()) {
       if (invokeId !== participantId) {
         continue;
       }
 
       subscription.subscribersByRequestId.delete(requestId);
+      subscription.metaByRequestId.delete(requestId);
       context.state.pendingRequests.delete(requestId);
     }
 
@@ -26,7 +34,6 @@ export function cleanupDisconnectedParticipant(
     }
 
     context.state.feedSubscriptions.delete(key);
-    const activeUpstream = context.state.activeUpstreamFeeds.get(key);
     if (!activeUpstream) {
       continue;
     }
@@ -42,6 +49,7 @@ export function cleanupDisconnectedParticipant(
       operation: "feed_stop",
       payloadKey: activeUpstream.payloadKey,
       payloadHash: activeUpstream.payloadHash,
+      meta: withBrokerSystemMeta(sourceRequestMeta, "disconnect-cleanup-feed-stop"),
     });
 
     context.state.activeUpstreamFeeds.delete(key);
@@ -82,6 +90,7 @@ export function cleanupDisconnectedParticipant(
         requestId: pending.requestId,
         hostId: participantId,
         error: `Host disconnected for route: ${pending.route}`,
+        meta: withBrokerSystemMeta(pending.meta, "disconnect-host-response-error"),
       });
       context.state.pendingRequests.delete(requestId);
     }
