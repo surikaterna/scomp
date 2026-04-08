@@ -6,7 +6,7 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc -b tsconfig.json",
-    "lint": "echo \"No lint configured for @scomp/transport-websocket-server-node\"",
+    "lint": "bunx tsc -b tsconfig.json --pretty false",
     "test": "jest --config jest.config.cjs"
   },
   "dependencies": {

@@ -1,0 +1,27 @@
+{
+  "name": "@scomp/transport-browser-windows",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./worker-entry": {
+      "types": "./dist/worker-entry.d.ts",
+      "default": "./dist/worker-entry.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "lint": "bunx tsc -b tsconfig.json --pretty false",
+    "test": "jest --config jest.config.cjs --passWithNoTests",
+    "smoke:bundler": "bun ../../check-transport-browser-windows-bundler-smoke.mjs"
+  },
+  "dependencies": {
+    "@scomp/core": "workspace:*",
+    "@scomp/types": "workspace:*"
+  }
+}

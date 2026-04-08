@@ -82,6 +82,14 @@
         "slf": "^2.0.3",
       },
     },
+    "packages/transport-browser-windows": {
+      "name": "@scomp/transport-browser-windows",
+      "version": "0.1.0",
+      "dependencies": {
+        "@scomp/core": "workspace:*",
+        "@scomp/types": "workspace:*",
+      },
+    },
     "packages/transport-inprocess": {
       "name": "@scomp/transport-inprocess",
       "version": "0.1.0",
@@ -524,6 +532,8 @@
     "@scomp/demo": ["@scomp/demo@workspace:apps/demo"],
 
     "@scomp/legacy": ["@scomp/legacy@workspace:packages/scomp-legacy"],
+
+    "@scomp/transport-browser-windows": ["@scomp/transport-browser-windows@workspace:packages/transport-browser-windows"],
 
     "@scomp/transport-inprocess": ["@scomp/transport-inprocess@workspace:packages/transport-inprocess"],
 

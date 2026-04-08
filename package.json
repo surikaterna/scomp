@@ -3,12 +3,13 @@
   "private": true,
   "packageManager": "bun@1.3.11",
   "scripts": {
-    "build": "turbo run build --concurrency=2",
+    "build": "bunx turbo run build --concurrency=2",
     "build:ts": "tsc -b tsconfig.build.json",
     "check:websocket-server-imports": "bun ./check-websocket-server-imports.mjs",
     "check:websocket-server-imports:fixtures": "bun ./check-websocket-server-imports-fixtures.mjs",
-    "lint": "bun run check:websocket-server-imports && turbo run lint",
-    "test": "turbo run test --concurrency=2"
+    "smoke:transport-browser-windows": "bun ./check-transport-browser-windows-bundler-smoke.mjs",
+    "lint": "bun run check:websocket-server-imports && bunx turbo run lint",
+    "test": "bunx turbo run test --concurrency=2"
   },
   "devDependencies": {
     "@babel/core": "^7.28.4",

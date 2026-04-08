@@ -4,13 +4,40 @@ import {
 } from "@scomp/client";
 import { createScompService } from "@scomp/core";
 import { createWebSocketBrowserTransport } from "@scomp/transport-websocket-browser";
-import { createWebSocketServerTransport } from "@scomp/transport-websocket-server";
+import { createWebSocketServerTransport } from "@scomp/transport-websocket-server-node";
 import type {
   ScompTransportSecurityContext,
   ScompTransportSecurityPolicy,
 } from "@scomp/types";
 
-const WsWebSocket = require("ws") as any;
+type WsSocketEvent = "open" | "close" | "error";
+
+interface WsSocketLike {
+  readyState: number;
+  send(payload: string): void;
+  close(): void;
+  on(type: "message", listener: (data: unknown) => void): void;
+  on(type: WsSocketEvent, listener: (event: unknown) => void): void;
+  off(type: "message", listener: (data: unknown) => void): void;
+  off(type: WsSocketEvent, listener: (event: unknown) => void): void;
+}
+
+type WsSocketCtor = new (url: string, protocols?: string | Array<string>) => WsSocketLike;
+
+interface BrowserCompatibleSocket {
+  readyState: number;
+  send(payload: string): void;
+  close(): void;
+  addEventListener(type: string, listener: (event: unknown) => void): void;
+  removeEventListener(type: string, listener: (event: unknown) => void): void;
+}
+
+type BrowserCompatibleSocketCtor = new (
+  url: string,
+  protocols?: string | Array<string>,
+) => BrowserCompatibleSocket;
+
+const WsWebSocket = require("ws") as WsSocketCtor;
 import type {
   DemoApiContract,
   LiveTickerInput,
@@ -24,7 +51,7 @@ const routeHints: ClientRouteHints = {
 };
 
 class WsBrowserAdapter {
-  private readonly socket: any;
+  private readonly socket: WsSocketLike;
 
   constructor(url: string, protocols?: string | Array<string>) {
     this.socket = new WsWebSocket(url, protocols as never);
@@ -133,10 +160,7 @@ async function runBrowserDemo() {
 
   const transport = createWebSocketBrowserTransport({
     url,
-    webSocketCtor: WsBrowserAdapter as unknown as new (
-      url: string,
-      protocols?: string | Array<string>,
-    ) => any,
+    webSocketCtor: WsBrowserAdapter as unknown as BrowserCompatibleSocketCtor,
     meta: {
       traceId: "demo-browser-trace",
       tags: { source: "demo-browser" },

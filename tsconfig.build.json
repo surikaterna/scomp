@@ -5,6 +5,7 @@
     { "path": "./packages/core" },
     { "path": "./packages/client" },
     { "path": "./packages/transport-rabbitmq" },
+    { "path": "./packages/transport-browser-windows" },
     { "path": "./packages/transport-inprocess" },
     { "path": "./packages/transport-websocket-client" },
     { "path": "./packages/transport-websocket-server-runtime" },
