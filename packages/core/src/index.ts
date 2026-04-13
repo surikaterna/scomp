@@ -2,8 +2,8 @@
  * Core package entrypoint for service and feed primitives.
  */
 export const createCore = () => ({
-  status: 'ok'
-})
+  status: "ok",
+});
 
 export {
   createScompFeed,
@@ -12,16 +12,17 @@ export {
   fromLegacyObservable,
   ScompFeedSubject,
   type LegacyObservableLike,
-  type ScompFeed
-} from './feed'
+  type ScompFeed,
+} from "./feed";
 
 export {
   createScompClient,
   createScompService,
+  createScompServiceFromDescriptor,
   ScompServiceBuilder,
   type ScompClientForService,
   type ScompServiceDefinition,
   type ScompServiceDescriptor,
   type ScompServiceMethodKind,
-  type ScompTransport
-} from './service'
+  type ScompTransport,
+} from "./service";

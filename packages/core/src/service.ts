@@ -1,8 +1,10 @@
-import { type ScompFeed } from './feed';
+import { type ScompFeed } from "./feed";
 
-type RequestHandler = (...args: Array<any>) => any;
-type FeedHandler = (...args: Array<any>) => ScompFeed<any, any> | AsyncIterable<any> | Iterable<any>;
-type CommandHandler = (...args: Array<any>) => void | Promise<void>;
+type RequestHandler = (...args: Array<unknown>) => unknown;
+type FeedHandler = (
+  ...args: Array<unknown>
+) => ScompFeed<unknown, unknown> | AsyncIterable<unknown> | Iterable<unknown>;
+type CommandHandler = (...args: Array<unknown>) => void | Promise<void>;
 
 type RequestHandlers = Record<string, RequestHandler>;
 type FeedHandlers = Record<string, FeedHandler>;
@@ -11,13 +13,13 @@ type CommandHandlers = Record<string, CommandHandler>;
 type ServiceMethods<
   Requests extends RequestHandlers,
   Feeds extends FeedHandlers,
-  Commands extends CommandHandlers
+  Commands extends CommandHandlers,
 > = Requests & Feeds & Commands;
 
 /**
  * Runtime method category used by service definitions.
  */
-export type ScompServiceMethodKind = 'request' | 'feed' | 'command';
+export type ScompServiceMethodKind = "request" | "feed" | "command";
 
 /**
  * Canonical, executable shape of a scomp service.
@@ -25,7 +27,7 @@ export type ScompServiceMethodKind = 'request' | 'feed' | 'command';
 export interface ScompServiceDefinition<
   Requests extends RequestHandlers,
   Feeds extends FeedHandlers,
-  Commands extends CommandHandlers
+  Commands extends CommandHandlers,
 > {
   /** Request/response handlers that return one value. */
   readonly requests: Requests;
@@ -45,7 +47,7 @@ export interface ScompServiceDefinition<
 export interface ScompServiceDescriptor<
   Requests extends RequestHandlers,
   Feeds extends FeedHandlers,
-  Commands extends CommandHandlers
+  Commands extends CommandHandlers,
 > {
   requests?: Requests;
   feeds?: Feeds;
@@ -57,11 +59,14 @@ export interface ScompServiceDescriptor<
  */
 export interface ScompTransport {
   /** Performs a unary request/response call. */
-  request<ResponseType = unknown>(methodName: string, args: ReadonlyArray<unknown>): Promise<ResponseType>;
+  request<ResponseType = unknown>(
+    methodName: string,
+    args: ReadonlyArray<unknown>,
+  ): Promise<ResponseType>;
   /** Starts observing values from a feed method. */
   observe<ResponseType = unknown, ErrorType = Error>(
     methodName: string,
-    args: ReadonlyArray<unknown>
+    args: ReadonlyArray<unknown>,
   ): ScompFeed<ResponseType, ErrorType>;
   /** Invokes a command method with no response contract. */
   fireAndForget(methodName: string, args: ReadonlyArray<unknown>): void;
@@ -83,63 +88,128 @@ type FeedResponse<Handler extends FeedHandler> =
         : ScompFeed<unknown, unknown>;
 
 type ClientFeedMethods<Feeds extends FeedHandlers> = {
-  [MethodName in keyof Feeds]: (...args: Parameters<Feeds[MethodName]>) => FeedResponse<Feeds[MethodName]>;
+  [MethodName in keyof Feeds]: (
+    ...args: Parameters<Feeds[MethodName]>
+  ) => FeedResponse<Feeds[MethodName]>;
 };
 
 type ClientCommandMethods<Commands extends CommandHandlers> = {
-  [MethodName in keyof Commands]: (...args: Parameters<Commands[MethodName]>) => void;
+  [MethodName in keyof Commands]: (
+    ...args: Parameters<Commands[MethodName]>
+  ) => void;
 };
 
 /**
  * Type-safe client API inferred from a service definition.
  */
 export type ScompClientForService<
-  Service extends ScompServiceDefinition<RequestHandlers, FeedHandlers, CommandHandlers>
-> = ClientRequestMethods<Service['requests']>
-  & ClientFeedMethods<Service['feeds']>
-  & ClientCommandMethods<Service['commands']>;
+  Service extends ScompServiceDefinition<
+    RequestHandlers,
+    FeedHandlers,
+    CommandHandlers
+  >,
+> = ClientRequestMethods<Service["requests"]> &
+  ClientFeedMethods<Service["feeds"]> &
+  ClientCommandMethods<Service["commands"]>;
 
 type EmptyMethods = Record<never, never>;
+
+type ServiceHandler = (...params: Array<unknown>) => unknown;
+type ServiceHandlerMap = Record<string, ServiceHandler>;
+
+function stringKeys<T extends Record<string, unknown>>(
+  value: T,
+): Array<Extract<keyof T, string>> {
+  return Object.keys(value) as Array<Extract<keyof T, string>>;
+}
+
+function mergeHandlers(
+  requests: RequestHandlers,
+  feeds: FeedHandlers,
+  commands: CommandHandlers,
+): ServiceHandlerMap {
+  return { ...requests, ...feeds, ...commands };
+}
+
+function assignMethodKind(
+  kinds: Record<string, ScompServiceMethodKind>,
+  handlers: Record<string, unknown>,
+  kind: ScompServiceMethodKind,
+) {
+  for (const methodName of Object.keys(handlers)) {
+    kinds[methodName] = kind;
+  }
+}
+
+function buildMethodKinds(
+  requests: RequestHandlers,
+  feeds: FeedHandlers,
+  commands: CommandHandlers,
+): Readonly<Record<string, ScompServiceMethodKind>> {
+  const kinds: Record<string, ScompServiceMethodKind> = {};
+  assignMethodKind(kinds, requests, "request");
+  assignMethodKind(kinds, feeds, "feed");
+  assignMethodKind(kinds, commands, "command");
+  return kinds;
+}
+
+function ensureUniqueMethodNames(
+  requests: RequestHandlers,
+  feeds: FeedHandlers,
+  commands: CommandHandlers,
+) {
+  const claimedBy = new Map<string, ScompServiceMethodKind>();
+
+  const register = (
+    kind: ScompServiceMethodKind,
+    handlers: Record<string, unknown>,
+  ) => {
+    for (const methodName of Object.keys(handlers)) {
+      const existingKind = claimedBy.get(methodName);
+      if (existingKind) {
+        throw new Error(
+          `Service method "${methodName}" is defined as both ${existingKind} and ${kind}. ` +
+            "Each method name must be unique across requests, feeds, and commands.",
+        );
+      }
+      claimedBy.set(methodName, kind);
+    }
+  };
+
+  register("request", requests);
+  register("feed", feeds);
+  register("command", commands);
+}
+
+function createServiceInvoker(handlers: ServiceHandlerMap) {
+  return (methodName: string, args: ReadonlyArray<unknown>): unknown => {
+    const method = handlers[methodName];
+    if (!method) {
+      throw new Error(`Unknown service method: ${methodName}`);
+    }
+    return method(...args);
+  };
+}
 
 function buildServiceDefinition<
   Requests extends RequestHandlers,
   Feeds extends FeedHandlers,
-  Commands extends CommandHandlers
+  Commands extends CommandHandlers,
 >(
   requests: Requests,
   feeds: Feeds,
-  commands: Commands
+  commands: Commands,
 ): ScompServiceDefinition<Requests, Feeds, Commands> {
-  const handlers: ServiceMethods<Requests, Feeds, Commands> = {
-    ...requests,
-    ...feeds,
-    ...commands
-  };
-
-  const kinds: Record<string, ScompServiceMethodKind> = {};
-
-  for (const methodName of Object.keys(requests)) {
-    kinds[methodName] = 'request';
-  }
-  for (const methodName of Object.keys(feeds)) {
-    kinds[methodName] = 'feed';
-  }
-  for (const methodName of Object.keys(commands)) {
-    kinds[methodName] = 'command';
-  }
+  ensureUniqueMethodNames(requests, feeds, commands);
+  const handlers = mergeHandlers(requests, feeds, commands);
+  const invoke = createServiceInvoker(handlers);
 
   return {
     requests,
     feeds,
     commands,
-    kinds,
-    invoke(methodName: string, args: ReadonlyArray<unknown>) {
-      const method = (handlers as Record<string, (...params: Array<unknown>) => unknown>)[methodName];
-      if (!method) {
-        throw new Error(`Unknown service method: ${methodName}`);
-      }
-      return method(...args);
-    }
+    kinds: buildMethodKinds(requests, feeds, commands),
+    invoke,
   };
 }
 
@@ -149,7 +219,7 @@ function buildServiceDefinition<
 export class ScompServiceBuilder<
   Requests extends RequestHandlers,
   Feeds extends FeedHandlers,
-  Commands extends CommandHandlers
+  Commands extends CommandHandlers,
 > {
   private readonly _requests: Requests;
   private readonly _feeds: Feeds;
@@ -164,64 +234,81 @@ export class ScompServiceBuilder<
     this._commands = commands;
   }
 
+  private copy<
+    NextRequests extends RequestHandlers,
+    NextFeeds extends FeedHandlers,
+    NextCommands extends CommandHandlers,
+  >(requests: NextRequests, feeds: NextFeeds, commands: NextCommands) {
+    return new ScompServiceBuilder<NextRequests, NextFeeds, NextCommands>(
+      requests,
+      feeds,
+      commands,
+    );
+  }
+
   /**
    * Adds a request/response method.
    */
-  request<
-    MethodName extends string,
-    Handler extends RequestHandler
-  >(
-    methodName: MethodName extends keyof ServiceMethods<Requests, Feeds, Commands> ? never : MethodName,
-    handler: Handler
+  request<MethodName extends string, Handler extends RequestHandler>(
+    methodName: MethodName extends keyof ServiceMethods<
+      Requests,
+      Feeds,
+      Commands
+    >
+      ? never
+      : MethodName,
+    handler: Handler,
   ) {
-    return new ScompServiceBuilder<Requests & Record<MethodName, Handler>, Feeds, Commands>(
+    return this.copy(
       {
         ...this._requests,
-        [methodName]: handler
+        [methodName]: handler,
       } as Requests & Record<MethodName, Handler>,
       this._feeds,
-      this._commands
+      this._commands,
     );
   }
 
   /**
    * Adds a feed method.
    */
-  feed<
-    MethodName extends string,
-    Handler extends FeedHandler
-  >(
-    methodName: MethodName extends keyof ServiceMethods<Requests, Feeds, Commands> ? never : MethodName,
-    handler: Handler
+  feed<MethodName extends string, Handler extends FeedHandler>(
+    methodName: MethodName extends keyof ServiceMethods<
+      Requests,
+      Feeds,
+      Commands
+    >
+      ? never
+      : MethodName,
+    handler: Handler,
   ) {
-    return new ScompServiceBuilder<Requests, Feeds & Record<MethodName, Handler>, Commands>(
+    return this.copy(
       this._requests,
       {
         ...this._feeds,
-        [methodName]: handler
+        [methodName]: handler,
       } as Feeds & Record<MethodName, Handler>,
-      this._commands
+      this._commands,
     );
   }
 
   /**
    * Adds a fire-and-forget command method.
    */
-  command<
-    MethodName extends string,
-    Handler extends CommandHandler
-  >(
-    methodName: MethodName extends keyof ServiceMethods<Requests, Feeds, Commands> ? never : MethodName,
-    handler: Handler
+  command<MethodName extends string, Handler extends CommandHandler>(
+    methodName: MethodName extends keyof ServiceMethods<
+      Requests,
+      Feeds,
+      Commands
+    >
+      ? never
+      : MethodName,
+    handler: Handler,
   ) {
-    return new ScompServiceBuilder<Requests, Feeds, Commands & Record<MethodName, Handler>>(
-      this._requests,
-      this._feeds,
-      {
-        ...this._commands,
-        [methodName]: handler
-      } as Commands & Record<MethodName, Handler>
-    );
+    return this.copy(this._requests, this._feeds, {
+      ...this._commands,
+      [methodName]: handler,
+    } as Commands & Record<MethodName, Handler>);
   }
 
   /**
@@ -235,28 +322,28 @@ export class ScompServiceBuilder<
 /**
  * Creates an empty fluent service builder.
  */
-export function createScompService(): ScompServiceBuilder<EmptyMethods, EmptyMethods, EmptyMethods>;
+export function createScompService(): ScompServiceBuilder<
+  EmptyMethods,
+  EmptyMethods,
+  EmptyMethods
+> {
+  return new ScompServiceBuilder<EmptyMethods, EmptyMethods, EmptyMethods>(
+    {},
+    {},
+    {},
+  );
+}
+
 /**
  * Creates a service definition from plain handler maps.
  */
-export function createScompService<
+export function createScompServiceFromDescriptor<
   Requests extends RequestHandlers,
   Feeds extends FeedHandlers,
-  Commands extends CommandHandlers
+  Commands extends CommandHandlers,
 >(
-  descriptor: ScompServiceDescriptor<Requests, Feeds, Commands>
-): ScompServiceDefinition<Requests, Feeds, Commands>;
-export function createScompService<
-  Requests extends RequestHandlers,
-  Feeds extends FeedHandlers,
-  Commands extends CommandHandlers
->(
-  descriptor?: ScompServiceDescriptor<Requests, Feeds, Commands>
-) {
-  if (!descriptor) {
-    return new ScompServiceBuilder<EmptyMethods, EmptyMethods, EmptyMethods>({}, {}, {});
-  }
-
+  descriptor: ScompServiceDescriptor<Requests, Feeds, Commands>,
+): ScompServiceDefinition<Requests, Feeds, Commands> {
   const requests = (descriptor.requests || {}) as Requests;
   const feeds = (descriptor.feeds || {}) as Feeds;
   const commands = (descriptor.commands || {}) as Commands;
@@ -267,22 +354,25 @@ export function createScompService<
  * Creates a transport-backed client from a service definition.
  */
 export function createScompClient<
-  Service extends ScompServiceDefinition<RequestHandlers, FeedHandlers, CommandHandlers>
->(
-  service: Service,
-  transport: ScompTransport
-): ScompClientForService<Service> {
+  Service extends ScompServiceDefinition<
+    RequestHandlers,
+    FeedHandlers,
+    CommandHandlers
+  >,
+>(service: Service, transport: ScompTransport): ScompClientForService<Service> {
   const client: Record<string, unknown> = {};
 
-  for (const methodName of Object.keys(service.requests)) {
-    client[methodName] = (...args: Array<unknown>) => transport.request(methodName, args);
+  for (const methodName of stringKeys(service.requests)) {
+    client[methodName] = (...args: Array<unknown>) =>
+      transport.request(methodName, args);
   }
 
-  for (const methodName of Object.keys(service.feeds)) {
-    client[methodName] = (...args: Array<unknown>) => transport.observe(methodName, args);
+  for (const methodName of stringKeys(service.feeds)) {
+    client[methodName] = (...args: Array<unknown>) =>
+      transport.observe(methodName, args);
   }
 
-  for (const methodName of Object.keys(service.commands)) {
+  for (const methodName of stringKeys(service.commands)) {
     client[methodName] = (...args: Array<unknown>) => {
       transport.fireAndForget(methodName, args);
     };

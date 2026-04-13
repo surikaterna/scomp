@@ -4,7 +4,10 @@
  * @typeParam ResponseType - Type emitted by {@link ScompFeed.next} and async iteration.
  * @typeParam ErrorType - Type emitted by {@link ScompFeed.error}.
  */
-export interface ScompFeed<ResponseType = unknown, ErrorType = Error> extends AsyncIterable<ResponseType> {
+export interface ScompFeed<
+  ResponseType = unknown,
+  ErrorType = Error,
+> extends AsyncIterable<ResponseType> {
   /** Registers a listener for next values. */
   onNext(fn: (res: ResponseType) => void): this;
   /** Registers a listener for terminal errors. */
@@ -26,22 +29,71 @@ export interface ScompFeed<ResponseType = unknown, ErrorType = Error> extends As
 }
 
 type FeedEvent<ResponseType, ErrorType> =
-  | { type: 'next'; value: ResponseType }
-  | { type: 'error'; value: ErrorType }
-  | { type: 'complete' };
+  | { type: "next"; value: ResponseType }
+  | { type: "error"; value: ErrorType }
+  | { type: "complete" };
 
 type PendingPull<ResponseType> = {
   resolve: (value: IteratorResult<ResponseType>) => void;
   reject: (reason?: unknown) => void;
 };
 
+type AsyncIterableFactory<ResponseType> = () => AsyncIterable<ResponseType>;
+
+function toIteratorResult<ResponseType>(
+  value: ResponseType,
+  done: false,
+): IteratorYieldResult<ResponseType>;
+function toIteratorResult<ResponseType>(
+  value: undefined,
+  done: true,
+): IteratorReturnResult<undefined>;
+function toIteratorResult<ResponseType>(
+  value: ResponseType | undefined,
+  done: boolean,
+): IteratorResult<ResponseType> {
+  return { value, done } as IteratorResult<ResponseType>;
+}
+
+function settlePendingPulls<ResponseType>(
+  pendingPulls: Array<PendingPull<ResponseType>>,
+  settle: (pendingPull: PendingPull<ResponseType>) => void,
+) {
+  for (const pendingPull of pendingPulls.splice(0)) {
+    settle(pendingPull);
+  }
+}
+
+function toAsyncIterable<ResponseType>(
+  iterable: AsyncIterable<ResponseType> | Iterable<ResponseType>,
+): AsyncIterable<ResponseType> {
+  if (Symbol.asyncIterator in iterable) {
+    return iterable as AsyncIterable<ResponseType>;
+  }
+
+  return (async function* () {
+    for (const value of iterable as Iterable<ResponseType>) {
+      yield value;
+    }
+  })();
+}
+
 /**
  * Compatibility shape for adapting legacy observable implementations.
  */
-export interface LegacyObservableLike<ResponseType = unknown, ErrorType = Error> {
-  onNext?: (fn: (res: ResponseType) => void) => LegacyObservableLike<ResponseType, ErrorType>;
-  onError?: (fn: (err: ErrorType) => void) => LegacyObservableLike<ResponseType, ErrorType>;
-  onComplete?: (fn: (res: unknown) => void) => LegacyObservableLike<ResponseType, ErrorType>;
+export interface LegacyObservableLike<
+  ResponseType = unknown,
+  ErrorType = Error,
+> {
+  onNext?: (
+    fn: (res: ResponseType) => void,
+  ) => LegacyObservableLike<ResponseType, ErrorType>;
+  onError?: (
+    fn: (err: ErrorType) => void,
+  ) => LegacyObservableLike<ResponseType, ErrorType>;
+  onComplete?: (
+    fn: (res: unknown) => void,
+  ) => LegacyObservableLike<ResponseType, ErrorType>;
   unsubscribe?: () => void;
 }
 
@@ -51,8 +103,10 @@ export interface LegacyObservableLike<ResponseType = unknown, ErrorType = Error>
  * @typeParam ResponseType - Type emitted through next values.
  * @typeParam ErrorType - Type emitted through terminal errors.
  */
-export class ScompFeedSubject<ResponseType = unknown, ErrorType = Error>
-implements ScompFeed<ResponseType, ErrorType> {
+export class ScompFeedSubject<
+  ResponseType = unknown,
+  ErrorType = Error,
+> implements ScompFeed<ResponseType, ErrorType> {
   private _onNextListener?: (res: ResponseType) => void;
   private _onErrorListener?: (error: ErrorType) => void;
   private _onCompleteListener?: (res: unknown) => void;
@@ -67,12 +121,12 @@ implements ScompFeed<ResponseType, ErrorType> {
       next: () => this._nextIteratorValue(),
       return: async () => {
         this.unsubscribe();
-        return { value: undefined, done: true };
+        return toIteratorResult<ResponseType>(undefined, true);
       },
       throw: async (error) => {
         this.error(error as ErrorType);
         throw error;
-      }
+      },
     };
   }
 
@@ -103,49 +157,27 @@ implements ScompFeed<ResponseType, ErrorType> {
 
     const pendingPull = this._pendingPulls.shift();
     if (pendingPull) {
-      pendingPull.resolve({ value: nextResponse, done: false });
+      pendingPull.resolve(toIteratorResult(nextResponse, false));
       return this;
     }
 
-    this._eventQueue.push({ type: 'next', value: nextResponse });
+    this._eventQueue.push({ type: "next", value: nextResponse });
     return this;
   }
 
   /** @inheritdoc */
   error(errorResponse: ErrorType) {
-    if (this._isClosed) {
-      return this;
+    if (this._close("error", errorResponse)) {
+      this._onErrorListener?.(errorResponse);
     }
-
-    this._onErrorListener?.(errorResponse);
-    this._isClosed = true;
-
-    const pendingPulls = this._pendingPulls.splice(0);
-    if (pendingPulls.length > 0) {
-      pendingPulls.forEach((pendingPull) => pendingPull.reject(errorResponse));
-      return this;
-    }
-
-    this._eventQueue.push({ type: 'error', value: errorResponse });
     return this;
   }
 
   /** @inheritdoc */
   complete(completeResponse?: unknown) {
-    if (this._isClosed) {
-      return this;
+    if (this._close("complete", completeResponse)) {
+      this._onCompleteListener?.(completeResponse);
     }
-
-    this._onCompleteListener?.(completeResponse);
-    this._isClosed = true;
-
-    const pendingPulls = this._pendingPulls.splice(0);
-    if (pendingPulls.length > 0) {
-      pendingPulls.forEach((pendingPull) => pendingPull.resolve({ value: undefined, done: true }));
-      return this;
-    }
-
-    this._eventQueue.push({ type: 'complete' });
     return this;
   }
 
@@ -173,6 +205,38 @@ implements ScompFeed<ResponseType, ErrorType> {
     return this;
   }
 
+  private _close(type: "error", value: ErrorType): boolean;
+  private _close(type: "complete", value?: unknown): boolean;
+  private _close(type: "error" | "complete", value?: unknown): boolean {
+    if (this._isClosed) {
+      return false;
+    }
+
+    this._isClosed = true;
+
+    if (type === "error") {
+      if (this._pendingPulls.length > 0) {
+        settlePendingPulls(this._pendingPulls, (pendingPull) =>
+          pendingPull.reject(value),
+        );
+      } else {
+        this._eventQueue.push({ type: "error", value: value as ErrorType });
+      }
+
+      return true;
+    }
+
+    if (this._pendingPulls.length > 0) {
+      settlePendingPulls(this._pendingPulls, (pendingPull) => {
+        pendingPull.resolve(toIteratorResult(undefined, true));
+      });
+    } else {
+      this._eventQueue.push({ type: "complete" });
+    }
+
+    return true;
+  }
+
   private _nextIteratorValue(): Promise<IteratorResult<ResponseType>> {
     const queuedEvent = this._eventQueue.shift();
     if (queuedEvent) {
@@ -180,7 +244,7 @@ implements ScompFeed<ResponseType, ErrorType> {
     }
 
     if (this._isClosed) {
-      return Promise.resolve({ value: undefined, done: true });
+      return Promise.resolve(toIteratorResult(undefined, true));
     }
 
     return new Promise((resolve, reject) => {
@@ -188,16 +252,18 @@ implements ScompFeed<ResponseType, ErrorType> {
     });
   }
 
-  private _resolveQueuedEvent(event: FeedEvent<ResponseType, ErrorType>): Promise<IteratorResult<ResponseType>> {
-    if (event.type === 'next') {
-      return Promise.resolve({ value: event.value, done: false });
+  private _resolveQueuedEvent(
+    event: FeedEvent<ResponseType, ErrorType>,
+  ): Promise<IteratorResult<ResponseType>> {
+    if (event.type === "next") {
+      return Promise.resolve(toIteratorResult(event.value, false));
     }
 
-    if (event.type === 'error') {
+    if (event.type === "error") {
       return Promise.reject(event.value);
     }
 
-    return Promise.resolve({ value: undefined, done: true });
+    return Promise.resolve(toIteratorResult(undefined, true));
   }
 }
 
@@ -212,13 +278,14 @@ export function createScompFeed<ResponseType = unknown, ErrorType = Error>() {
  * Adapts an async or sync iterable into a {@link ScompFeed}.
  */
 export function fromAsyncIterable<ResponseType>(
-  iterable: AsyncIterable<ResponseType> | Iterable<ResponseType>
+  iterable: AsyncIterable<ResponseType> | Iterable<ResponseType>,
 ) {
   const feed = createScompFeed<ResponseType, unknown>();
+  const source = toAsyncIterable(iterable);
 
   void (async () => {
     try {
-      for await (const nextResponse of iterable) {
+      for await (const nextResponse of source) {
         if (feed.isUnsubscribed()) {
           return;
         }
@@ -237,7 +304,7 @@ export function fromAsyncIterable<ResponseType>(
  * Adapts a generator factory into a {@link ScompFeed}.
  */
 export function fromGenerator<ResponseType>(
-  generator: (() => AsyncGenerator<ResponseType>) | (() => Generator<ResponseType>)
+  generator: AsyncIterableFactory<ResponseType>,
 ) {
   return fromAsyncIterable(generator());
 }
@@ -246,7 +313,7 @@ export function fromGenerator<ResponseType>(
  * Adapts a legacy observable-like source into a {@link ScompFeed}.
  */
 export function fromLegacyObservable<ResponseType = unknown, ErrorType = Error>(
-  source: LegacyObservableLike<ResponseType, ErrorType>
+  source: LegacyObservableLike<ResponseType, ErrorType>,
 ) {
   const feed = createScompFeed<ResponseType, ErrorType>();
 
