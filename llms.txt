@@ -1,194 +1,463 @@
-# SCOMP LLM Guide (Contributor + Agent Quick Reference)
+# SCOMP LLM Guide (v2 Target API)
 
-This file is a practical, accuracy-first guide for using SCOMP across core APIs and transports.
+This file is the authoritative reference for using SCOMP. It describes the v2 API
+with contract tokens, the peer model, and controlled feeds.
 
 ## 1) Mental model: request / signal / feed
 
-SCOMP operations are transport-agnostic and always route by `"service.method"`:
+SCOMP has three operations. They are transport-agnostic and route by `"service.method"`:
 
-- **request**: unary request/response (`Promise<T>`)
-- **signal**: fire-and-forget side effect (`Promise<void>` from caller perspective)
-- **feed**: stream (`AsyncIterable<T>`) with explicit `feed_start` and `feed_stop` under the hood
+- **request**: unary RPC (`(input) => Promise&lt;T&gt;`)
+- **signal**: fire-and-forget side effect (`(input) => Promise&lt;void&gt;`)
+- **feed**: server-sent stream (`(input) => AsyncIterable&lt;T&gt;`) with optional typed controller
 
-If you are writing clients with `@scomp/client`, route intent must be known so calls map to the right transport operation.
+Return type determines operation kind. No annotations needed.
 
-## 2) Modern default API usage (`@scomp/core` + `@scomp/client`)
+## 2) Contract tokens
 
-Use `@scomp/core` for service/router definitions and `@scomp/client` for typed client proxies.
+A `ContractToken&lt;C&gt;` binds a TypeScript contract type to a service name at runtime.
+It is the single source of truth for both sides of a service boundary.
 
 ```ts
-import { createScompService } from "@scomp/core";
-import { createScompClient, type ClientRouteHints } from "@scomp/client";
+import { createContractToken } from "@scomp/core";
 
-type ApiContract = {
-  users: {
-    get(input: { id: number }): Promise<{ id: number; name: string }>;
-    notifyLogin(input: { id: number; at: string }): Promise<void>;
-    liveUsers(input: { room: string }): AsyncIterable<{ id: number }>;
-  };
+type TradingContract = {
+  getPrice(input: { symbol: string }): Promise<{ price: number }>;
+  notifyTrade(input: { symbol: string; qty: number }): Promise<void>;
+  prices(input: { symbols: string[] }): AsyncIterable<{ symbol: string; price: number }>;
 };
 
-const users = createScompService<ApiContract["users"]>("users").implement({
+const Trading = createContractToken<TradingContract>("trading");
+```
+
+Versioning uses separate tokens with distinct names:
+
+```ts
+const TradingV1 = createContractToken<TradingContractV1>("trading");
+const TradingV2 = createContractToken<TradingContractV2>("trading.v2");
+```
+
+Never pass a service name string and contract generic separately. Always use a token.
+
+## 3) Peer model (provides / consumes)
+
+A peer is a symmetric node that can host services and/or call remote services.
+There is no separate client/server distinction.
+
+```ts
+import { createScompPeer, createScompService } from "@scomp/core";
+
+const peer = createScompPeer({ transports: [transport] });
+
+// Host a service (incoming calls)
+peer.provides(
+  createScompService(Trading).implement({
+    requests: {
+      getPrice: async ({ symbol }) => ({ price: 42.5 }),
+    },
+    signals: {
+      notifyTrade: async ({ symbol, qty }) => {
+        console.log("trade", symbol, qty);
+      },
+    },
+    feeds: {
+      prices: async function* ({ symbols }) {
+        yield { symbol: symbols[0], price: 42.5 };
+      },
+    },
+  })
+);
+
+// Call a remote service (outgoing calls)
+const trading = peer.consumes(Trading);
+const { price } = await trading.getPrice({ symbol: "AAPL" });
+```
+
+Rules:
+- `provides()` registers services. Multiple calls accumulate. Duplicate routes are a hard error.
+- `consumes()` returns a cached typed proxy. Lazily created, reused on subsequent calls.
+- A pure server only calls `provides()`. A pure client only calls `consumes()`. Bidirectional does both.
+- `peer.close()` tears down all transports and subscriptions.
+
+## 4) Service implementation
+
+Services are implemented against a contract token using grouped or flat method definitions.
+
+### Grouped (recommended for clarity)
+
+```ts
+const service = createScompService(Trading).implement({
   requests: {
-    get: async ({ id }) => ({ id, name: `user-${id}` }),
+    getPrice: async ({ symbol }) => ({ price: 42.5 }),
   },
   signals: {
-    notifyLogin: async () => undefined,
+    notifyTrade: async ({ symbol, qty }) => {
+      console.log("trade", symbol, qty);
+    },
   },
   feeds: {
-    liveUsers: async function* () {
-      yield { id: 1 };
+    prices: async function* ({ symbols }) {
+      yield { symbol: symbols[0], price: 42.5 };
     },
   },
 });
+```
 
-const routeHints: ClientRouteHints = {
-  "users.get": "request",
-  "users.notifyLogin": "signal",
-  "users.liveUsers": "feed",
+### Flat (shorthand)
+
+```ts
+const service = createScompService(Trading).implement({
+  getPrice: async ({ symbol }) => ({ price: 42.5 }),
+  notifyTrade: { kind: "signal", handler: async ({ symbol, qty }) => { /* ... */ } },
+  prices: { kind: "feed", strategy: "fanout", handler: async function* ({ symbols }) { yield { symbol: symbols[0], price: 42.5 }; } },
+});
+```
+
+### Feed configuration options
+
+Feeds support strategy and backpressure configuration:
+
+```ts
+feeds: {
+  prices: {
+    strategy: "fanout",           // "fanout" (shared) or "exclusive" (per-subscriber)
+    hashKey: ({ symbols }) => symbols.sort().join(","),  // optional dedup key
+    backpressure: { highWaterMark: 100 },                // optional
+    handler: async function* ({ symbols }) {
+      yield { symbol: symbols[0], price: 42.5 };
+    },
+  },
+}
+```
+
+### Fragment composition
+
+Fragments allow splitting a service implementation across modules:
+
+```ts
+import { createScompFragment, composeScompFragments } from "@scomp/core";
+
+const tradingRequests = createScompFragment(Trading).implement({
+  requests: { getPrice: async ({ symbol }) => ({ price: 42.5 }) },
+});
+
+const tradingFeeds = createScompFragment(Trading).implement({
+  feeds: { prices: async function* () { yield { symbol: "AAPL", price: 42.5 }; } },
+});
+
+const tradingService = composeScompFragments(tradingRequests, tradingFeeds);
+```
+
+Duplicate methods across fragments are rejected at composition time.
+
+## 5) Controlled feeds
+
+A controlled feed extends `AsyncIterable&lt;T&gt;` with a typed `.controller` for
+client-to-server messages scoped to an active subscription.
+
+### Contract definition
+
+```ts
+import type { ControlledAsyncIterable } from "@scomp/core";
+
+type PricingContract = {
+  prices(input: { symbols: string[] }): ControlledAsyncIterable<
+    PriceTick,
+    {
+      addSymbol(input: { symbol: string }): Promise<void>;
+      removeSymbol(input: { symbol: string }): Promise<void>;
+      getInterval(input: {}): Promise<{ intervalMs: number }>;
+    }
+  >;
 };
-
-// transport is injected (websocket, rabbitmq, browser-windows, etc.)
-const client = createScompClient<ApiContract>({ transport, routeHints });
 ```
 
-## 3) Route hints are required for signal/feed in `@scomp/client`
+Controller method conventions:
+- `(input) => Promise&lt;T&gt;` — request (returns a value)
+- `(input) => Promise&lt;void&gt;` — signal (fire-and-forget)
+- No nested feeds on controllers (no `AsyncIterable` returns)
 
-Important behavior in `@scomp/client`:
-
-- Route type defaults to **`request`** when not specified.
-- Therefore `signal` and `feed` routes should be declared via `routeHints`.
-
-If you omit hints, a signal/feed route may be incorrectly invoked as request.
-
-## 4) Transport matrix and quick usage
-
-### `@scomp/transport-inprocess`
-
-- Factory: **`createInprocessTransport`**
-- Primary use: in-process calls directly against a legacy/core-compatible `ScompServiceDefinition` (`service.invoke(...)` shape).
-- Compatibility note: this transport follows legacy/core compatibility patterns (`request/observe/fireAndForget` mapping), not network wire semantics.
+### Server implementation
 
 ```ts
-import { createLegacyScompService, createScompClient as createLegacyClient } from "@scomp/core";
-import { createInprocessTransport } from "@scomp/transport-inprocess";
+import { createControlledFeed } from "@scomp/core";
 
-const service = createLegacyScompService()
-  .request("getUser", async (id: number) => ({ id }))
-  .build();
+const service = createScompService(Pricing).implement({
+  feeds: {
+    prices: async function* ({ symbols }) {
+      const state = { symbols: [...symbols], intervalMs: 1000 };
 
-const transport = createInprocessTransport(service);
-const client = createLegacyClient(service, transport);
-await client.getUser(1);
-```
-
-### `@scomp/transport-websocket-browser`
-
-- Factory: **`createWebSocketBrowserTransport`**
-- Runtime: browser-like environments (`WebSocket` available or provided via `webSocketCtor`).
-- Hosts routes? **No** (`listen()` throws). Use a server transport to host routes.
-
-```ts
-import { createWebSocketBrowserTransport } from "@scomp/transport-websocket-browser";
-
-const transport = createWebSocketBrowserTransport({
-  url: "ws://127.0.0.1:3399",
+      return createControlledFeed(
+        generatePriceTicks(state),
+        {
+          addSymbol: async ({ symbol }) => { state.symbols.push(symbol); },
+          removeSymbol: async ({ symbol }) => { state.symbols = state.symbols.filter(s => s !== symbol); },
+          getInterval: async () => ({ intervalMs: state.intervalMs }),
+        }
+      );
+    },
+  },
 });
 ```
 
-### `@scomp/transport-websocket-client`
-
-- Factory: **`createWebSocketClientTransport`**
-- Runtime: Node/client process using `ws`.
-- Hosts routes? **No** (`listen()` throws).
+### Client usage
 
 ```ts
-import { createWebSocketClientTransport } from "@scomp/transport-websocket-client";
+const pricing = peer.consumes(Pricing);
+const feed = pricing.prices({ symbols: ["AAPL"] });
 
-const transport = createWebSocketClientTransport({
-  url: "ws://127.0.0.1:3399",
-});
+// Iterate the stream
+for await (const tick of feed) {
+  console.log(tick);
+}
+
+// Controller calls on the active subscription
+await feed.controller.addSymbol({ symbol: "GOOG" });
+const { intervalMs } = await feed.controller.getInterval({});
 ```
 
-### `@scomp/transport-websocket-server` (Bun)
+### Controller scoping
 
-- Factory: **`createWebSocketServerTransport`**
-- Runtime: Bun (`Bun.serve`).
-- Use `listen(router)` to host routes.
+- **Exclusive feeds**: each subscriber gets an isolated controller instance.
+- **Fanout feeds**: subscribers share the feed. Controller calls go to the shared instance.
+  Service author is responsible for concurrent access safety.
+- Framework controller methods (`__scomp.*`) are always per-subscription, even on fanout feeds.
+
+## 6) Transport interface
+
+`IScompTransport` is wire-level only. It moves messages between peers.
 
 ```ts
+interface IScompTransport {
+  request(route: string, payload: unknown, options?: ScompClientInvokeOptions): Promise<unknown>;
+  signal(route: string, payload: unknown, options?: ScompClientInvokeOptions): Promise<void>;
+  feed(route: string, payload: unknown, options?: ScompClientInvokeOptions): AsyncIterable<unknown>;
+  registerRoutes(router: CompiledRouter): Promise<void> | void;
+  close(): Promise<void> | void;
+}
+```
+
+- `registerRoutes()` registers route handlers. Client-only transports implement this as a no-op (they never throw).
+- `request()`, `signal()`, `feed()` make outgoing calls.
+- `close()` tears down the transport.
+
+### Transport matrix
+
+| Package | Factory | Runtime | Hosts routes? |
+| --- | --- | --- | --- |
+| `@scomp/transport-websocket-server` | `createWebSocketServerTransport` | Bun (`Bun.serve`) | Yes |
+| `@scomp/transport-websocket-server-node` | `createWebSocketServerTransport` | Node (`ws` + `http`) | Yes |
+| `@scomp/transport-websocket-browser` | `createWebSocketBrowserTransport` | Browser (`WebSocket`) | No |
+| `@scomp/transport-websocket-client` | `createWebSocketClientTransport` | Node (`ws`) | No |
+| `@scomp/transport-rabbitmq` | `createRabbitMqTransport` | Node/Bun + RabbitMQ | Yes |
+| `@scomp/transport-browser-windows` | `createBrowserWindowsTransport` | Same-origin browser tabs | Yes |
+| `@scomp/transport-inprocess` | `createInprocessTransport` | Any (legacy compat only) | N/A |
+
+### Transport setup examples
+
+```ts
+// Bun WebSocket server
 import { createWebSocketServerTransport } from "@scomp/transport-websocket-server";
-
 const transport = createWebSocketServerTransport({ port: 3399, path: "/" });
-await transport.listen(router);
-```
 
-### `@scomp/transport-websocket-server-node` (Node)
-
-- Factory: **`createWebSocketServerTransport`**
-- Runtime: Node (`ws` + `http/https`).
-- Use `listen(router)` to host routes.
-
-```ts
+// Node WebSocket server
 import { createWebSocketServerTransport } from "@scomp/transport-websocket-server-node";
-
 const transport = createWebSocketServerTransport({ port: 3399, path: "/" });
-await transport.listen(router);
-```
 
-### `@scomp/transport-rabbitmq`
+// Browser WebSocket client
+import { createWebSocketBrowserTransport } from "@scomp/transport-websocket-browser";
+const transport = createWebSocketBrowserTransport({ url: "ws://127.0.0.1:3399" });
 
-- Factory: **`createRabbitMqTransport`**
-- Runtime: Node/Bun process with RabbitMQ access.
-- Can host routes with `listen(router)` and invoke via request/signal/feed.
+// Node WebSocket client
+import { createWebSocketClientTransport } from "@scomp/transport-websocket-client";
+const transport = createWebSocketClientTransport({ url: "ws://127.0.0.1:3399" });
 
-```ts
+// RabbitMQ
 import { createRabbitMqTransport } from "@scomp/transport-rabbitmq";
+const transport = createRabbitMqTransport({ url: "amqp://guest:guest@localhost:5672" });
 
-const transport = createRabbitMqTransport({
-  url: "amqp://guest:guest@localhost:5672",
-});
-await transport.listen(router);
+// Browser windows (same-origin tabs)
+import { createBrowserWindowsTransport } from "@scomp/transport-browser-windows";
+const transport = createBrowserWindowsTransport({ channelName: "scomp-app", mode: "auto" });
 ```
 
-### `@scomp/transport-browser-windows`
+## 7) Wire protocol
 
-- Factory: **`createBrowserWindowsTransport`**
-- Runtime: same-origin browser tabs/windows.
-- Broker mode: SharedWorker primary, BroadcastChannel fallback.
+Three operations on the wire: `request`, `signal`, `feed`.
+
+### Request envelope (client -> server)
+
+```json
+{
+  "route": "trading.getPrice",
+  "op": "request",
+  "payload": { "symbol": "AAPL" },
+  "meta": { "traceId": "abc-123" }
+}
+```
+
+Optional fields for controller calls on active feeds:
+
+```json
+{
+  "route": "trading.prices",
+  "op": "request",
+  "feed": "7d8f67a9-d3a4-e9f0-c1b2-d3e4f5a6b7c8",
+  "method": "getInterval",
+  "payload": {}
+}
+```
+
+- `feed`: subscription ID (present only for controller calls)
+- `method`: controller method name (present only for controller calls)
+
+### Response envelope (server -> client)
+
+Success:
+```json
+{ "payload": { "price": 42.5 } }
+```
+
+Error:
+```json
+{ "error": "Route not found: trading.getPrice", "code": "ROUTE_NOT_FOUND" }
+```
+
+### Feed chunk envelope (server -> client stream)
+
+```json
+{ "id": "req-1", "type": "next", "channel": "feed", "feed": "7d8f67a9...", "payload": { "price": 42.5 } }
+{ "id": "req-1", "type": "done", "channel": "feed", "feed": "7d8f67a9..." }
+{ "id": "req-1", "type": "error", "channel": "feed", "feed": "7d8f67a9...", "message": "Feed error" }
+```
+
+### Feed unsubscribe
+
+Unsubscribe is a signal with a framework controller method:
+
+```json
+{
+  "route": "trading.prices",
+  "op": "signal",
+  "feed": "7d8f67a9-d3a4-e9f0-c1b2-d3e4f5a6b7c8",
+  "method": "__scomp.unsubscribe",
+  "payload": {}
+}
+```
+
+### Framework-reserved controller methods
+
+All framework controller methods use the `__scomp.` prefix.
+User-defined controller methods MUST NOT start with `__scomp.`.
+
+| Method | Op | Purpose |
+| --- | --- | --- |
+| `__scomp.unsubscribe` | signal | Tear down a feed subscription |
+| `__scomp.pause` | signal | Pause feed emission (future) |
+| `__scomp.resume` | signal | Resume feed emission (future) |
+| `__scomp.stats` | request | Query feed subscription stats (future) |
+
+## 8) Control plane
+
+The control plane is a regular SCOMP service with reserved routes under `__scomp.*`.
 
 ```ts
-import { createBrowserWindowsTransport } from "@scomp/transport-browser-windows";
+import { ScompControlPlane } from "@scomp/core";
 
-const transport = createBrowserWindowsTransport({
-  channelName: "scomp-app",
-  mode: "auto",
-});
+// Every peer automatically provides the control plane.
+// Any peer can consume another peer's control plane:
+const cp = peer.consumes(ScompControlPlane);
+
+const services = await cp.discover({ includeRoutes: true });
+const endpoint = await cp.resolve({ route: "trading.getPrice" });
+const health = await cp.health({ verbose: true });
 ```
 
-## 5) Security/meta guidance and caveats
+Control plane routes:
+- `__scomp.discover` — list node-local services and routes
+- `__scomp.resolve` — resolve a callable endpoint for a route
+- `__scomp.health` — report node health status
 
-- Treat browser-side policy as **advisory**, not authoritative trust boundary.
-- Enforce identity/authorization in trusted server-side transports.
-- `meta.auth` is opaque transport metadata; validate it where trust exists.
-- Priority hints (`priority`, `priorityClass`, `deadlineAtMs`, `targetLatencyMs`) are metadata unless runtime policy enforces behavior.
-- Same-origin browser transports (`browser-windows`, browser websocket client side) are constrained by browser security model and lifecycle.
+Rules:
+- `__scomp.*` is reserved. Application routes MUST NOT use this namespace.
+- Control plane routes are privileged. Apply explicit authorization policy before external exposure.
 
-## 6) Common mistakes and correct package/import choices
+## 9) Error handling
 
-- **Mistake**: using `@scomp/core` legacy client API for modern nested route proxies.
-  - **Use**: `createScompClient` from `@scomp/client` with `routeHints`.
+Error responses carry structured codes for programmatic handling:
 
-- **Mistake**: importing Node websocket server from Bun package.
-  - **Use (Node)**: `@scomp/transport-websocket-server-node`.
-  - **Use (Bun)**: `@scomp/transport-websocket-server`.
+| Code | Meaning |
+| --- | --- |
+| `ROUTE_NOT_FOUND` | No handler registered for the route |
+| `SERVICE_NOT_FOUND` | Service name prefix has no registered service |
+| `CONTROLLER_NOT_FOUND` | Controller method not found on the feed |
+| `FEED_NOT_FOUND` | Feed subscription ID does not exist or expired |
+| `TIMEOUT` | Operation exceeded deadline |
+| `UNAUTHORIZED` | Authentication or authorization failed |
 
-- **Mistake**: trying to host routes on websocket client/browser client transports.
-  - `createWebSocketClientTransport` and `createWebSocketBrowserTransport` are client-side; they do not host routes.
+The `error` field remains as a human-readable message. The `code` field is for programmatic use.
+Unknown codes must be treated as unrecoverable.
 
-- **Mistake**: assuming `@scomp/transport-websocket-server-runtime` is the app entry package.
-  - It is an internal runtime helper package used by server transport implementations.
-  - Typical apps should import server transport factories from the Bun/Node server packages.
+## 10) Priority model
 
-- **Mistake**: omitting `routeHints` for signal/feed when using `@scomp/client`.
-  - Missing hints default to request semantics.
+Priority is advisory metadata with five classes (P0 = highest, P4 = lowest):
+
+| Class | Intent | Examples |
+| --- | --- | --- |
+| P0 | Critical control/safety | shutdown, circuit-breaker, resource protection |
+| P1 | Interactive control | health checks, discovery, session refresh |
+| P2 | Default | normal business RPC |
+| P3 | Bulk/async | telemetry, batch processing |
+| P4 | Background | backfills, prefetch, periodic tasks |
+
+Pass priority hints on client calls:
+
+```ts
+await trading.getPrice(
+  { symbol: "AAPL" },
+  { priority: "P1", deadlineAtMs: Date.now() + 1000 }
+);
+```
+
+Default operation priorities: request=P2, signal=P3, feed=P1.
+
+## 11) Security guidance
+
+- `meta.auth` is opaque. Validate identity on the server, not the client.
+- Browser-side security hooks are client policy, not a trust boundary.
+- Enforce authentication and authorization in server transports.
+- Control plane routes should be internal-only by default.
+- Same-origin browser transports are constrained by browser security model.
+
+## 12) Common mistakes
+
+- **Using a string name instead of a contract token**: always use `createContractToken&lt;C&gt;("name")`.
+- **Importing Node WS server from Bun package**: use `@scomp/transport-websocket-server-node` for Node.
+- **Trying to host routes on client transports**: browser/client transports do not host routes. Use a server transport.
+- **Using `@scomp/transport-websocket-server-runtime` directly**: it is an internal package. Import from the Bun or Node server package.
+- **Naming controller methods with `__scomp.` prefix**: this is reserved for framework methods.
+- **Nesting feeds in controller methods**: controller methods return `Promise&lt;T&gt;` or `Promise&lt;void&gt;` only. No `AsyncIterable`.
+- **Using `listen()` instead of `registerRoutes()`**: `listen()` is the v1 API. Use `registerRoutes()` or let the peer handle it.
+- **Using `createScompClient` directly instead of `peer.consumes(token)`**: the peer model handles transport wiring and proxy caching.
+
+## 13) Packages
+
+- `@scomp/core` — contract tokens, peer, service builder, feed primitives, control plane, priority model
+- `@scomp/types` — wire protocol types, contract type utilities, security types
+- `@scomp/client` — typed client proxy (used internally by peer; direct use is legacy)
+- `@scomp/transport-rabbitmq` — RabbitMQ transport
+- `@scomp/transport-websocket-server` — Bun WebSocket server transport
+- `@scomp/transport-websocket-server-node` — Node WebSocket server transport
+- `@scomp/transport-websocket-browser` — browser WebSocket client transport
+- `@scomp/transport-websocket-client` — Node WebSocket client transport
+- `@scomp/transport-browser-windows` — same-origin browser tab/window transport
+- `@scomp/transport-inprocess` — in-process transport (legacy compatibility only)
+- `@scomp/transport-websocket-server-runtime` — internal shared runtime (do not import directly)
+
+## 14) Validation commands
+
+```bash
+bunx turbo run build    # build all packages
+bunx turbo run test     # run all tests
+bunx turbo run lint     # lint all packages
+```
