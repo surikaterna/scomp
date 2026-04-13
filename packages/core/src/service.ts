@@ -1,10 +1,10 @@
 import { type ScompFeed } from "./feed";
 
-type RequestHandler = (...args: Array<unknown>) => unknown;
+type RequestHandler = (...args: Array<any>) => unknown;
 type FeedHandler = (
-  ...args: Array<unknown>
-) => ScompFeed<unknown, unknown> | AsyncIterable<unknown> | Iterable<unknown>;
-type CommandHandler = (...args: Array<unknown>) => void | Promise<void>;
+  ...args: Array<any>
+) => ScompFeed<any, any> | AsyncIterable<any> | Iterable<any>;
+type CommandHandler = (...args: Array<any>) => void | Promise<void>;
 
 type RequestHandlers = Record<string, RequestHandler>;
 type FeedHandlers = Record<string, FeedHandler>;
