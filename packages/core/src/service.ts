@@ -1,4 +1,5 @@
 import { type ScompFeed } from "./feed";
+import { type ScompControlledFeed } from "./controlled-feed";
 
 type RequestHandler = (...args: Array<any>) => unknown;
 type FeedHandler = (
@@ -79,13 +80,23 @@ type ClientRequestMethods<Requests extends RequestHandlers> = {
 };
 
 type FeedResponse<Handler extends FeedHandler> =
-  ReturnType<Handler> extends ScompFeed<infer ResponseType, infer ErrorType>
-    ? ScompFeed<ResponseType, ErrorType>
-    : ReturnType<Handler> extends AsyncIterable<infer ResponseType>
-      ? ScompFeed<ResponseType, unknown>
-      : ReturnType<Handler> extends Iterable<infer ResponseType>
+  ReturnType<Handler> extends ScompControlledFeed<
+    infer ResponseType,
+    infer ErrorType,
+    infer CRequests,
+    infer CCommands
+  >
+    ? ScompFeed<ResponseType, ErrorType> & {
+        controller: ClientRequestMethods<CRequests> &
+          ClientCommandMethods<CCommands>;
+      }
+    : ReturnType<Handler> extends ScompFeed<infer ResponseType, infer ErrorType>
+      ? ScompFeed<ResponseType, ErrorType>
+      : ReturnType<Handler> extends AsyncIterable<infer ResponseType>
         ? ScompFeed<ResponseType, unknown>
-        : ScompFeed<unknown, unknown>;
+        : ReturnType<Handler> extends Iterable<infer ResponseType>
+          ? ScompFeed<ResponseType, unknown>
+          : ScompFeed<unknown, unknown>;
 
 type ClientFeedMethods<Feeds extends FeedHandlers> = {
   [MethodName in keyof Feeds]: (

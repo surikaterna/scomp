@@ -16,6 +16,14 @@ export {
 } from "./feed";
 
 export {
+  createControlledFeed,
+  ScompFeedControllerBuilder,
+  type ScompControlledFeed,
+  type ScompControllerMethodKind,
+  type ScompFeedControllerDefinition,
+} from "./controlled-feed";
+
+export {
   createScompClient,
   createScompService,
   createScompServiceFromDescriptor,
