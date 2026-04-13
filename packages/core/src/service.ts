@@ -1,5 +1,8 @@
 import { type ScompFeed } from "./feed";
-import { type ScompControlledFeed } from "./controlled-feed";
+import {
+  type ScompControlledFeed,
+  type ScompFeedControllerDefinition,
+} from "./controlled-feed";
 
 type RequestHandler = (...args: Array<any>) => unknown;
 type FeedHandler = (
@@ -361,6 +364,44 @@ export function createScompServiceFromDescriptor<
   return buildServiceDefinition(requests, feeds, commands);
 }
 
+function hasController(
+  feed: ScompFeed<unknown, unknown>,
+): feed is ScompControlledFeed<unknown, unknown> {
+  const candidate = feed as { controller?: unknown };
+  if (!candidate.controller || typeof candidate.controller !== "object") {
+    return false;
+  }
+  const ctrl = candidate.controller as ScompFeedControllerDefinition<
+    Record<string, never>,
+    Record<string, never>
+  >;
+  return (
+    typeof ctrl.invoke === "function" &&
+    typeof ctrl.kinds === "object" &&
+    ctrl.kinds !== null
+  );
+}
+
+function flattenController(
+  feed: ScompControlledFeed<unknown, unknown>,
+): Record<string, (...args: Array<unknown>) => unknown> {
+  const def = feed.controller;
+  const proxy: Record<string, (...args: Array<unknown>) => unknown> = {};
+
+  for (const [name, kind] of Object.entries(def.kinds)) {
+    if (kind === "request") {
+      proxy[name] = (...args: Array<unknown>) =>
+        Promise.resolve(def.invoke(name, args));
+    } else {
+      proxy[name] = (...args: Array<unknown>) => {
+        def.invoke(name, args);
+      };
+    }
+  }
+
+  return proxy;
+}
+
 /**
  * Creates a transport-backed client from a service definition.
  */
@@ -379,8 +420,16 @@ export function createScompClient<
   }
 
   for (const methodName of stringKeys(service.feeds)) {
-    client[methodName] = (...args: Array<unknown>) =>
-      transport.observe(methodName, args);
+    client[methodName] = (...args: Array<unknown>) => {
+      const feed = transport.observe(methodName, args);
+
+      if (hasController(feed)) {
+        const proxy = flattenController(feed);
+        return Object.assign(feed, { controller: proxy });
+      }
+
+      return feed;
+    };
   }
 
   for (const methodName of stringKeys(service.commands)) {
