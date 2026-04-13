@@ -2,102 +2,156 @@
 
 SCOMP is a transport-agnostic RPC toolkit with first-class `request`, `signal`, and `feed` semantics.
 
-Typed service contract + transport toolkit.
+Typed service contracts bound to runtime tokens. Symmetric peer model. Controlled feeds with typed controllers.
 
 ## LLM/contributor guides
 
 - [llms.txt](llms.txt) — practical SCOMP mental model, modern API usage, transport matrix, security caveats, and common mistakes.
 - [docs/llms-transports.md](docs/llms-transports.md) — concise runnable transport setup patterns.
 
-## Validation commands (browser transport quality gates)
+## Validation commands
 
-- `npm run lint`
-- `npm test`
-- `bun run --filter='@scomp/transport-browser-windows' test`
-- `bun run --filter='@scomp/transport-browser-windows' lint`
+```bash
+bunx turbo run build    # build all packages
+bunx turbo run test     # run all tests
+bunx turbo run lint     # lint all packages
+```
 
-## Default authoring model (strict + grouped)
+## Core concepts
 
-SCOMP defaults to **strict, grouped service authoring** with three operation sections:
+### Contract tokens
 
-- `requests`
-- `signals`
-- `feeds`
-
-Use `createScompService` to define a full service. In strict mode, every contract method must be implemented and grouped under the correct section.
+A contract token binds a TypeScript contract type to a service name at runtime:
 
 ```ts
-import { createScompService } from '@scomp/core';
+import { createContractToken } from "@scomp/core";
 
-interface UsersContract {
+type UsersContract = {
   getUser(input: { id: number }): Promise<{ id: number; name: string }>;
   notifyLogin(input: { id: number; at: string }): Promise<void>;
   liveUsers(input: { room: string }): AsyncIterable<{ id: number }>;
-}
+};
 
-const usersService = createScompService<UsersContract>('users').implement({
-  requests: {
-    getUser: async ({ id }) => ({ id, name: `user-${id}` })
-  },
-  signals: {
-    notifyLogin: async ({ id, at }) => {
-      console.log('login', { id, at });
-    }
-  },
-  feeds: {
-    liveUsers: {
-      strategy: 'fanout',
-      handler: async function* () {
-        yield { id: 1 };
-      }
-    }
-  }
-});
+const Users = createContractToken<UsersContract>("users");
 ```
 
-## Fragment composition flow
+### Peer model
 
-Use **fragments** for partial/domain-local implementation, then compose them with `composeScompFragments`.
+A peer is a symmetric node that can host services and/or call remote services:
 
 ```ts
-import { createScompFragment, composeScompFragments } from '@scomp/core';
+import { createScompPeer, createScompService } from "@scomp/core";
 
-const usersRequests = createScompFragment<UsersContract>('users').implement({
-  requests: {
-    getUser: async ({ id }) => ({ id, name: `user-${id}` })
-  }
-});
+const peer = createScompPeer({ transports: [transport] });
 
-const usersSignals = createScompFragment<UsersContract>('users').implement({
-  signals: {
-    notifyLogin: async () => {
-      return;
+// Host a service
+peer.provides(
+  createScompService(Users).implement({
+    requests: {
+      getUser: async ({ id }) => ({ id, name: `user-${id}` }),
+    },
+    signals: {
+      notifyLogin: async ({ id, at }) => {
+        console.log("login", { id, at });
+      },
+    },
+    feeds: {
+      liveUsers: {
+        strategy: "fanout",
+        handler: async function* () {
+          yield { id: 1 };
+        },
+      },
+    },
+  }),
+);
+
+// Call a remote service
+const users = peer.consumes(Users);
+const user = await users.getUser({ id: 1 });
+```
+
+Rules:
+
+- `provides()` registers services. Multiple calls accumulate. Duplicate routes are a hard error.
+- `consumes()` returns a cached typed proxy. Lazily created, reused on subsequent calls.
+- A pure server only calls `provides()`. A pure client only calls `consumes()`. Bidirectional does both.
+
+### Controlled feeds
+
+Feeds can expose a typed controller for client-to-server messages scoped to an active subscription:
+
+```ts
+import type { ControlledAsyncIterable } from "@scomp/core";
+
+type PricingContract = {
+  prices(input: { symbols: string[] }): ControlledAsyncIterable<
+    { symbol: string; price: number },
+    {
+      addSymbol(input: { symbol: string }): Promise<void>;
+      getInterval(input: {}): Promise<{ intervalMs: number }>;
     }
-  }
+  >;
+};
+
+const Pricing = createContractToken<PricingContract>("pricing");
+
+// Client usage
+const pricing = peer.consumes(Pricing);
+const feed = pricing.prices({ symbols: ["AAPL"] });
+
+for await (const tick of feed) {
+  console.log(tick);
+}
+
+await feed.controller.addSymbol({ symbol: "GOOG" });
+```
+
+### Fragment composition
+
+Split service implementations across modules, then compose:
+
+```ts
+import { createScompFragment, composeScompFragments } from "@scomp/core";
+
+const usersRequests = createScompFragment(Users).implement({
+  requests: { getUser: async ({ id }) => ({ id, name: `user-${id}` }) },
 });
 
-const usersFeeds = createScompFragment<UsersContract>('users').implement({
+const usersSignals = createScompFragment(Users).implement({
+  signals: { notifyLogin: async () => {} },
+});
+
+const usersFeeds = createScompFragment(Users).implement({
   feeds: {
     liveUsers: async function* () {
       yield { id: 1 };
-    }
-  }
+    },
+  },
 });
 
-const usersRouterFragment = composeScompFragments(usersRequests, usersSignals, usersFeeds);
+const usersService = composeScompFragments(
+  usersRequests,
+  usersSignals,
+  usersFeeds,
+);
 ```
 
 Fragment composition rejects duplicate methods across fragments.
 
 ## Packages
 
-- `@scomp/client` – typed client proxy API with per-call invocation options.
-- `@scomp/core` – service/router primitives.
-- `@scomp/transport-rabbitmq` – RabbitMQ transport.
-- `@scomp/transport-browser-windows` – same-origin browser tab/window transport (SharedWorker primary, BroadcastChannel fallback).
-- `@scomp/transport-websocket-server` – WebSocket server transport for hosting routes.
-- `@scomp/transport-websocket-server-node` – Node (`ws` + `http`) WebSocket server transport.
-- `@scomp/transport-websocket-browser` – browser WebSocket client transport.
+- `@scomp/core` — contract tokens, peer, service builder, feed primitives, control plane, priority model
+- `@scomp/types` — wire protocol types, contract type utilities, security types
+- `@scomp/client` — typed client proxy (used internally by peer; direct use is legacy)
+- `@scomp/transport-rabbitmq` — RabbitMQ transport
+- `@scomp/transport-websocket-server` — Bun WebSocket server transport
+- `@scomp/transport-websocket-server-node` — Node WebSocket server transport
+- `@scomp/transport-websocket-browser` — browser WebSocket client transport
+- `@scomp/transport-websocket-client` — Node WebSocket client transport
+- `@scomp/transport-browser-windows` — same-origin browser tab/window transport (SharedWorker primary, BroadcastChannel fallback)
+- `@scomp/transport-inprocess` — in-process transport (legacy compatibility only)
+- `@scomp/transport-websocket-server-runtime` — internal shared runtime (do not import directly)
 
 ## WebSocket server package split (Bun vs Node)
 
@@ -106,111 +160,18 @@ The websocket server transport is split by runtime:
 - **Bun runtime (`Bun.serve`)**: `@scomp/transport-websocket-server`
 - **Node runtime (`ws` + `http`)**: `@scomp/transport-websocket-server-node`
 
-If you previously imported Node server transport from `@scomp/transport-websocket-server`,
-switch those imports to `@scomp/transport-websocket-server-node`.
-
 See migration notes: [docs/migration-websocket-server-split.md](docs/migration-websocket-server-split.md)
 
-## Browser transport quickstart and parity
+## Security
 
-Use `@scomp/transport-websocket-browser` in browser-like runtimes and pair it with a server transport (for example `@scomp/transport-websocket-server`) that hosts routes.
-
-```ts
-import { createScompClient, type ClientRouteHints } from "@scomp/client";
-import { createWebSocketBrowserTransport } from "@scomp/transport-websocket-browser";
-
-type ApiContract = {
-  users: {
-    getUser(input: { id: number }): Promise<{ id: number; name: string }>;
-    notifyLogin(input: { userId: number; at: string }): Promise<void>;
-    liveTicker(input: { channel: string }): AsyncIterable<{ sequence: number }>;
-  };
-};
-
-const routeHints: ClientRouteHints = {
-  "users.getUser": "request",
-  "users.notifyLogin": "signal",
-  "users.liveTicker": "feed",
-};
-
-const transport = createWebSocketBrowserTransport({
-  url: "ws://127.0.0.1:3399",
-  meta: {
-    traceId: "browser-trace",
-    tags: { source: "browser" },
-  },
-});
-
-const client = createScompClient<ApiContract>({ transport, routeHints });
-
-const user = await client.users.getUser(
-  { id: 1 },
-  {
-    meta: { tenantId: "tenant-a" },
-    priority: "P1",
-    priorityClass: "P2",
-    deadlineAtMs: Date.now() + 1_000,
-    targetLatencyMs: 40,
-  },
-);
-
-await client.users.notifyLogin({ userId: user.id, at: new Date().toISOString() });
-
-for await (const tick of client.users.liveTicker({ channel: "prices" })) {
-  console.log(tick);
-  break;
-}
-```
-
-## Browser parity guarantees
-
-`@scomp/transport-websocket-browser` now matches server/client transports for invocation envelope behavior:
-
-- `request`, `signal`, `feed_start`, and `feed_stop` all carry invocation options.
-- Metadata merge order is deterministic: `config.meta` -> `call meta` -> priority hints -> authenticated principal metadata.
-- Priority hints (`priority`, `priorityClass`, `deadlineAtMs`, `targetLatencyMs`) are serialized into envelope `meta`.
-- Feed stop uses the same metadata shape as feed start when invoked from the same call context.
-
-## Security behavior and caveats
-
-Both browser and WebSocket server transports support `security.authenticate` and `security.authorize` hooks.
-
-- Browser transport hooks run before sending outbound envelopes.
-- Server transport hooks run for inbound envelopes before route dispatch.
-- If authorization denies an operation, the operation is rejected and no outbound frame is sent (browser client behavior).
-
-Important caveats:
-
-- Browser-side hooks are best-effort client policy controls, not a trust boundary.
-- `meta.auth` is opaque and transport-agnostic; verify and enforce identity server-side.
-- Priority hints are advisory metadata unless a transport/policy explicitly enforces scheduling behavior.
-
-## Migration notes (browser websocket)
-
-If you were using browser WebSocket transport before parity updates, align to the following:
-
-1. Depend on `@scomp/transport-websocket-browser` for browser clients.
-2. Pass invocation options on client calls when needed:
-   - `meta`
-   - `priority`
-   - `priorityClass`
-   - `deadlineAtMs`
-   - `targetLatencyMs`
-3. Expect these options to be present on request/signal/feed envelopes.
-4. Keep authorization and identity enforcement on trusted server-side transports.
-
-## Demo
-
-RabbitMQ demo entrypoint (existing):
-
-- `bun run --filter='@scomp/demo' start`
-
-Browser parity demo entrypoint:
-
-- `bun run --filter='@scomp/demo' run-browser`
-
-The browser demo uses WebSocket server + browser transport in one process and showcases request/signal/feed parity including metadata, priority hints, and security hooks.
+- `meta.auth` is opaque and transport-agnostic; validate identity on the server.
+- Browser-side security hooks are client policy, not a trust boundary.
+- Control plane routes (`__scomp.*`) should be internal-only by default.
+- Priority hints are advisory metadata unless enforced by transport/policy.
 
 ## Protocol reference
 
 - [docs/transport-json-protocol.md](docs/transport-json-protocol.md)
+- [docs/adr-peer-model-v2.md](docs/adr-peer-model-v2.md) — v2 architecture decisions
+- [docs/adr-control-plane-v1.md](docs/adr-control-plane-v1.md) — control plane namespace and routes
+- [docs/adr-priority-model-v1.md](docs/adr-priority-model-v1.md) — priority classes and defaults

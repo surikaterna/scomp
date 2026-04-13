@@ -4,17 +4,20 @@ Companion to root `llms.txt`. This page focuses on concise setup patterns by run
 
 ## Validation gates for transport readiness
 
-- Run repository gates: `npm run lint` and `npm test`.
+- Run repository gates: `bunx turbo run lint` and `bunx turbo run test`.
 - Validate browser-windows resilience suite directly: `bun run --filter='@scomp/transport-browser-windows' test`.
-- Validate package-level lint gates directly: `bun run --filter='@scomp/transport-browser-windows' lint` plus websocket-adjacent package lint scripts.
+- Validate package-level lint gates directly: `bun run --filter='@scomp/transport-browser-windows' lint`.
 
 ## 1) Bun websocket server + browser client
 
 ```ts
-import { createScompClient, type ClientRouteHints } from "@scomp/client";
-import { createScompService } from "@scomp/core";
-import { createWebSocketBrowserTransport } from "@scomp/transport-websocket-browser";
+import {
+  createContractToken,
+  createScompPeer,
+  createScompService,
+} from "@scomp/core";
 import { createWebSocketServerTransport } from "@scomp/transport-websocket-server";
+import { createWebSocketBrowserTransport } from "@scomp/transport-websocket-browser";
 
 type Contract = {
   users: {
@@ -23,33 +26,43 @@ type Contract = {
   };
 };
 
-const users = createScompService<Contract["users"]>("users").implement({
-  requests: { get: async ({ id }) => ({ id }) },
-  signals: { ping: async () => undefined },
+const Users = createContractToken<Contract["users"]>("users");
+
+// Server peer
+const serverTransport = createWebSocketServerTransport({
+  port: 3399,
+  path: "/",
 });
+const server = createScompPeer({ transports: [serverTransport] });
 
-const server = createWebSocketServerTransport({ port: 3399, path: "/" });
-await server.listen(users.router);
+server.provides(
+  createScompService(Users).implement({
+    requests: { get: async ({ id }) => ({ id }) },
+    signals: { ping: async () => undefined },
+  }),
+);
 
-const routeHints: ClientRouteHints = {
-  "users.get": "request",
-  "users.ping": "signal",
-};
+// Client peer
+const clientTransport = createWebSocketBrowserTransport({
+  url: "ws://127.0.0.1:3399",
+});
+const client = createScompPeer({ transports: [clientTransport] });
 
-const browserTransport = createWebSocketBrowserTransport({ url: "ws://127.0.0.1:3399" });
-const client = createScompClient<Contract>({ transport: browserTransport, routeHints });
-
-await client.users.get({ id: 1 });
-await client.users.ping({ id: 1 });
+const users = client.consumes(Users);
+await users.get({ id: 1 });
+await users.ping({ id: 1 });
 ```
 
 ## 2) Node websocket server + Node websocket client
 
 ```ts
-import { createScompClient, type ClientRouteHints } from "@scomp/client";
-import { createScompService } from "@scomp/core";
-import { createWebSocketClientTransport } from "@scomp/transport-websocket-client";
+import {
+  createContractToken,
+  createScompPeer,
+  createScompService,
+} from "@scomp/core";
 import { createWebSocketServerTransport } from "@scomp/transport-websocket-server-node";
+import { createWebSocketClientTransport } from "@scomp/transport-websocket-client";
 
 type Contract = {
   math: {
@@ -57,25 +70,39 @@ type Contract = {
   };
 };
 
-const math = createScompService<Contract["math"]>("math").implement({
-  requests: { add: async ({ a, b }) => ({ sum: a + b }) },
+const Math = createContractToken<Contract["math"]>("math");
+
+// Server peer
+const serverTransport = createWebSocketServerTransport({
+  port: 3399,
+  path: "/",
 });
+const server = createScompPeer({ transports: [serverTransport] });
 
-const server = createWebSocketServerTransport({ port: 3399, path: "/" });
-await server.listen(math.router);
+server.provides(
+  createScompService(Math).implement({
+    requests: { add: async ({ a, b }) => ({ sum: a + b }) },
+  }),
+);
 
-const routeHints: ClientRouteHints = { "math.add": "request" };
-const transport = createWebSocketClientTransport({ url: "ws://127.0.0.1:3399" });
-const client = createScompClient<Contract>({ transport, routeHints });
+// Client peer
+const clientTransport = createWebSocketClientTransport({
+  url: "ws://127.0.0.1:3399",
+});
+const client = createScompPeer({ transports: [clientTransport] });
 
-await client.math.add({ a: 1, b: 2 });
+const math = client.consumes(Math);
+await math.add({ a: 1, b: 2 });
 ```
 
 ## 3) RabbitMQ transport (single process pattern)
 
 ```ts
-import { createScompClient, type ClientRouteHints } from "@scomp/client";
-import { createScompService } from "@scomp/core";
+import {
+  createContractToken,
+  createScompPeer,
+  createScompService,
+} from "@scomp/core";
 import { createRabbitMqTransport } from "@scomp/transport-rabbitmq";
 
 type Contract = {
@@ -84,24 +111,32 @@ type Contract = {
   };
 };
 
-const jobs = createScompService<Contract["jobs"]>("jobs").implement({
-  requests: { run: async () => ({ ok: true }) },
+const Jobs = createContractToken<Contract["jobs"]>("jobs");
+
+// Single peer that both provides and consumes (bidirectional)
+const transport = createRabbitMqTransport({
+  url: "amqp://guest:guest@localhost:5672",
 });
+const peer = createScompPeer({ transports: [transport] });
 
-const transport = createRabbitMqTransport({ url: "amqp://guest:guest@localhost:5672" });
-await transport.listen(jobs.router);
+peer.provides(
+  createScompService(Jobs).implement({
+    requests: { run: async () => ({ ok: true as const }) },
+  }),
+);
 
-const routeHints: ClientRouteHints = { "jobs.run": "request" };
-const client = createScompClient<Contract>({ transport, routeHints });
-
-await client.jobs.run({ id: "job-1" });
+const jobs = peer.consumes(Jobs);
+await jobs.run({ id: "job-1" });
 ```
 
 ## 4) Browser windows transport (same-origin)
 
 ```ts
-import { createScompClient, type ClientRouteHints } from "@scomp/client";
-import { createScompService } from "@scomp/core";
+import {
+  createContractToken,
+  createScompPeer,
+  createScompService,
+} from "@scomp/core";
 import { createBrowserWindowsTransport } from "@scomp/transport-browser-windows";
 
 type Contract = {
@@ -110,33 +145,104 @@ type Contract = {
   };
 };
 
-const transport = createBrowserWindowsTransport({ channelName: "scomp-app", mode: "auto" });
+const Counter = createContractToken<Contract["counter"]>("counter");
+
+const transport = createBrowserWindowsTransport({
+  channelName: "scomp-app",
+  mode: "auto",
+});
 
 // In hosting window(s)
-const counter = createScompService<Contract["counter"]>("counter").implement({
-  requests: { get: async () => ({ value: 1 }) },
-});
-await transport.listen(counter.router);
+const server = createScompPeer({ transports: [transport] });
+server.provides(
+  createScompService(Counter).implement({
+    requests: { get: async () => ({ value: 1 }) },
+  }),
+);
 
 // In invoking window(s)
-const routeHints: ClientRouteHints = { "counter.get": "request" };
-const client = createScompClient<Contract>({ transport, routeHints });
-await client.counter.get({ id: "a" });
+const client = createScompPeer({ transports: [transport] });
+const counter = client.consumes(Counter);
+await counter.get({ id: "a" });
 ```
 
-## 5) Inprocess compatibility pattern
-
-`@scomp/transport-inprocess` is for legacy/core-compatible `ScompServiceDefinition` + `ScompTransport` flow.
+## 5) Controlled feed over websocket
 
 ```ts
-import { createLegacyScompService, createScompClient as createLegacyClient } from "@scomp/core";
-import { createInprocessTransport } from "@scomp/transport-inprocess";
+import {
+  createContractToken,
+  createControlledFeed,
+  createScompPeer,
+  createScompService,
+} from "@scomp/core";
+import type { ControlledAsyncIterable } from "@scomp/core";
+import { createWebSocketServerTransport } from "@scomp/transport-websocket-server";
+import { createWebSocketBrowserTransport } from "@scomp/transport-websocket-browser";
 
-const service = createLegacyScompService()
-  .request("sum", async (a: number, b: number) => a + b)
-  .build();
+type PriceTick = { symbol: string; price: number };
 
-const transport = createInprocessTransport(service);
-const client = createLegacyClient(service, transport);
-await client.sum(1, 2);
+type PricingContract = {
+  prices(input: { symbols: string[] }): ControlledAsyncIterable<
+    PriceTick,
+    {
+      addSymbol(input: { symbol: string }): Promise<void>;
+      getInterval(input: {}): Promise<{ intervalMs: number }>;
+    }
+  >;
+};
+
+const Pricing = createContractToken<PricingContract>("pricing");
+
+// Server
+const serverTransport = createWebSocketServerTransport({
+  port: 3399,
+  path: "/",
+});
+const server = createScompPeer({ transports: [serverTransport] });
+
+server.provides(
+  createScompService(Pricing).implement({
+    feeds: {
+      prices: {
+        strategy: "exclusive",
+        handler: async function* ({ symbols }) {
+          const state = { symbols: [...symbols], intervalMs: 1000 };
+
+          return createControlledFeed(
+            (async function* () {
+              while (true) {
+                for (const symbol of state.symbols) {
+                  yield { symbol, price: Math.random() * 100 };
+                }
+                await new Promise((r) => setTimeout(r, state.intervalMs));
+              }
+            })(),
+            {
+              addSymbol: async ({ symbol }) => {
+                state.symbols.push(symbol);
+              },
+              getInterval: async () => ({ intervalMs: state.intervalMs }),
+            },
+          );
+        },
+      },
+    },
+  }),
+);
+
+// Client
+const clientTransport = createWebSocketBrowserTransport({
+  url: "ws://127.0.0.1:3399",
+});
+const client = createScompPeer({ transports: [clientTransport] });
+
+const pricing = client.consumes(Pricing);
+const feed = pricing.prices({ symbols: ["AAPL"] });
+
+await feed.controller.addSymbol({ symbol: "GOOG" });
+
+for await (const tick of feed) {
+  console.log(tick);
+  break;
+}
 ```
