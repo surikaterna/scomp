@@ -1,5 +1,6 @@
 import {
   ScompFeed,
+  createFeedHash,
   type ControlledAsyncIterable,
   type ITransport,
   type ScompClientInvokeOptions,
@@ -10,7 +11,6 @@ import type {
   ScompPriorityHint,
   ScompTransportMessageMeta,
 } from "@scomp/types";
-import { createFeedHash } from "@scomp/types";
 
 type UnknownFunction = (...args: Array<unknown>) => unknown;
 

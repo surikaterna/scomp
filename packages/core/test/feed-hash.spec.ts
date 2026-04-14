@@ -2,7 +2,7 @@ import {
   createFeedHash,
   createRuntimeNeutralFeedHasher,
   type FeedHashOptions,
-} from "../src/protocol";
+} from "../src/feed-hash";
 
 describe("createFeedHash", () => {
   // ── Determinism ──────────────────────────────────────────────────────

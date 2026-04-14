@@ -122,8 +122,10 @@
         "@scomp/core": "workspace:*",
         "@scomp/transport-shared": "workspace:*",
         "@scomp/types": "workspace:*",
-        "@types/ws": "^8.18.1",
         "ws": "^8.18.3",
+      },
+      "devDependencies": {
+        "@types/ws": "^8.18.1",
       },
     },
     "packages/transport-websocket-server": {
@@ -135,8 +137,10 @@
         "@scomp/transport-websocket-client": "workspace:*",
         "@scomp/transport-websocket-server-runtime": "workspace:*",
         "@scomp/types": "workspace:*",
-        "@types/ws": "^8.18.1",
         "ws": "^8.18.3",
+      },
+      "devDependencies": {
+        "@types/ws": "^8.18.1",
       },
     },
     "packages/transport-websocket-server-runtime": {

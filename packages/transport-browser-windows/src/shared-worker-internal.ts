@@ -1,4 +1,4 @@
-import { createFeedHash } from "@scomp/types";
+import { createFeedHash } from "@scomp/core";
 import type {
   BrowserWindowsCanonicalPayloadHash,
   BrowserWindowsParticipantId,
