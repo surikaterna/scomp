@@ -1,5 +1,5 @@
-import type { ScompClientInvokeOptions } from "@scomp/core";
 import type {
+  ScompClientInvokeOptions,
   ScompTransportMessageMeta,
   ScompTransportPrincipal,
 } from "@scomp/types";

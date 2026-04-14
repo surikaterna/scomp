@@ -17,6 +17,14 @@ export interface ScompTransportPriorityHints {
   targetLatencyMs?: number;
 }
 
+export interface ScompClientInvokeOptions extends ScompTransportPriorityHints {
+  meta?: ScompTransportMessageMeta;
+  /** Feed subscription ID for controller-scoped calls. */
+  feed?: string;
+  /** Controller method name for controller-scoped calls. */
+  method?: string;
+}
+
 export const SCOMP_CONTROL_PLANE_NAMESPACE = "__scomp";
 
 export type ScompControlPlaneRoute =

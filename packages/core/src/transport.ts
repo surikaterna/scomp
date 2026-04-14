@@ -1,15 +1,6 @@
-import type {
-  ScompTransportMessageMeta,
-  ScompTransportPriorityHints,
-} from "@scomp/types";
+import type { ScompClientInvokeOptions } from "@scomp/types";
 
-export interface ScompClientInvokeOptions extends ScompTransportPriorityHints {
-  meta?: ScompTransportMessageMeta;
-  /** Feed subscription ID for controller-scoped calls. */
-  feed?: string;
-  /** Controller method name for controller-scoped calls. */
-  method?: string;
-}
+export type { ScompClientInvokeOptions } from "@scomp/types";
 
 export interface ITransport {
   registerRoutes(router: Record<string, unknown>): Promise<void> | void;

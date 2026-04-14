@@ -16,6 +16,7 @@ export {
   type ScompPriorityHint,
   type ScompPriorityIndex,
   type ScompTransportPriorityHints,
+  type ScompClientInvokeOptions,
   type ScompFeedHashFunction,
   type ScompControlPlaneDiscoverRequest,
   type ScompControlPlaneDiscoveredService,
