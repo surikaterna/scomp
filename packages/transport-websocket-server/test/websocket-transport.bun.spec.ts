@@ -47,7 +47,8 @@ async function reservePort(): Promise<number> {
   return port;
 }
 
-const transports: Array<WebSocketServerTransport | WebSocketClientTransport> = [];
+const transports: Array<WebSocketServerTransport | WebSocketClientTransport> =
+  [];
 
 afterEach(async () => {
   while (transports.length > 0) {
@@ -66,7 +67,7 @@ describe("WebSocketServerTransport Bun integration", () => {
     });
     transports.push(serverTransport);
 
-    await serverTransport.listen({
+    await serverTransport.registerRoutes({
       "health.ping": {
         route: "health.ping",
         kind: "request",
@@ -93,7 +94,7 @@ describe("WebSocketServerTransport Bun integration", () => {
     const serverTransport = new WebSocketServerTransport({ port, path: "/ws" });
     transports.push(serverTransport);
 
-    await serverTransport.listen({
+    await serverTransport.registerRoutes({
       "math.double": {
         route: "math.double",
         kind: "request",
@@ -110,7 +111,8 @@ describe("WebSocketServerTransport Bun integration", () => {
         route: "math.count",
         kind: "feed",
         strategy: "fanout",
-        hashKey: (payload: unknown) => String((payload as { room: string }).room),
+        hashKey: (payload: unknown) =>
+          String((payload as { room: string }).room),
         handler: async function* () {
           yield 1;
           yield 2;
@@ -130,9 +132,9 @@ describe("WebSocketServerTransport Bun integration", () => {
     await wait(20);
     expect(seenSignals).toEqual([{ id: 7 }]);
 
-    await expect(collect(client.feed("math.count", { room: "main" }))).resolves.toEqual(
-      [1, 2, 3],
-    );
+    await expect(
+      collect(client.feed("math.count", { room: "main" })),
+    ).resolves.toEqual([1, 2, 3]);
   });
 
   test("denies unauthorized inbound request/signal/feed operations", async () => {
@@ -144,8 +146,8 @@ describe("WebSocketServerTransport Bun integration", () => {
       path: "/ws",
       security: {
         authenticate: ({ meta }) => {
-          const token = (meta as { auth?: { token?: string } } | undefined)?.auth
-            ?.token;
+          const token = (meta as { auth?: { token?: string } } | undefined)
+            ?.auth?.token;
           if (token === "allow") {
             return { subject: "user:allow" };
           }
@@ -157,7 +159,7 @@ describe("WebSocketServerTransport Bun integration", () => {
     });
     transports.push(serverTransport);
 
-    await serverTransport.listen({
+    await serverTransport.registerRoutes({
       "secure.request": {
         route: "secure.request",
         kind: "request",
@@ -192,12 +194,12 @@ describe("WebSocketServerTransport Bun integration", () => {
     });
     transports.push(allowedClient);
 
-    await expect(deniedClient.request("secure.request", { id: 1 })).rejects.toThrow(
-      /not authorized/i,
-    );
-    await expect(allowedClient.request("secure.request", { id: 2 })).resolves.toEqual(
-      { id: 2 },
-    );
+    await expect(
+      deniedClient.request("secure.request", { id: 1 }),
+    ).rejects.toThrow(/not authorized/i);
+    await expect(
+      allowedClient.request("secure.request", { id: 2 }),
+    ).resolves.toEqual({ id: 2 });
 
     await deniedClient.signal("secure.signal", { denied: true });
     await wait(20);

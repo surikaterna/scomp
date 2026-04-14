@@ -1,6 +1,4 @@
-import {
-  cleanupDisconnectedParticipant,
-} from "../src/shared-worker-broker-disconnect";
+import { cleanupDisconnectedParticipant } from "../src/shared-worker-broker-disconnect";
 import {
   handleHostFeedChunk,
   handleInvokeFeedStop,
@@ -74,7 +72,7 @@ describe("shared-worker broker meta policy", () => {
       sentAtMs: Date.now(),
       requestId: "req-source",
       route: "svc.feed",
-      operation: "feed_stop",
+      operation: "signal",
       payloadKey: '{"id":1}',
       payloadHash: "hash-1",
       meta: stopMeta,
@@ -169,7 +167,9 @@ describe("shared-worker broker meta policy", () => {
 
     cleanupDisconnectedParticipant(context, "host-a");
 
-    const feedError = sent.find((entry) => entry.message.type === "invoke_feed_chunk")?.message;
+    const feedError = sent.find(
+      (entry) => entry.message.type === "invoke_feed_chunk",
+    )?.message;
     expect(feedError?.type).toBe("invoke_feed_chunk");
     expect(feedError?.meta).toMatchObject({
       traceId: "feed-meta",
@@ -180,7 +180,9 @@ describe("shared-worker broker meta policy", () => {
       },
     });
 
-    const responseError = sent.find((entry) => entry.message.type === "invoke_response")?.message;
+    const responseError = sent.find(
+      (entry) => entry.message.type === "invoke_response",
+    )?.message;
     expect(responseError?.type).toBe("invoke_response");
     expect(responseError?.meta).toMatchObject({
       traceId: "req-meta",
@@ -233,7 +235,9 @@ describe("shared-worker broker meta policy", () => {
     });
 
     expect(sent).toHaveLength(2);
-    const metaByTarget = new Map(sent.map((entry) => [entry.participantId, entry.message.meta]));
+    const metaByTarget = new Map(
+      sent.map((entry) => [entry.participantId, entry.message.meta]),
+    );
     expect(metaByTarget.get("invoke-a")).toEqual({ traceId: "trace-a" });
     expect(metaByTarget.get("invoke-b")).toEqual({ traceId: "trace-b" });
   });

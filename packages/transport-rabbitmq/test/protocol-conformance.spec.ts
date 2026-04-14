@@ -188,9 +188,8 @@ async function resolveCapturedUnaryRequest(
     payload,
   });
 
-  const rabbitReplyConsumer = captured.rabbitFake.queueConsumers.get(
-    "generated-1",
-  );
+  const rabbitReplyConsumer =
+    captured.rabbitFake.queueConsumers.get("generated-1");
   await rabbitReplyConsumer?.(
     createMessage(
       { payload },
@@ -301,7 +300,10 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
   it("encodes request envelopes with equivalent shape after transport metadata normalization", async () => {
     const captured = await captureUnaryRequest("users.get", { id: 9 });
 
-    assert.deepEqual(stripId(captured.websocketRequest), captured.rabbitRequest);
+    assert.deepEqual(
+      stripId(captured.websocketRequest),
+      captured.rabbitRequest,
+    );
 
     const result = await resolveCapturedUnaryRequest(captured, { ok: true });
     assert.deepEqual(result.websocket, { ok: true });
@@ -314,7 +316,10 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
       includeRoutes: true,
     });
 
-    assert.deepEqual(stripId(captured.websocketRequest), captured.rabbitRequest);
+    assert.deepEqual(
+      stripId(captured.websocketRequest),
+      captured.rabbitRequest,
+    );
 
     const discoverResponse = {
       services: [
@@ -327,7 +332,10 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
       generatedAt: "2026-03-28T15:00:00.000Z",
       ttlMs: 1500,
     };
-    const result = await resolveCapturedUnaryRequest(captured, discoverResponse);
+    const result = await resolveCapturedUnaryRequest(
+      captured,
+      discoverResponse,
+    );
 
     assert.deepEqual(result.websocket, discoverResponse);
     assert.deepEqual(result.rabbit, discoverResponse);
@@ -339,7 +347,10 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
       channel: "ws:alternate",
     });
 
-    assert.deepEqual(stripId(captured.websocketRequest), captured.rabbitRequest);
+    assert.deepEqual(
+      stripId(captured.websocketRequest),
+      captured.rabbitRequest,
+    );
 
     const resolveResponse = {
       resolved: true,
@@ -366,8 +377,14 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
 
     assert.deepEqual(result.websocket, resolveResponse);
     assert.deepEqual(result.rabbit, resolveResponse);
-    assert.equal((result.websocket as { fallbackUsed: boolean }).fallbackUsed, true);
-    assert.equal((result.rabbit as { fallbackUsed: boolean }).fallbackUsed, true);
+    assert.equal(
+      (result.websocket as { fallbackUsed: boolean }).fallbackUsed,
+      true,
+    );
+    assert.equal(
+      (result.rabbit as { fallbackUsed: boolean }).fallbackUsed,
+      true,
+    );
   });
 
   it("encodes health control-plane requests consistently across transports", async () => {
@@ -377,7 +394,10 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
       service: "users",
     });
 
-    assert.deepEqual(stripId(captured.websocketRequest), captured.rabbitRequest);
+    assert.deepEqual(
+      stripId(captured.websocketRequest),
+      captured.rabbitRequest,
+    );
 
     const healthResponse = {
       status: "ok",
@@ -466,7 +486,8 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
     assert.equal(websocketRequest.meta?.priorityClass, "P2");
     assert.equal(websocketRequest.meta?.tags?.priority, "P3");
 
-    const rabbitRequestOptions = rabbitFake.channel.sendToQueue.mock.calls[0][2] as {
+    const rabbitRequestOptions = rabbitFake.channel.sendToQueue.mock
+      .calls[0][2] as {
       correlationId: string;
       replyTo: string;
     };
@@ -686,7 +707,7 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
     assert.deepEqual(await pending, { ok: true });
   });
 
-  it("encodes feed start and stop envelopes consistently across transports", async () => {
+  it("encodes feed and unsubscribe envelopes consistently across transports", async () => {
     const rabbitFake = createFakeChannel();
     mockConnect.mockResolvedValue(rabbitFake.connection);
 
@@ -710,10 +731,9 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
     const rabbitFeedStartEnvelope = JSON.parse(
       Buffer.from(rabbitFeedStartCall[1]).toString("utf8"),
     ) as Record<string, unknown>;
-    const websocketFeedStartEnvelope = JSON.parse(websocket.sentPayloads[0]) as Record<
-      string,
-      unknown
-    >;
+    const websocketFeedStartEnvelope = JSON.parse(
+      websocket.sentPayloads[0],
+    ) as Record<string, unknown>;
 
     assert.deepEqual(
       stripId(websocketFeedStartEnvelope),
@@ -733,7 +753,7 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
         {
           payload: {
             exchange: feedExchange,
-            hash: feedHash,
+            feed: feedHash,
           },
         },
         {
@@ -752,7 +772,7 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
       id: String(websocketFeedStartEnvelope.id),
       payload: {
         exchange: feedExchange,
-        hash: feedHash,
+        feed: feedHash,
       },
     });
 
@@ -762,7 +782,7 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
     await rabbitFeedConsumer?.(
       createMessage({
         channel: "feed",
-        hash: feedHash,
+        feed: feedHash,
         type: "next",
         payload: { seq: 1 },
       }),
@@ -773,7 +793,7 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
       }
     ).handleIncoming({
       channel: "feed",
-      hash: feedHash,
+      feed: feedHash,
       type: "next",
       payload: { seq: 1 },
     });
@@ -794,49 +814,7 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
       throw new Error("Feed iterators do not support return().");
     }
 
-    await waitFor(() => rabbitFake.channel.sendToQueue.mock.calls.length > 1);
-    await waitFor(() => websocket.sentPayloads.length > 1);
-
-    const rabbitFeedStopCall = rabbitFake.channel.sendToQueue.mock.calls[1];
-    const rabbitFeedStopEnvelope = JSON.parse(
-      Buffer.from(rabbitFeedStopCall[1]).toString("utf8"),
-    ) as Record<string, unknown>;
-    const websocketFeedStopEnvelope = JSON.parse(websocket.sentPayloads[1]) as Record<
-      string,
-      unknown
-    >;
-
-    assert.deepEqual(
-      stripId(websocketFeedStopEnvelope),
-      rabbitFeedStopEnvelope,
-    );
-    assert.deepEqual(rabbitFeedStopEnvelope.payload, { hash: feedHash });
-    assert.deepEqual(websocketFeedStopEnvelope.payload, { hash: feedHash });
-
-    const rabbitFeedStopOptions = rabbitFeedStopCall[2] as {
-      correlationId: string;
-      replyTo: string;
-    };
-    await rabbitReplyConsumer?.(
-      createMessage(
-        { payload: { ok: true } },
-        {
-          properties: {
-            correlationId: rabbitFeedStopOptions.correlationId,
-            replyTo: rabbitFeedStopOptions.replyTo,
-          },
-        },
-      ),
-    );
-    (
-      websocket.client as unknown as {
-        handleIncoming: (message: unknown) => void;
-      }
-    ).handleIncoming({
-      id: String(websocketFeedStopEnvelope.id),
-      payload: { ok: true },
-    });
-
+    // In v2, feed unsubscribe is a fire-and-forget signal — no response needed.
     const [rabbitReturn, websocketReturn] = await Promise.all([
       rabbitReturnPromise,
       websocketReturnPromise,
@@ -844,6 +822,22 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
 
     assert.equal(rabbitReturn.done, true);
     assert.equal(websocketReturn.done, true);
+
+    // RabbitMQ unsubscribe goes through signal() → channel.publish
+    await waitFor(() => rabbitFake.channel.publish.mock.calls.length > 0);
+    const rabbitUnsubCall = rabbitFake.channel.publish.mock.calls[0];
+    const rabbitUnsubEnvelope = JSON.parse(
+      Buffer.from(rabbitUnsubCall[2]).toString("utf8"),
+    ) as Record<string, unknown>;
+    assert.equal(rabbitUnsubEnvelope.op, "signal");
+
+    // WS client sends fire-and-forget JSON signal
+    await waitFor(() => websocket.sentPayloads.length > 1);
+    const websocketUnsubEnvelope = JSON.parse(
+      websocket.sentPayloads[1],
+    ) as Record<string, unknown>;
+    assert.equal(websocketUnsubEnvelope.op, "signal");
+    assert.equal(websocketUnsubEnvelope.method, "__scomp.unsubscribe");
   });
 
   it("propagates feed error chunks with consistent rejections", async () => {
@@ -871,7 +865,9 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
       correlationId: string;
       replyTo: string;
     };
-    const websocketFeedStartEnvelope = JSON.parse(websocket.sentPayloads[0]) as {
+    const websocketFeedStartEnvelope = JSON.parse(
+      websocket.sentPayloads[0],
+    ) as {
       id: string;
     };
 
@@ -884,7 +880,7 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
         {
           payload: {
             exchange: feedExchange,
-            hash: feedHash,
+            feed: feedHash,
           },
         },
         {
@@ -903,7 +899,7 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
       id: websocketFeedStartEnvelope.id,
       payload: {
         exchange: feedExchange,
-        hash: feedHash,
+        feed: feedHash,
       },
     });
 
@@ -913,7 +909,7 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
     await rabbitFeedConsumer?.(
       createMessage({
         channel: "feed",
-        hash: feedHash,
+        feed: feedHash,
         type: "error",
         message: "feed exploded",
       }),
@@ -924,43 +920,13 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
       }
     ).handleIncoming({
       channel: "feed",
-      hash: feedHash,
+      feed: feedHash,
       type: "error",
       message: "feed exploded",
     });
 
-    await waitFor(() => rabbitFake.channel.sendToQueue.mock.calls.length > 1);
-    await waitFor(() => websocket.sentPayloads.length > 1);
-
-    const rabbitFeedStopCall = rabbitFake.channel.sendToQueue.mock.calls[1];
-    const rabbitFeedStopOptions = rabbitFeedStopCall[2] as {
-      correlationId: string;
-      replyTo: string;
-    };
-    const websocketFeedStopEnvelope = JSON.parse(websocket.sentPayloads[1]) as {
-      id: string;
-    };
-
-    await rabbitReplyConsumer?.(
-      createMessage(
-        { payload: { ok: true } },
-        {
-          properties: {
-            correlationId: rabbitFeedStopOptions.correlationId,
-            replyTo: rabbitFeedStopOptions.replyTo,
-          },
-        },
-      ),
-    );
-    (
-      websocket.client as unknown as {
-        handleIncoming: (message: unknown) => void;
-      }
-    ).handleIncoming({
-      id: websocketFeedStopEnvelope.id,
-      payload: { ok: true },
-    });
-
+    // In v2, feed error triggers the iterator's finally block which sends
+    // a fire-and-forget unsubscribe signal — no response handshake needed.
     await assert.rejects(() => rabbitNext, /feed exploded/);
     await assert.rejects(() => websocketNext, /feed exploded/);
   });
@@ -970,7 +936,7 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
     mockConnect.mockResolvedValue(rabbitFake.connection);
 
     const rabbit = new RabbitMQTransport({ url: "amqp://test" });
-    await rabbit.listen({
+    await rabbit.registerRoutes({
       "users.live": {
         route: "users.live",
         kind: "feed",
@@ -985,7 +951,7 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
     await rpcConsumer?.(
       createMessage({
         route: "users.live",
-        op: "feed_start",
+        op: "feed",
         payload: { room: "alpha" },
       }),
     );
@@ -997,7 +963,7 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
     );
     assert.equal(firstChunk.channel, "feed");
     assert.equal(firstChunk.type, "next");
-    assert.equal(typeof firstChunk.hash, "string");
+    assert.equal(typeof firstChunk.feed, "string");
 
     const websocket = createPatchedWebSocketClient().client as unknown as {
       feeds: Map<string, unknown>;
@@ -1010,7 +976,7 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
       closed: false,
     };
 
-    websocket.feeds.set(firstChunk.hash, feedState);
+    websocket.feeds.set(firstChunk.feed, feedState);
     websocket.handleIncoming(firstChunk);
     assert.deepEqual(feedState.queue[0], { seq: 1 });
 

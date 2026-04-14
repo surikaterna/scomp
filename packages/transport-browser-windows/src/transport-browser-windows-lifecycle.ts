@@ -75,7 +75,11 @@ export function shutdownTransport(options: {
   options.removeRuntimeEventListener();
 
   for (const [requestId, pending] of options.pendingRequests.entries()) {
-    rejectPendingRequest(requestId, pending, new Error("BrowserWindowsTransport closed."));
+    rejectPendingRequest(
+      requestId,
+      pending,
+      new Error("BrowserWindowsTransport closed."),
+    );
   }
   options.pendingRequests.clear();
 
@@ -95,7 +99,8 @@ export function shutdownTransport(options: {
         sentAtMs: Date.now(),
         requestId,
         route: feed.route,
-        operation: "feed_stop",
+        operation: "signal",
+        method: "__scomp.unsubscribe",
         payloadKey: feed.payloadKey,
         payloadHash: feed.payloadHash,
         meta: feed.meta,

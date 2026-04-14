@@ -1,4 +1,4 @@
-import { createScompService } from "@scomp/core";
+import { createScompService, createContractToken } from "@scomp/core";
 import { BrowserWindowsSharedWorkerBroker } from "../src/shared-worker-broker";
 import { BrowserWindowsTransport } from "../src/transport-browser-windows";
 import { createRouteIntentsFromCompiledRouter } from "../src";
@@ -30,14 +30,21 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function latestReasonCode(transport: BrowserWindowsTransport): string | undefined {
+function latestReasonCode(
+  transport: BrowserWindowsTransport,
+): string | undefined {
   const snapshot = transport.healthSnapshot();
   const last = snapshot.reasons[snapshot.reasons.length - 1];
   return last?.code;
 }
 
-function hasReasonCode(transport: BrowserWindowsTransport, code: string): boolean {
-  return transport.healthSnapshot().reasons.some((reason) => reason.code === code);
+function hasReasonCode(
+  transport: BrowserWindowsTransport,
+  code: string,
+): boolean {
+  return transport
+    .healthSnapshot()
+    .reasons.some((reason) => reason.code === code);
 }
 
 describe("BrowserWindowsTransport shared worker", () => {
@@ -50,7 +57,7 @@ describe("BrowserWindowsTransport shared worker", () => {
     const host = new BrowserWindowsTransport({
       sharedWorkerCtor: MockSharedWorker as any,
     });
-    host.listen({
+    host.registerRoutes({
       "svc.double": {
         route: "svc.double",
         kind: "request",
@@ -112,7 +119,7 @@ describe("BrowserWindowsTransport shared worker", () => {
     const hostA = new BrowserWindowsTransport({
       sharedWorkerCtor: MockSharedWorker as any,
     });
-    hostA.listen({
+    hostA.registerRoutes({
       "svc.ping": {
         route: "svc.ping",
         kind: "signal",
@@ -125,7 +132,7 @@ describe("BrowserWindowsTransport shared worker", () => {
     const hostB = new BrowserWindowsTransport({
       sharedWorkerCtor: MockSharedWorker as any,
     });
-    hostB.listen({
+    hostB.registerRoutes({
       "svc.ping": {
         route: "svc.ping",
         kind: "signal",
@@ -155,7 +162,7 @@ describe("BrowserWindowsTransport shared worker", () => {
       sharedWorkerCtor: MockSharedWorker as any,
     });
 
-    host.listen({
+    host.registerRoutes({
       "svc.stream": {
         route: "svc.stream",
         kind: "feed",
@@ -190,7 +197,7 @@ describe("BrowserWindowsTransport shared worker", () => {
       sharedWorkerCtor: MockSharedWorker as any,
     });
 
-    host.listen({
+    host.registerRoutes({
       "svc.hot": {
         route: "svc.hot",
         kind: "feed",
@@ -225,7 +232,7 @@ describe("BrowserWindowsTransport shared worker", () => {
       sharedWorkerCtor: MockSharedWorker as any,
     });
 
-    host.listen({
+    host.registerRoutes({
       "svc.hang": {
         route: "svc.hang",
         kind: "request",
@@ -263,14 +270,18 @@ describe("BrowserWindowsTransport shared worker", () => {
     });
 
     const pendingRequest = invoke.request("svc.hang", { id: 1 });
-    const feedIterator = invoke.feed("svc.live", { id: 1 })[Symbol.asyncIterator]();
+    const feedIterator = invoke
+      .feed("svc.live", { id: 1 })
+      [Symbol.asyncIterator]();
     await feedIterator.next();
 
     host.close();
 
     await expect(pendingRequest).rejects.toThrow(/host disconnected/i);
     expect(latestReasonCode(invoke)).toBe("host-disconnected");
-    await expect(feedIterator.next()).rejects.toThrow(/feed host disconnected/i);
+    await expect(feedIterator.next()).rejects.toThrow(
+      /feed host disconnected/i,
+    );
 
     invoke.close();
   });
@@ -284,7 +295,7 @@ describe("BrowserWindowsTransport shared worker", () => {
       sharedWorkerCtor: MockSharedWorker as any,
     });
 
-    host.listen({
+    host.registerRoutes({
       "svc.mux": {
         route: "svc.mux",
         kind: "feed",
@@ -316,10 +327,17 @@ describe("BrowserWindowsTransport shared worker", () => {
       sharedWorkerCtor: MockSharedWorker as any,
     });
 
-    const iteratorA = invokeA.feed("svc.mux", { key: "same" })[Symbol.asyncIterator]();
-    const iteratorB = invokeB.feed("svc.mux", { key: "same" })[Symbol.asyncIterator]();
+    const iteratorA = invokeA
+      .feed("svc.mux", { key: "same" })
+      [Symbol.asyncIterator]();
+    const iteratorB = invokeB
+      .feed("svc.mux", { key: "same" })
+      [Symbol.asyncIterator]();
 
-    const [firstA, firstB] = await Promise.all([iteratorA.next(), iteratorB.next()]);
+    const [firstA, firstB] = await Promise.all([
+      iteratorA.next(),
+      iteratorB.next(),
+    ]);
     expect(firstA.value).toBe(0);
     expect(firstB.value).toBe(0);
     expect(feedStarts).toBe(1);
@@ -353,7 +371,7 @@ describe("BrowserWindowsTransport shared worker", () => {
       },
     });
 
-    host.listen({
+    host.registerRoutes({
       "svc.double": {
         route: "svc.double",
         kind: "request",
@@ -454,7 +472,7 @@ describe("BrowserWindowsTransport shared worker", () => {
       heartbeatTimeoutMs: 40,
     });
 
-    host.listen({
+    host.registerRoutes({
       "svc.identity": {
         route: "svc.identity",
         kind: "request",
@@ -474,13 +492,17 @@ describe("BrowserWindowsTransport shared worker", () => {
     });
 
     await new Promise((resolve) => setTimeout(resolve, 50));
-    const beforeFailover = await invoke.request("svc.identity", { value: "before" });
+    const beforeFailover = await invoke.request("svc.identity", {
+      value: "before",
+    });
     expect(beforeFailover).toEqual({ value: "before" });
 
     firstLeader.close();
     await new Promise((resolve) => setTimeout(resolve, 80));
 
-    const afterFailover = await invoke.request("svc.identity", { value: "after" });
+    const afterFailover = await invoke.request("svc.identity", {
+      value: "after",
+    });
     expect(afterFailover).toEqual({ value: "after" });
 
     invoke.close();
@@ -502,7 +524,7 @@ describe("BrowserWindowsTransport shared worker", () => {
       heartbeatTimeoutMs: 40,
     });
 
-    host.listen({
+    host.registerRoutes({
       "svc.mux": {
         route: "svc.mux",
         kind: "feed",
@@ -546,10 +568,17 @@ describe("BrowserWindowsTransport shared worker", () => {
 
     await sleep(50);
 
-    const iteratorA = invokeA.feed("svc.mux", { key: "same" })[Symbol.asyncIterator]();
-    const iteratorB = invokeB.feed("svc.mux", { key: "same" })[Symbol.asyncIterator]();
+    const iteratorA = invokeA
+      .feed("svc.mux", { key: "same" })
+      [Symbol.asyncIterator]();
+    const iteratorB = invokeB
+      .feed("svc.mux", { key: "same" })
+      [Symbol.asyncIterator]();
 
-    const [firstA, firstB] = await Promise.all([iteratorA.next(), iteratorB.next()]);
+    const [firstA, firstB] = await Promise.all([
+      iteratorA.next(),
+      iteratorB.next(),
+    ]);
     expect(firstA.value).toBe(0);
     expect(firstB.value).toBe(0);
     expect(feedStarts).toBe(1);
@@ -582,7 +611,7 @@ describe("BrowserWindowsTransport shared worker", () => {
       },
     });
 
-    host.listen({
+    host.registerRoutes({
       "svc.meta": {
         route: "svc.meta",
         kind: "request",
@@ -609,16 +638,20 @@ describe("BrowserWindowsTransport shared worker", () => {
       },
     });
 
-    const result = await invoke.request("svc.meta", { id: 1 }, {
-      meta: {
-        tenantId: "tenant-options",
-        auth: { source: "options" },
+    const result = await invoke.request(
+      "svc.meta",
+      { id: 1 },
+      {
+        meta: {
+          tenantId: "tenant-options",
+          auth: { source: "options" },
+        },
+        priority: "P0",
+        priorityClass: "P1",
+        deadlineAtMs: 200,
+        targetLatencyMs: 10,
       },
-      priority: "P0",
-      priorityClass: "P1",
-      deadlineAtMs: 200,
-      targetLatencyMs: 10,
-    });
+    );
 
     expect(result).toEqual({ ok: true });
     expect(observedMeta?.traceId).toBe("cfg-trace");
@@ -642,8 +675,11 @@ describe("BrowserWindowsTransport shared worker", () => {
     host.close();
   });
 
-  test("preserves inbound security meta parity for feed_start/feed_stop", async () => {
-    const seenByOperation = new Map<string, Array<Record<string, unknown> | undefined>>();
+  test("preserves inbound security meta parity for feed/signal", async () => {
+    const seenByOperation = new Map<
+      string,
+      Array<Record<string, unknown> | undefined>
+    >();
 
     const host = new BrowserWindowsTransport({
       sharedWorkerCtor: MockSharedWorker as any,
@@ -657,7 +693,7 @@ describe("BrowserWindowsTransport shared worker", () => {
       },
     });
 
-    host.listen({
+    host.registerRoutes({
       "svc.secure-feed": {
         route: "svc.secure-feed",
         kind: "feed",
@@ -691,13 +727,15 @@ describe("BrowserWindowsTransport shared worker", () => {
       },
     });
 
-    const iterator = invoke.feed("svc.secure-feed", { id: 1 })[Symbol.asyncIterator]();
+    const iterator = invoke
+      .feed("svc.secure-feed", { id: 1 })
+      [Symbol.asyncIterator]();
     await iterator.next();
     await iterator.return?.(undefined);
     await sleep(15);
 
-    const startMeta = seenByOperation.get("feed_start")?.[0];
-    const stopMeta = seenByOperation.get("feed_stop")?.[0];
+    const startMeta = seenByOperation.get("feed")?.[0];
+    const stopMeta = seenByOperation.get("signal")?.[0];
     expect(startMeta?.traceId).toBe("trace-feed-meta");
     expect(startMeta?.tenantId).toBe("tenant-feed-meta");
     expect(stopMeta?.traceId).toBe("trace-feed-meta");
@@ -711,7 +749,7 @@ describe("BrowserWindowsTransport shared worker", () => {
     const host = new BrowserWindowsTransport({
       sharedWorkerCtor: MockSharedWorker as any,
     });
-    host.listen({
+    host.registerRoutes({
       "svc.secure": {
         route: "svc.secure",
         kind: "request",
@@ -755,7 +793,7 @@ describe("BrowserWindowsTransport shared worker", () => {
     );
 
     const iterator = invoke.feed("svc.feed", { id: 1 })[Symbol.asyncIterator]();
-    await expect(iterator.next()).rejects.toThrow(/feed_start not authorized/i);
+    await expect(iterator.next()).rejects.toThrow(/feed not authorized/i);
 
     invoke.close();
     host.close();
@@ -766,7 +804,7 @@ describe("BrowserWindowsTransport shared worker", () => {
       sharedWorkerCtor: MockSharedWorker as any,
     });
 
-    host.listen({
+    host.registerRoutes({
       "svc.open": {
         route: "svc.open",
         kind: "request",
@@ -792,7 +830,7 @@ describe("BrowserWindowsTransport shared worker", () => {
     const host = new BrowserWindowsTransport({
       sharedWorkerCtor: MockSharedWorker as any,
     });
-    host.listen({
+    host.registerRoutes({
       "svc.known": {
         route: "svc.known",
         kind: "request",
@@ -822,7 +860,7 @@ describe("BrowserWindowsTransport shared worker", () => {
     const host = new BrowserWindowsTransport({
       sharedWorkerCtor: MockSharedWorker as any,
     });
-    host.listen({
+    host.registerRoutes({
       "svc.kind": {
         route: "svc.kind",
         kind: "request",
@@ -854,7 +892,7 @@ describe("BrowserWindowsTransport shared worker", () => {
       get(input: { id: number }): Promise<{ id: number }>;
       notify(input: { message: string }): Promise<void>;
       stream(input: { from: number }): AsyncIterable<number>;
-    }>("svc.strict").implement({
+    }>(createContractToken("svc.strict")).implement({
       requests: {
         get: async ({ id }) => ({ id }),
       },
@@ -880,7 +918,7 @@ describe("BrowserWindowsTransport shared worker", () => {
     const host = new BrowserWindowsTransport({
       sharedWorkerCtor: MockSharedWorker as any,
     });
-    host.listen(service.router);
+    host.registerRoutes(service.router);
 
     const invoke = new BrowserWindowsTransport({
       sharedWorkerCtor: MockSharedWorker as any,
@@ -891,7 +929,9 @@ describe("BrowserWindowsTransport shared worker", () => {
     const response = await invoke.request("svc.strict.get", { id: 4 });
     expect(response).toEqual({ id: 4 });
 
-    await expect(invoke.signal("svc.strict.notify", { message: "ok" })).resolves.toBeUndefined();
+    await expect(
+      invoke.signal("svc.strict.notify", { message: "ok" }),
+    ).resolves.toBeUndefined();
     await sleep(0);
     expect(handlerInvocations).toEqual(["ok"]);
 

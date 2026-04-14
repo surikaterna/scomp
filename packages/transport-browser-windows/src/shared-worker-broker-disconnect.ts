@@ -1,6 +1,4 @@
-import {
-  failFeedSubscription,
-} from "./shared-worker-broker-feed";
+import { failFeedSubscription } from "./shared-worker-broker-feed";
 import { withBrokerSystemMeta } from "./shared-worker-broker-meta";
 import { unregisterAllRoutes } from "./shared-worker-broker-routes";
 import type { BrowserWindowsParticipantId } from "./types";
@@ -15,11 +13,15 @@ export function cleanupDisconnectedParticipant(
   for (const [key, subscription] of context.state.feedSubscriptions.entries()) {
     const activeUpstream = context.state.activeUpstreamFeeds.get(key);
     const sourceRequestMeta = activeUpstream
-      ? (context.state.pendingRequests.get(activeUpstream.sourceRequestId)?.meta ??
+      ? (context.state.pendingRequests.get(activeUpstream.sourceRequestId)
+          ?.meta ??
         subscription.metaByRequestId.get(activeUpstream.sourceRequestId))
       : undefined;
 
-    for (const [requestId, invokeId] of subscription.subscribersByRequestId.entries()) {
+    for (const [
+      requestId,
+      invokeId,
+    ] of subscription.subscribersByRequestId.entries()) {
       if (invokeId !== participantId) {
         continue;
       }
@@ -46,17 +48,24 @@ export function cleanupDisconnectedParticipant(
       invokeId: participantId,
       requestId: activeUpstream.sourceRequestId,
       route: activeUpstream.route,
-      operation: "feed_stop",
+      operation: "signal",
+      method: "__scomp.unsubscribe",
       payloadKey: activeUpstream.payloadKey,
       payloadHash: activeUpstream.payloadHash,
-      meta: withBrokerSystemMeta(sourceRequestMeta, "disconnect-cleanup-feed-stop"),
+      meta: withBrokerSystemMeta(
+        sourceRequestMeta,
+        "disconnect-cleanup-feed-stop",
+      ),
     });
 
     context.state.activeUpstreamFeeds.delete(key);
     context.state.pendingRequests.delete(activeUpstream.sourceRequestId);
   }
 
-  for (const [key, activeUpstream] of context.state.activeUpstreamFeeds.entries()) {
+  for (const [
+    key,
+    activeUpstream,
+  ] of context.state.activeUpstreamFeeds.entries()) {
     if (activeUpstream.ownerHostId !== participantId) {
       continue;
     }
@@ -90,7 +99,10 @@ export function cleanupDisconnectedParticipant(
         requestId: pending.requestId,
         hostId: participantId,
         error: `Host disconnected for route: ${pending.route}`,
-        meta: withBrokerSystemMeta(pending.meta, "disconnect-host-response-error"),
+        meta: withBrokerSystemMeta(
+          pending.meta,
+          "disconnect-host-response-error",
+        ),
       });
       context.state.pendingRequests.delete(requestId);
     }

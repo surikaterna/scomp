@@ -65,7 +65,8 @@ export function terminateFeedState(
     sentAtMs: number;
     requestId: BrowserWindowsRequestId;
     route: string;
-    operation: "feed_stop";
+    operation: "signal";
+    method: "__scomp.unsubscribe";
     payloadKey: string;
     payloadHash: string;
     meta?: ScompTransportMessageMeta;
@@ -95,7 +96,8 @@ export function terminateFeedState(
       sentAtMs: Date.now(),
       requestId,
       route: state.route,
-      operation: "feed_stop",
+      operation: "signal",
+      method: "__scomp.unsubscribe",
       payloadKey: state.payloadKey,
       payloadHash: state.payloadHash,
       meta: state.meta,

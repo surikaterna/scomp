@@ -1,8 +1,4 @@
-export type ScompTransportOperation =
-  | "request"
-  | "signal"
-  | "feed_start"
-  | "feed_stop";
+export type ScompTransportOperation = "request" | "signal" | "feed";
 
 export type ScompPriorityIndex = 0 | 1 | 2 | 3 | 4;
 
@@ -155,6 +151,8 @@ export interface ScompTransportRequestEnvelope {
   id?: string;
   route: string;
   op: ScompTransportOperation;
+  feed?: string;
+  method?: string;
   payload?: unknown;
   meta?: ScompTransportMessageMeta;
 }
@@ -167,9 +165,29 @@ export interface ScompTransportSuccessResponseEnvelope {
   meta?: ScompTransportMessageMeta;
 }
 
+/** Structured error codes for programmatic error handling. */
+export type ScompErrorCode =
+  | "ROUTE_NOT_FOUND"
+  | "SERVICE_NOT_FOUND"
+  | "CONTROLLER_NOT_FOUND"
+  | "FEED_NOT_FOUND"
+  | "TIMEOUT"
+  | "UNAUTHORIZED";
+
+/** Array of all valid error codes for runtime validation. */
+export const SCOMP_ERROR_CODES: ReadonlyArray<ScompErrorCode> = [
+  "ROUTE_NOT_FOUND",
+  "SERVICE_NOT_FOUND",
+  "CONTROLLER_NOT_FOUND",
+  "FEED_NOT_FOUND",
+  "TIMEOUT",
+  "UNAUTHORIZED",
+] as const;
+
 export interface ScompTransportErrorResponseEnvelope {
   id?: string;
   error: string;
+  code?: ScompErrorCode;
   meta?: ScompTransportMessageMeta;
 }
 
@@ -210,7 +228,7 @@ export type ScompFeedChunkType = "next" | "done" | "error";
 
 export interface ScompFeedChunkEnvelope {
   channel: "feed";
-  hash: string;
+  feed: string;
   type: ScompFeedChunkType;
   payload?: unknown;
   message?: string;

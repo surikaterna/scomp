@@ -3,6 +3,7 @@ import { createServer, type Server as HttpServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import {
   composeScompFragments,
+  createContractToken,
   createScompFragment,
   createScompService,
   type CompiledRoute,
@@ -44,7 +45,7 @@ async function createHarness(router: CompiledRouter): Promise<Harness> {
     server: httpServer,
     outbound: { url },
   });
-  await serverTransport.listen(router);
+  await serverTransport.registerRoutes(router);
 
   return {
     httpServer,
@@ -83,7 +84,9 @@ describe("WebSocket transports", () => {
     }
 
     const groupedSignals: Array<unknown> = [];
-    const grouped = createScompService<UsersContract>("users").implement({
+    const grouped = createScompService<UsersContract>(
+      createContractToken("users"),
+    ).implement({
       requests: {
         getUser: async ({ id }: { id: number }) => ({ id, name: `u-${id}` }),
       },
@@ -105,22 +108,22 @@ describe("WebSocket transports", () => {
     });
 
     const composedSignals: Array<unknown> = [];
-    const requestFragment = createScompFragment<UsersContract>("users").implement(
-      {
-        requests: {
-          getUser: async ({ id }: { id: number }) => ({ id, name: `u-${id}` }),
+    const requestFragment = createScompFragment<UsersContract>(
+      "users",
+    ).implement({
+      requests: {
+        getUser: async ({ id }: { id: number }) => ({ id, name: `u-${id}` }),
+      },
+    });
+    const signalFragment = createScompFragment<UsersContract>(
+      "users",
+    ).implement({
+      signals: {
+        notifyLogin: async (payload: { id: number }) => {
+          composedSignals.push(payload);
         },
       },
-    );
-    const signalFragment = createScompFragment<UsersContract>("users").implement(
-      {
-        signals: {
-          notifyLogin: async (payload: { id: number }) => {
-            composedSignals.push(payload);
-          },
-        },
-      },
-    );
+    });
     const feedFragment = createScompFragment<UsersContract>("users").implement({
       feeds: {
         liveUsers: {
@@ -160,9 +163,11 @@ describe("WebSocket transports", () => {
         await wait(15);
         assert.deepEqual(signals, [{ id: 7 }]);
 
-        const feedValues = await collect(client.feed("users.liveUsers", {
-          room: "general",
-        }));
+        const feedValues = await collect(
+          client.feed("users.liveUsers", {
+            room: "general",
+          }),
+        );
         assert.deepEqual(feedValues, [{ id: 1 }, { id: 2 }]);
       } finally {
         await closeClientTransport(client);
@@ -359,7 +364,7 @@ describe("WebSocket transports", () => {
       },
     });
 
-    await transport.listen(router);
+    await transport.registerRoutes(router);
 
     const deniedClient = new WebSocketClientTransport({
       url,

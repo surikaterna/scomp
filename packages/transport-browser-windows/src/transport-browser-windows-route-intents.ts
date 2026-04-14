@@ -9,16 +9,20 @@ type BrowserWindowsCompiledRouteLike = {
   kind?: BrowserWindowsRouteIntentKind;
 };
 
-function resolveIntentKind(kind: BrowserWindowsRouteIntentKind | undefined): BrowserWindowsRouteIntentKind {
+function resolveIntentKind(
+  kind: BrowserWindowsRouteIntentKind | undefined,
+): BrowserWindowsRouteIntentKind {
   return kind ?? "request";
 }
 
-function operationToIntentKind(operation: ScompTransportOperation): BrowserWindowsRouteIntentKind {
+function operationToIntentKind(
+  operation: ScompTransportOperation,
+): BrowserWindowsRouteIntentKind {
   if (operation === "signal") {
     return "signal";
   }
 
-  if (operation === "feed_start" || operation === "feed_stop") {
+  if (operation === "feed") {
     return "feed";
   }
 
@@ -26,7 +30,9 @@ function operationToIntentKind(operation: ScompTransportOperation): BrowserWindo
 }
 
 function toIntentMap(
-  intents: BrowserWindowsRouteIntentMap | ReadonlyArray<BrowserWindowsRouteIntent>,
+  intents:
+    | BrowserWindowsRouteIntentMap
+    | ReadonlyArray<BrowserWindowsRouteIntent>,
 ): BrowserWindowsRouteIntentMap {
   if (Array.isArray(intents)) {
     const resolved: Record<string, BrowserWindowsRouteIntentKind> = {};
@@ -52,7 +58,9 @@ export function createRouteIntentsFromCompiledRouter(
 }
 
 export function createRouteIntentsFromCompiledRouters(
-  routers: ReadonlyArray<Readonly<Record<string, BrowserWindowsCompiledRouteLike>>>,
+  routers: ReadonlyArray<
+    Readonly<Record<string, BrowserWindowsCompiledRouteLike>>
+  >,
 ): BrowserWindowsRouteIntentMap {
   const intents: Record<string, BrowserWindowsRouteIntentKind> = {};
 
@@ -67,7 +75,10 @@ export function createRouteIntentsFromCompiledRouters(
 
 export function assertStrictRouteIntentAllowed(
   strictEnabled: boolean,
-  configuredIntents: BrowserWindowsRouteIntentMap | ReadonlyArray<BrowserWindowsRouteIntent> | undefined,
+  configuredIntents:
+    | BrowserWindowsRouteIntentMap
+    | ReadonlyArray<BrowserWindowsRouteIntent>
+    | undefined,
   route: string,
   operation: ScompTransportOperation,
 ): void {
@@ -75,7 +86,9 @@ export function assertStrictRouteIntentAllowed(
     return;
   }
 
-  const intentMap = configuredIntents ? toIntentMap(configuredIntents) : undefined;
+  const intentMap = configuredIntents
+    ? toIntentMap(configuredIntents)
+    : undefined;
   if (!intentMap) {
     throw new Error(
       "BrowserWindowsTransport strictRouteIntents is enabled, but no routeIntents were configured.",
@@ -91,6 +104,12 @@ export function assertStrictRouteIntentAllowed(
 
   const attemptedKind = operationToIntentKind(operation);
   if (configuredKind !== attemptedKind) {
+    // In v2, feed unsubscription is a signal sent to a feed route.
+    // Allow signal operations on feed-intent routes for this purpose.
+    if (configuredKind === "feed" && attemptedKind === "signal") {
+      return;
+    }
+
     throw new Error(
       `BrowserWindowsTransport strict route-intent rejection: route \"${route}\" allows \"${configuredKind}\" but attempted \"${operation}\".`,
     );

@@ -253,8 +253,16 @@ describe("Cross-runtime conformance: browser websocket, node websocket, rabbitmq
       targetLatencyMs: 40,
     };
 
-    const rabbitPending = rabbit.request("users.get", { id: 10 }, invokeOptions);
-    const nodePending = node.client.request("users.get", { id: 10 }, invokeOptions);
+    const rabbitPending = rabbit.request(
+      "users.get",
+      { id: 10 },
+      invokeOptions,
+    );
+    const nodePending = node.client.request(
+      "users.get",
+      { id: 10 },
+      invokeOptions,
+    );
     const browserPending = browser.client.request(
       "users.get",
       { id: 10 },
@@ -269,10 +277,14 @@ describe("Cross-runtime conformance: browser websocket, node websocket, rabbitmq
     const rabbitRequest = JSON.parse(
       Buffer.from(rabbitRequestCall[1]).toString("utf8"),
     ) as Record<string, unknown>;
-    const nodeRequest = JSON.parse(node.sentPayloads[0]) as Record<string, unknown>;
-    const browserRequest = JSON.parse(
-      browser.sentPayloads[0],
-    ) as Record<string, unknown>;
+    const nodeRequest = JSON.parse(node.sentPayloads[0]) as Record<
+      string,
+      unknown
+    >;
+    const browserRequest = JSON.parse(browser.sentPayloads[0]) as Record<
+      string,
+      unknown
+    >;
 
     assert.deepEqual(stripId(nodeRequest), rabbitRequest);
     assert.deepEqual(stripId(browserRequest), rabbitRequest);
@@ -323,16 +335,20 @@ describe("Cross-runtime conformance: browser websocket, node websocket, rabbitmq
     const rabbitSignal = JSON.parse(
       Buffer.from(rabbitFake.channel.publish.mock.calls[0][2]).toString("utf8"),
     ) as Record<string, unknown>;
-    const nodeSignal = JSON.parse(node.sentPayloads[1]) as Record<string, unknown>;
-    const browserSignal = JSON.parse(
-      browser.sentPayloads[1],
-    ) as Record<string, unknown>;
+    const nodeSignal = JSON.parse(node.sentPayloads[1]) as Record<
+      string,
+      unknown
+    >;
+    const browserSignal = JSON.parse(browser.sentPayloads[1]) as Record<
+      string,
+      unknown
+    >;
 
     assert.deepEqual(nodeSignal, rabbitSignal);
     assert.deepEqual(browserSignal, rabbitSignal);
   });
 
-  it("keeps feed_start/feed_stop metadata and lifecycle semantics aligned", async () => {
+  it("keeps feed metadata and lifecycle semantics aligned", async () => {
     const rabbitFake = createFakeChannel();
     mockConnect.mockResolvedValue(rabbitFake.connection);
 
@@ -385,10 +401,14 @@ describe("Cross-runtime conformance: browser websocket, node websocket, rabbitmq
     const rabbitFeedStart = JSON.parse(
       Buffer.from(rabbitFeedStartCall[1]).toString("utf8"),
     ) as Record<string, unknown>;
-    const nodeFeedStart = JSON.parse(node.sentPayloads[0]) as Record<string, unknown>;
-    const browserFeedStart = JSON.parse(
-      browser.sentPayloads[0],
-    ) as Record<string, unknown>;
+    const nodeFeedStart = JSON.parse(node.sentPayloads[0]) as Record<
+      string,
+      unknown
+    >;
+    const browserFeedStart = JSON.parse(browser.sentPayloads[0]) as Record<
+      string,
+      unknown
+    >;
 
     assert.deepEqual(stripId(nodeFeedStart), rabbitFeedStart);
     assert.deepEqual(stripId(browserFeedStart), rabbitFeedStart);
@@ -406,7 +426,7 @@ describe("Cross-runtime conformance: browser websocket, node websocket, rabbitmq
         {
           payload: {
             exchange: feedExchange,
-            hash: feedHash,
+            feed: feedHash,
           },
         },
         {
@@ -424,13 +444,13 @@ describe("Cross-runtime conformance: browser websocket, node websocket, rabbitmq
       }
     ).handleIncoming({
       id: String(nodeFeedStart.id),
-      payload: { exchange: feedExchange, hash: feedHash },
+      payload: { exchange: feedExchange, feed: feedHash },
     });
 
     browser.getSocket().emit("message", {
       data: JSON.stringify({
         id: String(browserFeedStart.id),
-        payload: { exchange: feedExchange, hash: feedHash },
+        payload: { exchange: feedExchange, feed: feedHash },
       }),
     });
 
@@ -440,7 +460,7 @@ describe("Cross-runtime conformance: browser websocket, node websocket, rabbitmq
     await rabbitFeedConsumer?.(
       createMessage({
         channel: "feed",
-        hash: feedHash,
+        feed: feedHash,
         type: "next",
         payload: { seq: 1 },
       }),
@@ -451,14 +471,14 @@ describe("Cross-runtime conformance: browser websocket, node websocket, rabbitmq
       }
     ).handleIncoming({
       channel: "feed",
-      hash: feedHash,
+      feed: feedHash,
       type: "next",
       payload: { seq: 1 },
     });
     browser.getSocket().emit("message", {
       data: JSON.stringify({
         channel: "feed",
-        hash: feedHash,
+        feed: feedHash,
         type: "next",
         payload: { seq: 1 },
       }),
@@ -484,56 +504,8 @@ describe("Cross-runtime conformance: browser websocket, node websocket, rabbitmq
       throw new Error("Feed iterators must support return().");
     }
 
-    await waitFor(() => rabbitFake.channel.sendToQueue.mock.calls.length > 1);
-    await waitFor(() => node.sentPayloads.length > 1);
-    await waitFor(() => browser.sentPayloads.length > 1);
-
-    const rabbitFeedStopCall = rabbitFake.channel.sendToQueue.mock.calls[1];
-    const rabbitFeedStop = JSON.parse(
-      Buffer.from(rabbitFeedStopCall[1]).toString("utf8"),
-    ) as Record<string, unknown>;
-    const nodeFeedStop = JSON.parse(node.sentPayloads[1]) as Record<string, unknown>;
-    const browserFeedStop = JSON.parse(
-      browser.sentPayloads[1],
-    ) as Record<string, unknown>;
-
-    assert.deepEqual(stripId(nodeFeedStop), rabbitFeedStop);
-    assert.deepEqual(stripId(browserFeedStop), rabbitFeedStop);
-    assert.deepEqual((nodeFeedStop as { meta?: unknown }).meta, (nodeFeedStart as { meta?: unknown }).meta);
-    assert.deepEqual((browserFeedStop as { meta?: unknown }).meta, (browserFeedStart as { meta?: unknown }).meta);
-
-    const rabbitFeedStopOptions = rabbitFeedStopCall[2] as {
-      correlationId: string;
-      replyTo: string;
-    };
-    await rabbitReplyConsumer?.(
-      createMessage(
-        { payload: { ok: true } },
-        {
-          properties: {
-            correlationId: rabbitFeedStopOptions.correlationId,
-            replyTo: rabbitFeedStopOptions.replyTo,
-          },
-        },
-      ),
-    );
-
-    (
-      node.client as unknown as {
-        handleIncoming: (message: unknown) => void;
-      }
-    ).handleIncoming({
-      id: String(nodeFeedStop.id),
-      payload: { ok: true },
-    });
-
-    browser.getSocket().emit("message", {
-      data: JSON.stringify({
-        id: String(browserFeedStop.id),
-        payload: { ok: true },
-      }),
-    });
-
+    // In v2, feed unsubscribe is a fire-and-forget signal — no response needed.
+    // RabbitMQ publishes to the signal exchange; WS clients send a JSON signal.
     const [rabbitStopped, nodeStopped, browserStopped] = await Promise.all([
       rabbitReturn,
       nodeReturn,
@@ -543,6 +515,32 @@ describe("Cross-runtime conformance: browser websocket, node websocket, rabbitmq
     assert.equal(rabbitStopped.done, true);
     assert.equal(nodeStopped.done, true);
     assert.equal(browserStopped.done, true);
+
+    // RabbitMQ unsubscribe goes through signal() → channel.publish
+    await waitFor(() => rabbitFake.channel.publish.mock.calls.length > 0);
+    const rabbitUnsubCall = rabbitFake.channel.publish.mock.calls[0];
+    const rabbitUnsub = JSON.parse(
+      Buffer.from(rabbitUnsubCall[2]).toString("utf8"),
+    ) as Record<string, unknown>;
+    assert.equal(rabbitUnsub.op, "signal");
+
+    // WS clients send fire-and-forget JSON signals
+    await waitFor(() => node.sentPayloads.length > 1);
+    await waitFor(() => browser.sentPayloads.length > 1);
+
+    const nodeUnsub = JSON.parse(node.sentPayloads[1]) as Record<
+      string,
+      unknown
+    >;
+    const browserUnsub = JSON.parse(browser.sentPayloads[1]) as Record<
+      string,
+      unknown
+    >;
+
+    assert.equal(nodeUnsub.op, "signal");
+    assert.equal(nodeUnsub.method, "__scomp.unsubscribe");
+    assert.equal(browserUnsub.op, "signal");
+    assert.equal(browserUnsub.method, "__scomp.unsubscribe");
   });
 
   it("propagates feed error chunks as rejections across all runtimes", async () => {
@@ -553,15 +551,15 @@ describe("Cross-runtime conformance: browser websocket, node websocket, rabbitmq
     const node = createPatchedWebSocketClient();
     const browser = createPatchedBrowserClient();
 
-    const rabbitIterator = rabbit.feed("users.live", { room: "alpha" })[
-      Symbol.asyncIterator
-    ]();
-    const nodeIterator = node.client.feed("users.live", { room: "alpha" })[
-      Symbol.asyncIterator
-    ]();
-    const browserIterator = browser.client.feed("users.live", { room: "alpha" })[
-      Symbol.asyncIterator
-    ]();
+    const rabbitIterator = rabbit
+      .feed("users.live", { room: "alpha" })
+      [Symbol.asyncIterator]();
+    const nodeIterator = node.client
+      .feed("users.live", { room: "alpha" })
+      [Symbol.asyncIterator]();
+    const browserIterator = browser.client
+      .feed("users.live", { room: "alpha" })
+      [Symbol.asyncIterator]();
 
     const rabbitNext = rabbitIterator.next();
     const nodeNext = nodeIterator.next();
@@ -577,7 +575,9 @@ describe("Cross-runtime conformance: browser websocket, node websocket, rabbitmq
       replyTo: string;
     };
     const nodeFeedStart = JSON.parse(node.sentPayloads[0]) as { id: string };
-    const browserFeedStart = JSON.parse(browser.sentPayloads[0]) as { id: string };
+    const browserFeedStart = JSON.parse(browser.sentPayloads[0]) as {
+      id: string;
+    };
 
     const rabbitReplyConsumer = rabbitFake.queueConsumers.get("generated-1");
     const feedHash = "feed-error-runtime";
@@ -588,7 +588,7 @@ describe("Cross-runtime conformance: browser websocket, node websocket, rabbitmq
         {
           payload: {
             exchange: feedExchange,
-            hash: feedHash,
+            feed: feedHash,
           },
         },
         {
@@ -605,12 +605,12 @@ describe("Cross-runtime conformance: browser websocket, node websocket, rabbitmq
       }
     ).handleIncoming({
       id: nodeFeedStart.id,
-      payload: { exchange: feedExchange, hash: feedHash },
+      payload: { exchange: feedExchange, feed: feedHash },
     });
     browser.getSocket().emit("message", {
       data: JSON.stringify({
         id: browserFeedStart.id,
-        payload: { exchange: feedExchange, hash: feedHash },
+        payload: { exchange: feedExchange, feed: feedHash },
       }),
     });
 
@@ -619,7 +619,7 @@ describe("Cross-runtime conformance: browser websocket, node websocket, rabbitmq
     await rabbitFeedConsumer?.(
       createMessage({
         channel: "feed",
-        hash: feedHash,
+        feed: feedHash,
         type: "error",
         message: "runtime feed failure",
       }),
@@ -630,57 +630,21 @@ describe("Cross-runtime conformance: browser websocket, node websocket, rabbitmq
       }
     ).handleIncoming({
       channel: "feed",
-      hash: feedHash,
+      feed: feedHash,
       type: "error",
       message: "runtime feed failure",
     });
     browser.getSocket().emit("message", {
       data: JSON.stringify({
         channel: "feed",
-        hash: feedHash,
+        feed: feedHash,
         type: "error",
         message: "runtime feed failure",
       }),
     });
 
-    await waitFor(() => rabbitFake.channel.sendToQueue.mock.calls.length > 1);
-    await waitFor(() => node.sentPayloads.length > 1);
-    await waitFor(() => browser.sentPayloads.length > 1);
-
-    const rabbitFeedStopCall = rabbitFake.channel.sendToQueue.mock.calls[1];
-    const rabbitFeedStopOptions = rabbitFeedStopCall[2] as {
-      correlationId: string;
-      replyTo: string;
-    };
-    const nodeFeedStop = JSON.parse(node.sentPayloads[1]) as { id: string };
-    const browserFeedStop = JSON.parse(browser.sentPayloads[1]) as { id: string };
-
-    await rabbitReplyConsumer?.(
-      createMessage(
-        { payload: { ok: true } },
-        {
-          properties: {
-            correlationId: rabbitFeedStopOptions.correlationId,
-            replyTo: rabbitFeedStopOptions.replyTo,
-          },
-        },
-      ),
-    );
-    (
-      node.client as unknown as {
-        handleIncoming: (message: unknown) => void;
-      }
-    ).handleIncoming({
-      id: nodeFeedStop.id,
-      payload: { ok: true },
-    });
-    browser.getSocket().emit("message", {
-      data: JSON.stringify({
-        id: browserFeedStop.id,
-        payload: { ok: true },
-      }),
-    });
-
+    // In v2, feed error triggers the iterator's finally block which sends
+    // a fire-and-forget unsubscribe signal — no response handshake needed.
     await assert.rejects(() => rabbitNext, /runtime feed failure/);
     await assert.rejects(() => nodeNext, /runtime feed failure/);
     await assert.rejects(() => browserNext, /runtime feed failure/);

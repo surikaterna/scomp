@@ -1,3 +1,5 @@
+export { createContractToken, type ContractToken } from "./contract-token";
+
 export {
   ScompFeed,
   createScompFeed,
@@ -41,7 +43,19 @@ export {
   type ScompControlPlaneRouteHandlers,
 } from "./control-plane";
 
+export {
+  ScompControlPlane,
+  type ScompControlPlaneContract,
+} from "./control-plane-contract";
+
 export { type ITransport, type ScompClientInvokeOptions } from "./transport";
+
+export {
+  createScompPeer,
+  type ClientFactory,
+  type CreateScompPeerConfig,
+  type IScompPeer,
+} from "./peer";
 
 export {
   SCOMP_DEFAULT_OPERATION_PRIORITIES,

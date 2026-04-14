@@ -123,10 +123,8 @@ export class WebSocketClientTransport implements ITransport {
     this.config = config;
   }
 
-  async listen(_router: Record<string, unknown>): Promise<void> {
-    throw new Error(
-      "WebSocketClientTransport.listen() is not supported. Use WebSocketServerTransport to host routes.",
-    );
+  async registerRoutes(_router: Record<string, unknown>): Promise<void> {
+    // No-op — client-only transport does not host routes.
   }
 
   async close(): Promise<void> {
@@ -203,10 +201,7 @@ export class WebSocketClientTransport implements ITransport {
       route,
       op: "signal",
       payload,
-      meta: this.mergeMeta(
-        effectiveMeta,
-        this.toPrincipalMeta(principal),
-      ),
+      meta: this.mergeMeta(effectiveMeta, this.toPrincipalMeta(principal)),
     });
   }
 
@@ -219,16 +214,13 @@ export class WebSocketClientTransport implements ITransport {
 
     return {
       async *[Symbol.asyncIterator]() {
-        const handshake = await self.sendRpc(
-          route,
-          "feed_start",
-          payload,
-          options,
-        );
-        const feedHash = String(handshake?.hash ?? "");
+        const handshake = await self.sendRpc(route, "feed", payload, options);
+        const feedHash = String(handshake?.feed ?? "");
 
         if (!feedHash) {
-          throw new Error("Feed start response did not include a hash.");
+          throw new Error(
+            "Feed start response did not include a feed identifier.",
+          );
         }
 
         const state: FeedState = {
@@ -263,12 +255,14 @@ export class WebSocketClientTransport implements ITransport {
           }
         } finally {
           self.feeds.delete(feedHash);
-          await self.sendRpc(
+          const socket = await self.getSocket();
+          self.sendJson(socket, {
             route,
-            "feed_stop",
-            { hash: feedHash },
-            options,
-          );
+            op: "signal",
+            feed: feedHash,
+            method: "__scomp.unsubscribe",
+            payload: {},
+          });
         }
       },
     };
@@ -329,12 +323,12 @@ export class WebSocketClientTransport implements ITransport {
 
   private handleIncoming(message: TransportMessage): void {
     if (isFeedChunkEnvelope(message)) {
-      const hash = String(message.hash ?? "");
-      const feed = this.feeds.get(hash);
+      const feedId = String(message.feed ?? "");
+      const feed = this.feeds.get(feedId);
       if (!feed) {
-        const pending = this.pendingFeedChunks.get(hash) ?? [];
+        const pending = this.pendingFeedChunks.get(feedId) ?? [];
         pending.push(message);
-        this.pendingFeedChunks.set(hash, pending);
+        this.pendingFeedChunks.set(feedId, pending);
         return;
       }
 

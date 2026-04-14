@@ -21,7 +21,7 @@ export interface BrowserWindowsHostContextInput {
   postMessage(message: unknown): void;
   assertInboundAllowed(
     route: string,
-    operation: "request" | "signal" | "feed_start" | "feed_stop",
+    operation: "request" | "signal" | "feed",
     payload: unknown,
     meta: unknown,
   ): Promise<void>;
@@ -55,10 +55,13 @@ export interface BrowserWindowsClientContextInput {
     detail: string | undefined,
     status: BrowserWindowsTransportHealthStatus,
   ): void;
-  assertOutboundAllowed(route: string, operation: ScompTransportOperation): void;
+  assertOutboundAllowed(
+    route: string,
+    operation: ScompTransportOperation,
+  ): void;
   composeMetaForOperation(
     route: string,
-    operation: "request" | "signal" | "feed_start" | "feed_stop",
+    operation: "request" | "signal" | "feed",
     payload: unknown,
     options?: ScompClientInvokeOptions,
   ): Promise<{ meta: ScompTransportMessageMeta | undefined }>;
@@ -69,7 +72,8 @@ export function createClientContext(input: BrowserWindowsClientContextInput) {
     participantId: input.participantId,
     requestTimeoutMs: input.requestTimeoutMs,
     maxPendingRequests: input.maxPendingRequests,
-    maxBufferedFeedChunksPerSubscriber: input.maxBufferedFeedChunksPerSubscriber,
+    maxBufferedFeedChunksPerSubscriber:
+      input.maxBufferedFeedChunksPerSubscriber,
     getPreparingRequests: input.getPreparingRequests,
     incrementPreparingRequests: input.incrementPreparingRequests,
     decrementPreparingRequests: input.decrementPreparingRequests,
@@ -100,22 +104,27 @@ export interface BrowserWindowsTransportContextInput {
     detail: string | undefined,
     status: BrowserWindowsTransportHealthStatus,
   ): void;
-  assertOutboundAllowed(route: string, operation: ScompTransportOperation): void;
+  assertOutboundAllowed(
+    route: string,
+    operation: ScompTransportOperation,
+  ): void;
   assertInboundAllowed(
     route: string,
-    operation: "request" | "signal" | "feed_start" | "feed_stop",
+    operation: "request" | "signal" | "feed",
     payload: unknown,
     meta: unknown,
   ): Promise<void>;
   composeMetaForOperation(
     route: string,
-    operation: "request" | "signal" | "feed_start" | "feed_stop",
+    operation: "request" | "signal" | "feed",
     payload: unknown,
     options?: ScompClientInvokeOptions,
   ): Promise<{ meta: ScompTransportMessageMeta | undefined }>;
 }
 
-export function createTransportContexts(input: BrowserWindowsTransportContextInput): {
+export function createTransportContexts(
+  input: BrowserWindowsTransportContextInput,
+): {
   hostContext: ReturnType<typeof createHostContext>;
   clientContext: ReturnType<typeof createClientContext>;
 } {
@@ -131,7 +140,8 @@ export function createTransportContexts(input: BrowserWindowsTransportContextInp
       participantId: input.participantId,
       requestTimeoutMs: input.requestTimeoutMs,
       maxPendingRequests: input.maxPendingRequests,
-      maxBufferedFeedChunksPerSubscriber: input.maxBufferedFeedChunksPerSubscriber,
+      maxBufferedFeedChunksPerSubscriber:
+        input.maxBufferedFeedChunksPerSubscriber,
       getPreparingRequests: input.getPreparingRequests,
       incrementPreparingRequests: input.incrementPreparingRequests,
       decrementPreparingRequests: input.decrementPreparingRequests,
