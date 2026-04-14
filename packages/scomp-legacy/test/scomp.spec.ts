@@ -5,7 +5,7 @@ import ControlledObservable from '../src/ControlledObservable';
 import NullWire from '../src/null';
 import { Logger, LoggerFactory } from 'slf';
 import Promise from 'bluebird'
-import { createScompFeed } from '../../core/src/feed';
+import { createScompFeed } from '@scomp/core';
 LoggerFactory.setFactory((e) => console.log(e.name, e.params.join(' ')));
 
 const LOG = Logger.getLogger('scomp:client');

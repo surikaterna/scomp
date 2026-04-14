@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import type { CompiledRoute } from "@scomp/core";
 import { RabbitMQTransport } from "../src";
-import { createScompClient } from "../../client/src";
+import { createScompClient } from "@scomp/client";
 import {
   WebSocketClientTransport,
   createNodeSocketAdapterFactory,
   SOCKET_OPEN,
-} from "../../transport-websocket-client/src";
+} from "@scomp/transport-websocket-client";
 
 const mockConnect = jest.fn();
 const mockRandomUUID = jest.fn();

@@ -5,7 +5,7 @@ import {
   createBrowserSocketAdapterFactory,
   createNodeSocketAdapterFactory,
   SOCKET_OPEN,
-} from "../../transport-websocket-client/src";
+} from "@scomp/transport-websocket-client";
 
 const mockConnect = jest.fn();
 const mockRandomUUID = jest.fn();
