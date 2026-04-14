@@ -1,6 +1,18 @@
 export { createContractToken, type ContractToken } from "./contract-token";
 
 export {
+  SCOMP_FRAMEWORK_PREFIX,
+  ScompFrameworkMethods,
+  type ScompFrameworkMethod,
+} from "./framework-methods";
+
+export {
+  createControlledFeed,
+  type ControlledAsyncIterable,
+  type ControlledFeedOptions,
+} from "./controlled-feed";
+
+export {
   ScompFeed,
   createScompFeed,
   fromAsyncIterable,

@@ -7,5 +7,6 @@ export {
   type ClientRouteIntentMap,
   type CreateScompClientConfig,
   type ScompClientCallOptions,
-  type ScompClientProxy
-} from './proxy';
+  type ScompClientProxy,
+  type ScompControlledFeed,
+} from "./proxy";

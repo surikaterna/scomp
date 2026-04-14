@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto";
-import type { ITransport, ScompClientInvokeOptions } from "@scomp/core";
+import {
+  type ITransport,
+  type ScompClientInvokeOptions,
+  ScompFrameworkMethods,
+} from "@scomp/core";
 import type {
   ScompFeedChunkEnvelope,
   ScompTransportMessageMeta,
@@ -197,12 +201,21 @@ export class WebSocketClientTransport implements ITransport {
     if (!allowed) {
       throw new Error(`signal not authorized for route: ${route}`);
     }
-    this.sendJson(socket, {
+    const envelope: Record<string, unknown> = {
       route,
       op: "signal",
       payload,
       meta: this.mergeMeta(effectiveMeta, this.toPrincipalMeta(principal)),
-    });
+    };
+
+    if (options?.feed) {
+      envelope.feed = options.feed;
+    }
+    if (options?.method) {
+      envelope.method = options.method;
+    }
+
+    this.sendJson(socket, envelope);
   }
 
   feed(
@@ -260,7 +273,7 @@ export class WebSocketClientTransport implements ITransport {
             route,
             op: "signal",
             feed: feedHash,
-            method: "__scomp.unsubscribe",
+            method: ScompFrameworkMethods.UNSUBSCRIBE,
             payload: {},
           });
         }
@@ -418,13 +431,22 @@ export class WebSocketClientTransport implements ITransport {
       this.pendingRequests.set(id, { resolve, reject });
     });
 
-    this.sendJson(socket, {
+    const envelope: ScompTransportRequestEnvelope = {
       id,
       route,
       op,
       payload,
       meta: this.mergeMeta(effectiveMeta, this.toPrincipalMeta(principal)),
-    } satisfies ScompTransportRequestEnvelope);
+    };
+
+    if (options?.feed) {
+      envelope.feed = options.feed;
+    }
+    if (options?.method) {
+      envelope.method = options.method;
+    }
+
+    this.sendJson(socket, envelope);
 
     return response;
   }

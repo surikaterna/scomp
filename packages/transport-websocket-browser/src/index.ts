@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto";
-import type { ITransport, ScompClientInvokeOptions } from "@scomp/core";
+import {
+  type ITransport,
+  type ScompClientInvokeOptions,
+  ScompFrameworkMethods,
+} from "@scomp/core";
 import type {
   ScompFeedChunkEnvelope,
   ScompTransportMessageMeta,
@@ -208,12 +212,21 @@ export class WebSocketBrowserTransport implements ITransport {
 
     const outboundMeta = await this.composeOutboundMeta(options, principal);
 
-    this.sendJson(socket, {
+    const envelope: Record<string, unknown> = {
       route,
       op: "signal",
       payload,
       meta: outboundMeta,
-    });
+    };
+
+    if (options?.feed) {
+      envelope.feed = options.feed;
+    }
+    if (options?.method) {
+      envelope.method = options.method;
+    }
+
+    this.sendJson(socket, envelope);
   }
 
   feed(
@@ -297,7 +310,7 @@ export class WebSocketBrowserTransport implements ITransport {
               route,
               op: "signal",
               feed: feedHash,
-              method: "__scomp.unsubscribe",
+              method: ScompFrameworkMethods.UNSUBSCRIBE,
               payload: {},
             });
           } catch (error) {
@@ -486,13 +499,22 @@ export class WebSocketBrowserTransport implements ITransport {
 
     const outboundMeta = await this.composeOutboundMeta(options, principal);
 
-    this.sendJson(socket, {
+    const envelope: ScompTransportRequestEnvelope = {
       id,
       route,
       op,
       payload,
       meta: outboundMeta,
-    } satisfies ScompTransportRequestEnvelope);
+    };
+
+    if (options?.feed) {
+      envelope.feed = options.feed;
+    }
+    if (options?.method) {
+      envelope.method = options.method;
+    }
+
+    this.sendJson(socket, envelope);
 
     return response;
   }

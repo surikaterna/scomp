@@ -5,6 +5,10 @@ import type {
 
 export interface ScompClientInvokeOptions extends ScompTransportPriorityHints {
   meta?: ScompTransportMessageMeta;
+  /** Feed subscription ID for controller-scoped calls. */
+  feed?: string;
+  /** Controller method name for controller-scoped calls. */
+  method?: string;
 }
 
 export interface ITransport {

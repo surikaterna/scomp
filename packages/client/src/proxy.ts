@@ -1,27 +1,58 @@
-import { ScompFeed, type ITransport, type ScompClientInvokeOptions } from '@scomp/core';
+import {
+  ScompFeed,
+  type ControlledAsyncIterable,
+  type ITransport,
+  type ScompClientInvokeOptions,
+} from "@scomp/core";
 import type {
   ContractRouteIntents,
   ScompPriorityClass,
   ScompPriorityHint,
   ScompTransportMessageMeta,
-} from '@scomp/types';
+} from "@scomp/types";
+import { createFeedHash } from "@scomp/types";
 
 type UnknownFunction = (...args: Array<unknown>) => unknown;
 
+/**
+ * Client-side representation of a controlled feed.
+ * Async-iterable for consuming values, with a `.controller` proxy for
+ * dispatching controller method calls back to the server.
+ */
+export interface ScompControlledFeed<T, C> extends AsyncIterable<T> {
+  readonly controller: C;
+}
+
+/**
+ * Extracts the controller type from a `ControlledAsyncIterable` return type.
+ * Maps each controller method to return `Promise<Awaited<ReturnType>>`.
+ */
+type ClientControllerProxy<C> = {
+  [K in keyof C]: C[K] extends (...args: infer A) => infer R
+    ? (...args: A) => Promise<Awaited<R>>
+    : never;
+};
+
 export type ScompClientProxy<Contract extends object> = {
-  [Key in keyof Contract]: Contract[Key] extends (...args: infer Args) => AsyncIterable<infer Output>
-    ? (...args: [...Args, ScompClientCallOptions?]) => ScompFeed<Output>
-    : Contract[Key] extends (...args: infer Args) => void | Promise<void>
-      ? (...args: [...Args, ScompClientCallOptions?]) => Promise<void>
-      : Contract[Key] extends (...args: infer Args) => Promise<infer Output>
-        ? (...args: [...Args, ScompClientCallOptions?]) => Promise<Output>
-        : Contract[Key] extends object
-          ? ScompClientProxy<Contract[Key]>
-          : never;
+  [Key in keyof Contract]: Contract[Key] extends (
+    ...args: infer Args
+  ) => ControlledAsyncIterable<infer Output, infer Controller>
+    ? (
+        ...args: [...Args, ScompClientCallOptions?]
+      ) => ScompControlledFeed<Output, ClientControllerProxy<Controller>>
+    : Contract[Key] extends (...args: infer Args) => AsyncIterable<infer Output>
+      ? (...args: [...Args, ScompClientCallOptions?]) => ScompFeed<Output>
+      : Contract[Key] extends (...args: infer Args) => void | Promise<void>
+        ? (...args: [...Args, ScompClientCallOptions?]) => Promise<void>
+        : Contract[Key] extends (...args: infer Args) => Promise<infer Output>
+          ? (...args: [...Args, ScompClientCallOptions?]) => Promise<Output>
+          : Contract[Key] extends object
+            ? ScompClientProxy<Contract[Key]>
+            : never;
 };
 
 export interface ClientRouteHints {
-  [route: string]: 'request' | 'signal' | 'feed';
+  [route: string]: "request" | "signal" | "feed";
 }
 
 export interface CreateScompClientConfig {
@@ -54,7 +85,7 @@ export interface ClientRouteOptions {
 export type ClientRouteOptionResolver = (context: {
   route: string;
   payload: unknown;
-  operation: 'request' | 'signal' | 'feed';
+  operation: "request" | "signal" | "feed";
 }) => ClientRouteOptionEntry | undefined;
 
 interface ResolvedInvocation {
@@ -63,10 +94,12 @@ interface ResolvedInvocation {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
+  return typeof value === "object" && value !== null;
 }
 
-function normalizeRouteEntry(entry?: ClientRouteOptionEntry): ScompClientInvokeOptions | undefined {
+function normalizeRouteEntry(
+  entry?: ClientRouteOptionEntry,
+): ScompClientInvokeOptions | undefined {
   if (!entry) {
     return undefined;
   }
@@ -119,7 +152,9 @@ function mergeOptions(
   return Object.keys(merged).length > 0 ? merged : undefined;
 }
 
-function toInvokeOptions(callOptions?: ScompClientCallOptions): ScompClientInvokeOptions | undefined {
+function toInvokeOptions(
+  callOptions?: ScompClientCallOptions,
+): ScompClientInvokeOptions | undefined {
   if (!callOptions) {
     return undefined;
   }
@@ -148,7 +183,7 @@ function resolveInvocation(
   route: string,
   payload: unknown,
   callOptionsRaw: unknown,
-  operation: 'request' | 'signal' | 'feed',
+  operation: "request" | "signal" | "feed",
   routeOptions: ClientRouteOptions | undefined,
   routeOptionResolver: ClientRouteOptionResolver | undefined,
 ): ResolvedInvocation {
@@ -166,12 +201,69 @@ function resolveInvocation(
 
   return {
     payload,
-    options: mergeOptions(mergeOptions(routeDefault, resolvedByResolver), callOptions),
+    options: mergeOptions(
+      mergeOptions(routeDefault, resolvedByResolver),
+      callOptions,
+    ),
   };
 }
 
-function getRouteType(route: string, routeHints?: ClientRouteHints): 'request' | 'signal' | 'feed' {
-  return routeHints?.[route] ?? 'request';
+function getRouteType(
+  route: string,
+  routeHints?: ClientRouteHints,
+): "request" | "signal" | "feed" {
+  return routeHints?.[route] ?? "request";
+}
+
+/**
+ * Creates a JS Proxy that intercepts property access and dispatches
+ * controller method calls as transport requests scoped to a feed.
+ */
+function createControllerProxy(
+  transport: ITransport,
+  route: string,
+  feedId: string,
+): unknown {
+  return new Proxy(Object.create(null) as Record<string, unknown>, {
+    get(_target, prop) {
+      if (typeof prop !== "string") {
+        return undefined;
+      }
+
+      return (payload: unknown) => {
+        return transport.request(route, payload, {
+          feed: feedId,
+          method: prop,
+        });
+      };
+    },
+  });
+}
+
+/**
+ * Wraps a transport feed async iterable with a controller proxy,
+ * producing a {@link ScompControlledFeed}.
+ */
+function createControlledScompFeed(
+  transport: ITransport,
+  route: string,
+  payload: unknown,
+  options: ScompClientInvokeOptions | undefined,
+): ScompControlledFeed<unknown, unknown> {
+  const feedId = createFeedHash(route, payload);
+  const feed = new ScompFeed(async function* feedGenerator() {
+    for await (const chunk of transport.feed(route, payload, options)) {
+      yield chunk;
+    }
+  });
+  const controller = createControllerProxy(transport, route, feedId);
+
+  return {
+    [Symbol.asyncIterator]() {
+      return feed[Symbol.asyncIterator]();
+    },
+    controller,
+  };
 }
 
 function createProxyNode(
@@ -179,7 +271,7 @@ function createProxyNode(
   routeHints: ClientRouteHints | undefined,
   routeOptions: ClientRouteOptions | undefined,
   routeOptionResolver: ClientRouteOptionResolver | undefined,
-  segments: Array<string>
+  segments: Array<string>,
 ): UnknownFunction {
   const target = () => {
     return undefined;
@@ -187,7 +279,7 @@ function createProxyNode(
 
   return new Proxy(target, {
     get(_target, prop, _receiver) {
-      if (typeof prop !== 'string') {
+      if (typeof prop !== "string") {
         return undefined;
       }
 
@@ -200,7 +292,7 @@ function createProxyNode(
       );
     },
     apply(_target, _thisArg, argArray: Array<unknown>) {
-      const route = segments.join('.');
+      const route = segments.join(".");
       const routeType = getRouteType(route, routeHints);
       const invocation = resolveInvocation(
         route,
@@ -211,25 +303,26 @@ function createProxyNode(
         routeOptionResolver,
       );
 
-      if (routeType === 'signal') {
+      if (routeType === "signal") {
         return transport.signal(route, invocation.payload, invocation.options);
       }
 
-      if (routeType === 'feed') {
-        return new ScompFeed(async function* feedGenerator() {
-          for await (const chunk of transport.feed(route, invocation.payload, invocation.options)) {
-            yield chunk;
-          }
-        });
+      if (routeType === "feed") {
+        return createControlledScompFeed(
+          transport,
+          route,
+          invocation.payload,
+          invocation.options,
+        );
       }
 
       return transport.request(route, invocation.payload, invocation.options);
-    }
+    },
   });
 }
 
 export function createScompClient<Contract extends object>(
-  config: CreateScompClientConfig
+  config: CreateScompClientConfig,
 ): ScompClientProxy<Contract> {
   return createProxyNode(
     config.transport,
@@ -240,4 +333,5 @@ export function createScompClient<Contract extends object>(
   ) as unknown as ScompClientProxy<Contract>;
 }
 
-export type ClientRouteIntentMap<Contract extends object> = ContractRouteIntents<Contract>;
+export type ClientRouteIntentMap<Contract extends object> =
+  ContractRouteIntents<Contract>;
