@@ -1,4 +1,9 @@
-import type { CompiledRoute } from "@scomp/core";
+import {
+  SCOMP_FRAMEWORK_PREFIX,
+  ScompFrameworkMethods,
+  type CompiledRoute,
+  type ControlledAsyncIterable,
+} from "@scomp/core";
 import {
   createFeedHash,
   type ScompErrorCode,
@@ -28,6 +33,7 @@ interface RunningFeed<Socket extends RuntimeSocket> {
   exchange: string;
   subscribers: Set<Socket>;
   abortController: AbortController;
+  controller?: Record<string, (payload: unknown) => unknown>;
 }
 
 export type TransportMessage = ScompTransportRequestEnvelope;
@@ -84,6 +90,17 @@ function ensureFeedIterable(value: unknown): AsyncIterable<unknown> {
   throw new Error("Feed route handler did not return an AsyncIterable.");
 }
 
+function isControlledAsyncIterable(
+  value: unknown,
+): value is ControlledAsyncIterable<unknown, Record<string, Function>> {
+  return (
+    value != null &&
+    typeof (value as ControlledAsyncIterable<unknown>).controller ===
+      "object" &&
+    (value as ControlledAsyncIterable<unknown>).controller !== null
+  );
+}
+
 function defaultToPrincipalMeta(
   principal: ScompTransportPrincipal | undefined,
 ): ScompTransportMessageMeta | undefined {
@@ -108,6 +125,14 @@ function defaultToPrincipalMeta(
 export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
   private router?: Record<string, CompiledRoute>;
   private readonly runningFeeds = new Map<string, RunningFeed<Socket>>();
+  /**
+   * Shared controllers for fanout feeds, keyed by route+feedHash.
+   * Multiple RunningFeed entries may reference the same shared controller.
+   */
+  private readonly sharedControllers = new Map<
+    string,
+    Record<string, (payload: unknown) => unknown>
+  >();
 
   constructor(private readonly config: WebSocketServerRuntimeConfig<Socket>) {}
 
@@ -155,8 +180,17 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
       return;
     }
 
-    if (op === "signal" && body.method === "__scomp.unsubscribe" && body.feed) {
+    if (
+      op === "signal" &&
+      body.method === ScompFrameworkMethods.UNSUBSCRIBE &&
+      body.feed
+    ) {
       this.handleFeedUnsubscribe(socket, body);
+      return;
+    }
+
+    if (body.feed && body.method) {
+      await this.handleControllerCall(socket, body, meta);
       return;
     }
 
@@ -215,6 +249,66 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
     this.replyWithPayload(socket, body.id, { ok: true });
   }
 
+  private async handleControllerCall(
+    socket: Socket,
+    body: TransportMessage,
+    meta?: ScompTransportMessageMeta,
+  ): Promise<void> {
+    const feedId = String(body.feed ?? "");
+    const method = String(body.method ?? "");
+
+    const running = this.runningFeeds.get(feedId);
+    if (!running) {
+      this.replyWithError(
+        socket,
+        body.id,
+        `Feed not found: ${feedId}`,
+        meta,
+        "FEED_NOT_FOUND",
+      );
+      return;
+    }
+
+    if (method.startsWith(SCOMP_FRAMEWORK_PREFIX)) {
+      this.replyWithError(
+        socket,
+        body.id,
+        `Framework method not implemented: ${method}`,
+        meta,
+        "CONTROLLER_NOT_FOUND",
+      );
+      return;
+    }
+
+    const controller = running.controller;
+    if (!controller || typeof controller[method] !== "function") {
+      this.replyWithError(
+        socket,
+        body.id,
+        `Controller method not found: ${method}`,
+        meta,
+        "CONTROLLER_NOT_FOUND",
+      );
+      return;
+    }
+
+    if ((body.op ?? "request") === "signal") {
+      try {
+        await controller[method](body.payload);
+      } catch {
+        // Signals are fire-and-forget and do not reply.
+      }
+      return;
+    }
+
+    try {
+      const result = await controller[method](body.payload);
+      this.replyWithPayload(socket, body.id, result, meta);
+    } catch (error) {
+      this.replyWithError(socket, body.id, error, meta);
+    }
+  }
+
   private async handleFeedRpc(
     socket: Socket,
     route: CompiledRoute,
@@ -252,6 +346,24 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
 
     const result = await this.config.invokeRoute(route, body);
     const iterable = ensureFeedIterable(result);
+
+    if (isControlledAsyncIterable(result)) {
+      const controllerRef = result.controller as Record<
+        string,
+        (payload: unknown) => unknown
+      >;
+
+      if (result.__scope === "fanout") {
+        const existing = this.sharedControllers.get(hash);
+        runningFeed.controller = existing ?? controllerRef;
+        if (!existing) {
+          this.sharedControllers.set(hash, controllerRef);
+        }
+      } else {
+        runningFeed.controller = controllerRef;
+      }
+    }
+
     setImmediate(() => {
       void this.publishFeed(runningFeed, iterable);
     });
@@ -286,6 +398,7 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
       });
     } finally {
       this.runningFeeds.delete(runningFeed.key);
+      this.sharedControllers.delete(runningFeed.key);
     }
   }
 
