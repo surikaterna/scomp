@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
-import { createControlledFeed, type ControlledAsyncIterable } from "../src";
+import {
+  createControlledFeed,
+  SCOMP_SCOPE,
+  type ControlledAsyncIterable,
+} from "../src";
 
 async function* generate<T>(...values: T[]): AsyncIterable<T> {
   for (const v of values) yield v;
@@ -118,16 +122,16 @@ describe("createControlledFeed", () => {
 
   it("defaults to exclusive scope when no options given", () => {
     const feed = createControlledFeed(generate(1), {});
-    assert.equal(feed.__scope, "exclusive");
+    assert.equal(feed[SCOMP_SCOPE], "exclusive");
   });
 
-  it("sets __scope to 'fanout' when scope option is fanout", () => {
+  it("sets scope to 'fanout' when scope option is fanout", () => {
     const feed = createControlledFeed(generate(1), {}, { scope: "fanout" });
-    assert.equal(feed.__scope, "fanout");
+    assert.equal(feed[SCOMP_SCOPE], "fanout");
   });
 
-  it("sets __scope to 'exclusive' when scope option is explicit", () => {
+  it("sets scope to 'exclusive' when scope option is explicit", () => {
     const feed = createControlledFeed(generate(1), {}, { scope: "exclusive" });
-    assert.equal(feed.__scope, "exclusive");
+    assert.equal(feed[SCOMP_SCOPE], "exclusive");
   });
 });
