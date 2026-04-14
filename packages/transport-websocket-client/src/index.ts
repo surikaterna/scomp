@@ -6,7 +6,13 @@ export {
 export { createNodeSocketAdapterFactory } from "./adapter-node";
 export {
   SocketDisconnectedError,
+  RequestTimeoutError,
+  InFlightLimitError,
+  FeedBackpressureError,
+  ConnectionTimeoutError,
   type WebSocketClientTransportConfig,
+  type WebSocketReconnectConfig,
+  type WebSocketTransportEvent,
   type FeedState,
 } from "./client-types";
 export {
@@ -14,6 +20,7 @@ export {
   type SocketAdapterFactory,
   SOCKET_OPEN,
 } from "./socket-adapter";
+export { reconnectWithBackoff, type ReconnectOptions } from "./reconnect";
 
 import { WebSocketClientTransport } from "./transport";
 import type { WebSocketClientTransportConfig } from "./client-types";
