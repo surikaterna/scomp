@@ -121,7 +121,9 @@ export class WebSocketClientTransport implements ITransport {
     return {
       async *[Symbol.asyncIterator]() {
         const handshake = await self.sendRpc(route, "feed", payload, options);
-        const feedHash = String(handshake?.feed ?? "");
+        const feedHash = String(
+          (handshake as Record<string, unknown> | null | undefined)?.feed ?? "",
+        );
         if (!feedHash) {
           throw new Error(
             "Feed start response did not include a feed identifier.",
