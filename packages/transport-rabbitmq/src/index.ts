@@ -1,181 +1,36 @@
-﻿import { randomUUID } from "node:crypto";
-import { once } from "node:events";
-import {
-  type CompiledRoute,
-  type ITransport,
-  type ScompPriorityDecision,
-  type ScompClientInvokeOptions,
-  resolveScompPriority,
-} from "@scomp/core";
-import {
-  createFeedHash,
-  type ScompErrorCode,
-  type ScompFeedChunkEnvelope,
-  type ScompTransportMessageMeta,
-  type ScompTransportPrincipal,
-  type ScompTransportSecurityContext,
-  type ScompTransportSecurityPolicy,
-  type ScompSerializer,
-  type ScompTransportRequestEnvelope,
-  type ScompTransportResponseEnvelope,
+import { randomUUID } from "node:crypto";
+import { type ITransport, type ScompClientInvokeOptions } from "@scomp/core";
+import type {
+  ScompTransportMessageMeta,
+  ScompSerializer,
+  ScompTransportRequestEnvelope,
 } from "@scomp/types";
-import amqp, {
-  type Channel,
-  type ChannelModel,
-  type ConsumeMessage,
-} from "amqplib";
+import type { Channel, ChannelModel } from "amqplib";
+import {
+  toPriorityMeta,
+  toPrincipalMeta,
+  mergeMeta,
+} from "@scomp/transport-shared";
 import { defaultJsonSerializer } from "./serialization";
-
-const SIGNAL_EXCHANGE = "scomp.signals";
-
-export class StreamClosedError extends Error {
-  constructor(streamHash: string) {
-    super(`Feed stream closed for hash: ${streamHash}`);
-    this.name = "StreamClosedError";
-  }
-}
-
-interface RunningFeed {
-  key: string;
-  exchange: string;
-  subscribers: number;
-  abortController: AbortController;
-}
-
-export interface RabbitMQTransportRetryConfig {
-  maxAttempts?: number;
-  baseDelayMs?: number;
-  maxDelayMs?: number;
-}
-
-export interface RabbitMQTransportSecurityConfig {
-  requireTls?: boolean;
-  maxPayloadBytes?: number;
-  policy?: ScompTransportSecurityPolicy;
-  authorize?: (ctx: {
-    direction: "inbound" | "outbound";
-    route: string;
-    operation: string;
-    payload: unknown;
-  }) => boolean | Promise<boolean>;
-}
-
-export interface RabbitMQTransportPerformanceConfig {
-  requestTimeoutMs?: number;
-  maxInFlightRequests?: number;
-  feedBufferHighWaterMark?: number;
-}
-
-export type RabbitMQTransportEvent =
-  | { type: "connection_opened" }
-  | { type: "connection_reconnect"; attempt: number }
-  | { type: "connection_closed"; reason?: string }
-  | { type: "channel_opened" }
-  | { type: "request_sent"; route: string; correlationId: string }
-  | {
-      type: "request_resolved";
-      route: string;
-      correlationId: string;
-      durationMs: number;
-    }
-  | {
-      type: "request_rejected";
-      route: string;
-      correlationId: string;
-      reason: string;
-    }
-  | {
-      type: "request_timeout";
-      route: string;
-      correlationId: string;
-      timeoutMs: number;
-    }
-  | { type: "signal_sent"; route: string }
-  | { type: "feed_started"; route: string; hash: string }
-  | { type: "feed_joined"; route: string; hash: string }
-  | { type: "feed_stopped"; route: string; hash: string }
-  | { type: "feed_aborted"; hash: string }
-  | { type: "publish_return"; exchange: string }
-  | {
-      type: "security_denied";
-      route: string;
-      operation: string;
-      direction: "inbound" | "outbound";
-    }
-  | {
-      type: "priority_decision";
-      direction: "inbound" | "outbound";
-      route: string;
-      operation: ScompTransportRequestEnvelope["op"];
-      source: ScompPriorityDecision["source"];
-      requested: ScompPriorityDecision["requested"];
-      effective: ScompPriorityDecision["effective"];
-    };
-
-export interface RabbitMQTransportObservabilityConfig {
-  onEvent?: (event: RabbitMQTransportEvent) => void;
-  now?: () => number;
-}
-
-export interface RabbitMQTransportConfig {
-  url: string;
-  prefetch?: number;
-  serviceName?: string;
-  serializer?: ScompSerializer;
-  retry?: RabbitMQTransportRetryConfig;
-  security?: RabbitMQTransportSecurityConfig;
-  performance?: RabbitMQTransportPerformanceConfig;
-  observability?: RabbitMQTransportObservabilityConfig;
-}
-
-type RouterTable = Record<string, CompiledRoute>;
-
-function toPriorityMeta(
-  options?: ScompClientInvokeOptions,
-): ScompTransportMessageMeta | undefined {
-  if (!options) {
-    return undefined;
-  }
-
-  const { priority, priorityClass, deadlineAtMs, targetLatencyMs } = options;
-  if (
-    priority === undefined &&
-    priorityClass === undefined &&
-    deadlineAtMs === undefined &&
-    targetLatencyMs === undefined
-  ) {
-    return undefined;
-  }
-
-  const meta: ScompTransportMessageMeta = {};
-  if (priority !== undefined) {
-    meta.priority = priority;
-  }
-  if (priorityClass !== undefined) {
-    meta.priorityClass = priorityClass;
-  }
-  if (deadlineAtMs !== undefined) {
-    meta.deadlineAtMs = deadlineAtMs;
-  }
-  if (targetLatencyMs !== undefined) {
-    meta.targetLatencyMs = targetLatencyMs;
-  }
-
-  return meta;
-}
-
-function toServiceName(route: string): string {
-  const parts = route.split(".");
-  return parts[0] ?? "default";
-}
-
-function toRpcQueue(serviceName: string): string {
-  return `scomp.rpc.${serviceName}`;
-}
-
-function toFeedExchange(hash: string): string {
-  return `scomp.live.${hash}`;
-}
+import {
+  SIGNAL_EXCHANGE,
+  StreamClosedError,
+  checkTransportSecurity,
+  buildPriorityDecisionEvent,
+  type RunningFeed,
+  type RabbitMQTransportConfig,
+  type RabbitMQTransportEvent,
+  type RouterTable,
+  toServiceName,
+  toRpcQueue,
+} from "./types";
+import { connectWithRetry } from "./rabbitmq-connection";
+import { handleRpcMessage } from "./rabbitmq-rpc";
+import {
+  sendRpc,
+  createFeedConsumer,
+  type ClientContext,
+} from "./rabbitmq-client";
 
 export class RabbitMQTransport implements ITransport {
   private readonly config: RabbitMQTransportConfig;
@@ -196,6 +51,11 @@ export class RabbitMQTransport implements ITransport {
   >();
   private readonly runningFeeds = new Map<string, RunningFeed>();
   private readonly exchangeToFeedKey = new Map<string, string>();
+  private readonly feedConsumer: (
+    route: string,
+    payload: unknown,
+    options?: ScompClientInvokeOptions,
+  ) => AsyncIterable<unknown>;
 
   constructor(config: RabbitMQTransportConfig) {
     this.config = config;
@@ -205,6 +65,12 @@ export class RabbitMQTransport implements ITransport {
     if (config.security?.requireTls && !config.url.startsWith("amqps://")) {
       throw new Error("RabbitMQTransport requires TLS but URL is not amqps://");
     }
+
+    this.feedConsumer = createFeedConsumer(
+      this.clientContext(),
+      (route, payload, options) => this.signal(route, payload, options),
+      () => this.getFeedBufferLimit(),
+    );
   }
 
   async registerRoutes(router: RouterTable): Promise<void> {
@@ -216,14 +82,10 @@ export class RabbitMQTransport implements ITransport {
       const exchange = message.fields.exchange;
       this.emitEvent({ type: "publish_return", exchange });
       const feedKey = this.exchangeToFeedKey.get(exchange);
-      if (!feedKey) {
-        return;
-      }
+      if (!feedKey) return;
 
       const runningFeed = this.runningFeeds.get(feedKey);
-      if (!runningFeed) {
-        return;
-      }
+      if (!runningFeed) return;
 
       this.emitEvent({ type: "feed_aborted", hash: feedKey });
       runningFeed.abortController.abort(new StreamClosedError(feedKey));
@@ -238,11 +100,8 @@ export class RabbitMQTransport implements ITransport {
       const rpcQueue = toRpcQueue(serviceName);
       await channel.assertQueue(rpcQueue, { durable: true });
       await channel.consume(rpcQueue, async (message) => {
-        if (!message) {
-          return;
-        }
-
-        await this.handleRpcMessage(message);
+        if (!message) return;
+        await handleRpcMessage(this.rpcContext(), message);
       });
     }
 
@@ -256,9 +115,7 @@ export class RabbitMQTransport implements ITransport {
       });
       await channel.bindQueue(signalQueue, SIGNAL_EXCHANGE, signalRoute.route);
       await channel.consume(signalQueue, async (message) => {
-        if (!message) {
-          return;
-        }
+        if (!message) return;
 
         const body = this.deserializeFromBuffer<ScompTransportRequestEnvelope>(
           message.content,
@@ -269,7 +126,7 @@ export class RabbitMQTransport implements ITransport {
           "signal",
           body.meta,
         );
-        const { allowed } = await this.checkSecurity({
+        const { allowed } = await checkTransportSecurity(this.config.security, {
           direction: "inbound",
           transport: "rabbitmq",
           route: signalRoute.route,
@@ -289,7 +146,13 @@ export class RabbitMQTransport implements ITransport {
         }
 
         channel.ack(message);
-        await this.invokeRoute(signalRoute, body);
+        const routeEntry = this.router?.[signalRoute.route];
+        if (routeEntry) {
+          const payload = routeEntry.parser
+            ? routeEntry.parser(body.payload)
+            : body.payload;
+          await routeEntry.handler(payload);
+        }
       });
     }
   }
@@ -299,7 +162,7 @@ export class RabbitMQTransport implements ITransport {
     payload: unknown,
     options?: ScompClientInvokeOptions,
   ): Promise<unknown> {
-    return this.sendRpc(route, "request", payload, options);
+    return sendRpc(this.clientContext(), route, "request", payload, options);
   }
 
   async signal(
@@ -308,16 +171,19 @@ export class RabbitMQTransport implements ITransport {
     options?: ScompClientInvokeOptions,
   ): Promise<void> {
     const priorityMeta = toPriorityMeta(options);
-    const baseMeta = this.mergeMeta(options?.meta, priorityMeta);
+    const baseMeta = mergeMeta(options?.meta, priorityMeta);
     this.emitPriorityDecision("outbound", route, "signal", baseMeta);
-    const { allowed, principal } = await this.checkSecurity({
-      direction: "outbound",
-      transport: "rabbitmq",
-      route,
-      operation: "signal",
-      payload,
-      meta: baseMeta,
-    });
+    const { allowed, principal } = await checkTransportSecurity(
+      this.config.security,
+      {
+        direction: "outbound",
+        transport: "rabbitmq",
+        route,
+        operation: "signal",
+        payload,
+        meta: baseMeta,
+      },
+    );
     if (!allowed) {
       this.emitEvent({
         type: "security_denied",
@@ -335,7 +201,7 @@ export class RabbitMQTransport implements ITransport {
       route,
       payload,
       op: "signal",
-      meta: this.mergeMeta(baseMeta, this.toMessageMeta(principal)),
+      meta: mergeMeta(baseMeta, toPrincipalMeta(principal)),
     } satisfies ScompTransportRequestEnvelope);
     this.assertPayloadSize(content);
     channel.publish(SIGNAL_EXCHANGE, route, content, {
@@ -353,26 +219,19 @@ export class RabbitMQTransport implements ITransport {
     this.exchangeToFeedKey.clear();
 
     const closeError = new Error("RabbitMQ transport closed.");
-    for (const reject of this.requestRejecters.values()) {
-      reject(closeError);
-    }
+    for (const reject of this.requestRejecters.values()) reject(closeError);
     this.requestRejecters.clear();
     this.requestResolvers.clear();
     this.requestStartTime.clear();
-
     this.replyQueue = "";
 
     const channel = this.channel;
     this.channel = undefined;
-    if (channel?.close) {
-      await channel.close();
-    }
+    if (channel?.close) await channel.close();
 
     const connection = this.connection;
     this.connection = undefined;
-    if (connection?.close) {
-      await connection.close();
-    }
+    if (connection?.close) await connection.close();
   }
 
   feed(
@@ -380,191 +239,60 @@ export class RabbitMQTransport implements ITransport {
     payload: unknown,
     options?: ScompClientInvokeOptions,
   ): AsyncIterable<unknown> {
-    const self = this;
+    return this.feedConsumer(route, payload, options);
+  }
 
+  private clientContext(): ClientContext {
     return {
-      async *[Symbol.asyncIterator]() {
-        const channel = await self.getChannel();
-        const handshake = (await self.sendRpc(
-          route,
-          "feed",
-          payload,
-          options,
-        )) as { exchange: string; feed: string };
-
-        const exchangeName = String(handshake.exchange);
-        const feedHash = String(handshake.feed);
-        const queueName = (
-          await channel.assertQueue("", { exclusive: true, durable: false })
-        ).queue;
-        await channel.bindQueue(queueName, exchangeName, "");
-
-        const queueBuffer: Array<unknown> = [];
-        const waiters: Array<() => void> = [];
-        let closed = false;
-        const feedBufferLimit = self.getFeedBufferLimit();
-
-        const { consumerTag } = await channel.consume(queueName, (message) => {
-          if (!message) {
-            return;
-          }
-
-          const parsed = self.deserializeFromBuffer<ScompFeedChunkEnvelope>(
-            message.content,
-          );
-          channel.ack(message);
-
-          if (parsed.type === "done") {
-            closed = true;
-          } else if (parsed.type === "error") {
-            closed = true;
-            queueBuffer.push(
-              Promise.reject(new Error(parsed.message ?? "Feed error")),
-            );
-          } else {
-            if (queueBuffer.length >= feedBufferLimit) {
-              closed = true;
-              queueBuffer.push(
-                Promise.reject(
-                  new Error(
-                    `Feed buffer high-water mark exceeded (${feedBufferLimit})`,
-                  ),
-                ),
-              );
-              return;
-            }
-            queueBuffer.push(parsed.payload);
-          }
-
-          waiters.shift()?.();
-        });
-
-        try {
-          while (true) {
-            if (queueBuffer.length > 0) {
-              const value = queueBuffer.shift();
-              if (value instanceof Promise) {
-                await value;
-              }
-              if (closed && value === undefined) {
-                return;
-              }
-              if (value !== undefined) {
-                yield value;
-              }
-            } else if (closed) {
-              return;
-            } else {
-              await new Promise<void>((resolve) => waiters.push(resolve));
-            }
-          }
-        } finally {
-          await channel.cancel(consumerTag);
-          await channel.unbindQueue(queueName, exchangeName, "");
-          await channel.deleteQueue(queueName);
-          self.emitEvent({ type: "feed_stopped", route, hash: feedHash });
-          await self.signal(route, {}, {
-            ...options,
-            meta: {
-              ...options?.meta,
-              __scomp_feed: feedHash,
-              __scomp_method: "__scomp.unsubscribe",
-            },
-          } as ScompClientInvokeOptions);
-        }
+      security: this.config.security,
+      serializer: this.serializer,
+      contentType: this.contentType,
+      getChannel: () => this.getChannel(),
+      emitEvent: (e) => this.emitEvent(e),
+      emitPriorityDecision: (d, r, o, m) =>
+        this.emitPriorityDecision(d, r, o, m),
+      assertPayloadSize: (p) => this.assertPayloadSize(p),
+      requestStartTime: this.requestStartTime,
+      requestResolvers: this.requestResolvers,
+      requestRejecters: this.requestRejecters,
+      getReplyQueue: () => this.replyQueue,
+      setReplyQueue: (q) => {
+        this.replyQueue = q;
       },
+      now: () => this.now(),
+      getRequestTimeoutMs: () => this.getRequestTimeoutMs(),
+      getMaxInFlightRequests: () => this.getMaxInFlightRequests(),
     };
   }
 
-  private async sendRpc(
-    route: string,
-    op: ScompTransportRequestEnvelope["op"],
-    payload: unknown,
-    options?: ScompClientInvokeOptions,
-  ): Promise<unknown> {
-    const priorityMeta = toPriorityMeta(options);
-    const baseMeta = this.mergeMeta(options?.meta, priorityMeta);
-    this.emitPriorityDecision("outbound", route, op, baseMeta);
-    const { allowed, principal } = await this.checkSecurity({
-      direction: "outbound",
-      transport: "rabbitmq",
-      route,
-      operation: op,
-      payload,
-      meta: baseMeta,
-    });
-    if (!allowed) {
-      this.emitEvent({
-        type: "security_denied",
-        route,
-        operation: op,
-        direction: "outbound",
-      });
-      throw new Error(`${op} not authorized for route: ${route}`);
-    }
-
-    if (this.requestResolvers.size >= this.getMaxInFlightRequests()) {
-      throw new Error(
-        `In-flight request limit reached: ${this.getMaxInFlightRequests()}`,
-      );
-    }
-
-    const channel = await this.getChannel();
-    await this.ensureReplyConsumer();
-
-    const correlationId = randomUUID();
-    this.requestStartTime.set(correlationId, this.now());
-
-    const replyPromise = new Promise<unknown>((resolve, reject) => {
-      this.requestResolvers.set(correlationId, resolve);
-      this.requestRejecters.set(correlationId, reject);
-    });
-
-    const serviceName = toServiceName(route);
-    const body = this.serializeToBuffer({
-      route,
-      payload,
-      op,
-      meta: this.mergeMeta(baseMeta, this.toMessageMeta(principal)),
-    } satisfies ScompTransportRequestEnvelope);
-    this.assertPayloadSize(body);
-
-    channel.sendToQueue(toRpcQueue(serviceName), body, {
-      correlationId,
-      replyTo: this.replyQueue,
+  private rpcContext() {
+    return {
+      router: this.router,
+      security: this.config.security,
+      getChannel: () => this.getChannel(),
+      serializeToBuffer: (v: unknown) => this.serializeToBuffer(v),
+      deserializeFromBuffer: <T>(v: Buffer) => this.deserializeFromBuffer<T>(v),
       contentType: this.contentType,
-    });
-
-    this.emitEvent({ type: "request_sent", route, correlationId });
-
-    const timeoutMs = this.getRequestTimeoutMs();
-    const timeoutPromise = new Promise<never>((_resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.requestResolvers.delete(correlationId);
-        this.requestRejecters.delete(correlationId);
-        this.requestStartTime.delete(correlationId);
-        this.emitEvent({
-          type: "request_timeout",
-          route,
-          correlationId,
-          timeoutMs,
-        });
-        reject(
-          new Error(
-            `Request timed out after ${timeoutMs}ms for route: ${route}`,
-          ),
-        );
-      }, timeoutMs);
-
-      void replyPromise.finally(() => clearTimeout(timer));
-    });
-
-    return Promise.race([replyPromise, timeoutPromise]);
+      serializer: this.serializer,
+      emitEvent: (e: RabbitMQTransportEvent) => this.emitEvent(e),
+      emitPriorityDecision: (
+        d: "inbound" | "outbound",
+        r: string,
+        o: ScompTransportRequestEnvelope["op"],
+        m?: ScompTransportMessageMeta,
+      ) => this.emitPriorityDecision(d, r, o, m),
+      runningFeeds: this.runningFeeds,
+      exchangeToFeedKey: this.exchangeToFeedKey,
+      getCurrentChannel: () => this.channel,
+    };
   }
 
   private async getConnection(): Promise<ChannelModel> {
     if (!this.connection) {
-      this.connection = await this.connectWithRetry();
+      this.connection = await connectWithRetry(
+        { ...this.config.retry, url: this.config.url },
+        (event) => this.emitEvent(event),
+      );
       this.emitEvent({ type: "connection_opened" });
       this.connection.on("close", () => {
         this.connection = undefined;
@@ -586,290 +314,12 @@ export class RabbitMQTransport implements ITransport {
       const connection = await this.getConnection();
       this.channel = await connection.createChannel();
       this.emitEvent({ type: "channel_opened" });
-      const channel = this.channel;
-      if (this.config.prefetch && channel) {
-        await channel.prefetch(this.config.prefetch);
+      if (this.config.prefetch && this.channel) {
+        await this.channel.prefetch(this.config.prefetch);
       }
     }
-
-    const channel = this.channel;
-    if (!channel) {
-      throw new Error("RabbitMQ channel is not initialized.");
-    }
-
-    return channel;
-  }
-
-  private async ensureReplyConsumer(): Promise<void> {
-    if (this.replyQueue) {
-      return;
-    }
-
-    const channel = await this.getChannel();
-    const asserted = await channel.assertQueue("", {
-      exclusive: true,
-      durable: false,
-      autoDelete: true,
-    });
-    this.replyQueue = asserted.queue;
-
-    await channel.consume(this.replyQueue, (message) => {
-      if (!message) {
-        return;
-      }
-
-      const correlationId = message.properties.correlationId;
-      const resolve = this.requestResolvers.get(correlationId);
-      const reject = this.requestRejecters.get(correlationId);
-
-      this.requestResolvers.delete(correlationId);
-      this.requestRejecters.delete(correlationId);
-
-      const body = this.deserializeFromBuffer<ScompTransportResponseEnvelope>(
-        message.content,
-      );
-      if ("error" in body) {
-        this.emitEvent({
-          type: "request_rejected",
-          route: "unknown",
-          correlationId,
-          reason: String(body.error),
-        });
-        reject?.(new Error(String(body.error)));
-      } else {
-        const startedAt =
-          this.requestStartTime.get(correlationId) ?? this.now();
-        this.emitEvent({
-          type: "request_resolved",
-          route: "unknown",
-          correlationId,
-          durationMs: this.now() - startedAt,
-        });
-        resolve?.(body.payload);
-      }
-      this.requestStartTime.delete(correlationId);
-
-      channel.ack(message);
-    });
-  }
-
-  private async handleRpcMessage(message: ConsumeMessage): Promise<void> {
-    const channel = await this.getChannel();
-    const body = this.deserializeFromBuffer<ScompTransportRequestEnvelope>(
-      message.content,
-    );
-    const route = String(body.route ?? "");
-    this.emitPriorityDecision("inbound", route, body.op, body.meta);
-    const { allowed } = await this.checkSecurity({
-      direction: "inbound",
-      transport: "rabbitmq",
-      route,
-      operation: body.op,
-      payload: body.payload,
-      meta: body.meta,
-    });
-    if (!allowed) {
-      channel.ack(message);
-      this.emitEvent({
-        type: "security_denied",
-        route,
-        operation: body.op,
-        direction: "inbound",
-      });
-      this.replyWithError(
-        message,
-        `Inbound operation not authorized for route: ${route}`,
-        "UNAUTHORIZED",
-      );
-      return;
-    }
-
-    const routeEntry = this.router?.[route];
-
-    if (!routeEntry) {
-      channel.ack(message);
-      this.replyWithError(
-        message,
-        `Route not found: ${route}`,
-        "ROUTE_NOT_FOUND",
-      );
-      return;
-    }
-
-    if (routeEntry.kind === "feed") {
-      await this.handleFeedRpc(routeEntry, message, body);
-      channel.ack(message);
-      return;
-    }
-
-    try {
-      const output = await this.invokeRoute(routeEntry, body);
-      this.replyWithPayload(message, output);
-    } catch (error) {
-      this.replyWithError(message, error);
-    } finally {
-      channel.ack(message);
-    }
-  }
-
-  private async handleFeedRpc(
-    route: CompiledRoute,
-    message: ConsumeMessage,
-    body: ScompTransportRequestEnvelope,
-  ): Promise<void> {
-    const rawPayload = body.payload;
-    const parsedPayload = route.parser ? route.parser(rawPayload) : rawPayload;
-    const hash = String(
-      body.feed ??
-        createFeedHash(route.route, parsedPayload, { hashKey: route.hashKey }),
-    );
-
-    const existing = this.runningFeeds.get(hash);
-    if (existing) {
-      existing.subscribers += 1;
-      this.emitEvent({ type: "feed_joined", route: route.route, hash });
-      this.replyWithPayload(message, {
-        exchange: existing.exchange,
-        feed: hash,
-      });
-      return;
-    }
-
-    const exchange = toFeedExchange(hash);
-    const channel = await this.getChannel();
-    await channel.assertExchange(exchange, "fanout", {
-      durable: false,
-      autoDelete: true,
-    });
-
-    const runningFeed: RunningFeed = {
-      key: hash,
-      exchange,
-      subscribers: 1,
-      abortController: new AbortController(),
-    };
-    this.runningFeeds.set(hash, runningFeed);
-    this.exchangeToFeedKey.set(exchange, hash);
-    this.emitEvent({ type: "feed_started", route: route.route, hash });
-
-    const iterable = route.handler(parsedPayload) as AsyncIterable<unknown>;
-    void this.publishFeed(runningFeed, iterable);
-
-    this.replyWithPayload(message, { exchange, feed: hash });
-  }
-
-  private async publishFeed(
-    runningFeed: RunningFeed,
-    iterable: AsyncIterable<unknown>,
-  ): Promise<void> {
-    const channel = await this.getChannel();
-
-    try {
-      for await (const chunk of iterable) {
-        if (runningFeed.abortController.signal.aborted) {
-          throw runningFeed.abortController.signal.reason;
-        }
-
-        channel.publish(
-          runningFeed.exchange,
-          "",
-          this.serializeToBuffer({
-            channel: "feed",
-            feed: runningFeed.key,
-            type: "next",
-            payload: chunk,
-          } satisfies ScompFeedChunkEnvelope),
-          {
-            contentType: this.contentType,
-            mandatory: true,
-          },
-        );
-        await this.waitForChannelDrainIfNeeded(channel);
-      }
-
-      channel.publish(
-        runningFeed.exchange,
-        "",
-        this.serializeToBuffer({
-          channel: "feed",
-          feed: runningFeed.key,
-          type: "done",
-        } satisfies ScompFeedChunkEnvelope),
-        {
-          contentType: this.contentType,
-          mandatory: true,
-        },
-      );
-      await this.waitForChannelDrainIfNeeded(channel);
-    } catch (error) {
-      channel.publish(
-        runningFeed.exchange,
-        "",
-        this.serializeToBuffer({
-          channel: "feed",
-          feed: runningFeed.key,
-          type: "error",
-          message: error instanceof Error ? error.message : String(error),
-        } satisfies ScompFeedChunkEnvelope),
-        {
-          contentType: this.contentType,
-          mandatory: true,
-        },
-      );
-      await this.waitForChannelDrainIfNeeded(channel);
-    } finally {
-      this.runningFeeds.delete(runningFeed.key);
-      this.exchangeToFeedKey.delete(runningFeed.exchange);
-    }
-  }
-
-  private async invokeRoute(
-    route: CompiledRoute,
-    body: ScompTransportRequestEnvelope,
-  ): Promise<unknown> {
-    const payload = route.parser ? route.parser(body.payload) : body.payload;
-    return route.handler(payload);
-  }
-
-  private replyWithPayload(message: ConsumeMessage, payload: unknown): void {
-    const replyTo = message.properties.replyTo;
-    if (!replyTo) {
-      return;
-    }
-
-    this.channel?.sendToQueue(
-      replyTo,
-      this.serializeToBuffer({
-        payload,
-      } satisfies ScompTransportResponseEnvelope),
-      {
-        correlationId: message.properties.correlationId,
-        contentType: this.contentType,
-      },
-    );
-  }
-
-  private replyWithError(
-    message: ConsumeMessage,
-    error: unknown,
-    code?: ScompErrorCode,
-  ): void {
-    const replyTo = message.properties.replyTo;
-    if (!replyTo) {
-      return;
-    }
-
-    this.channel?.sendToQueue(
-      replyTo,
-      this.serializeToBuffer({
-        error: error instanceof Error ? error.message : String(error),
-        code,
-      } satisfies ScompTransportResponseEnvelope),
-      {
-        correlationId: message.properties.correlationId,
-        contentType: this.contentType,
-      },
-    );
+    if (!this.channel) throw new Error("RabbitMQ channel is not initialized.");
+    return this.channel;
   }
 
   private serializeToBuffer(value: unknown): Buffer {
@@ -882,121 +332,8 @@ export class RabbitMQTransport implements ITransport {
 
   private assertPayloadSize(payload: Buffer): void {
     const limit = this.config.security?.maxPayloadBytes;
-    if (!limit) {
-      return;
-    }
-
-    if (payload.byteLength > limit) {
+    if (limit && payload.byteLength > limit) {
       throw new Error(`Payload exceeds maxPayloadBytes (${limit}).`);
-    }
-  }
-
-  private toMessageMeta(
-    principal: ScompTransportPrincipal | undefined,
-  ): ScompTransportMessageMeta | undefined {
-    if (!principal) {
-      return undefined;
-    }
-
-    return {
-      auth: {
-        subject: principal.subject,
-        tenantId: principal.tenantId,
-        scopes: principal.scopes,
-        claims: principal.claims,
-        issuedAt: principal.issuedAt,
-        expiresAt: principal.expiresAt,
-        authType: principal.authType,
-      },
-      tenantId: principal.tenantId,
-    };
-  }
-
-  private mergeMeta(
-    baseMeta: ScompTransportMessageMeta | undefined,
-    overlayMeta: ScompTransportMessageMeta | undefined,
-  ): ScompTransportMessageMeta | undefined {
-    if (!baseMeta && !overlayMeta) {
-      return undefined;
-    }
-
-    return {
-      ...(baseMeta ?? {}),
-      ...(overlayMeta ?? {}),
-    };
-  }
-
-  private async checkSecurity(
-    ctx: Omit<ScompTransportSecurityContext, "principal">,
-  ): Promise<{ allowed: boolean; principal?: ScompTransportPrincipal }> {
-    const policy = this.config.security?.policy;
-
-    const principal = policy?.authenticate
-      ? await policy.authenticate(ctx)
-      : undefined;
-
-    if (policy?.authorize) {
-      const allowed = Boolean(
-        await policy.authorize({ ...ctx, principal: principal ?? undefined }),
-      );
-      return { allowed, principal: principal ?? undefined };
-    }
-
-    const legacyAuthorize = this.config.security?.authorize;
-    if (legacyAuthorize) {
-      const allowed = Boolean(
-        await legacyAuthorize({
-          direction: ctx.direction,
-          route: ctx.route,
-          operation: ctx.operation,
-          payload: ctx.payload,
-        }),
-      );
-      return { allowed, principal: principal ?? undefined };
-    }
-
-    return { allowed: true, principal: principal ?? undefined };
-  }
-
-  private async connectWithRetry(): Promise<ChannelModel> {
-    const maxAttempts = this.config.retry?.maxAttempts ?? 6;
-    const baseDelayMs = this.config.retry?.baseDelayMs ?? 250;
-    const maxDelayMs = this.config.retry?.maxDelayMs ?? 8_000;
-
-    let attempt = 0;
-    let lastError: unknown;
-
-    while (attempt < maxAttempts) {
-      attempt += 1;
-      try {
-        if (attempt > 1) {
-          this.emitEvent({ type: "connection_reconnect", attempt });
-        }
-        return await amqp.connect(this.config.url);
-      } catch (error) {
-        lastError = error;
-        if (attempt >= maxAttempts) {
-          break;
-        }
-
-        const jitter = Math.floor(Math.random() * 100);
-        const delay = Math.min(
-          maxDelayMs,
-          baseDelayMs * 2 ** (attempt - 1) + jitter,
-        );
-        await new Promise((resolve) => setTimeout(resolve, delay));
-      }
-    }
-
-    throw new Error(
-      `Unable to connect to RabbitMQ after ${maxAttempts} attempts: ${String(lastError)}`,
-    );
-  }
-
-  private async waitForChannelDrainIfNeeded(channel: Channel): Promise<void> {
-    const writable = (channel as unknown as { writable?: boolean }).writable;
-    if (writable === false) {
-      await once(channel, "drain");
     }
   }
 
@@ -1010,22 +347,9 @@ export class RabbitMQTransport implements ITransport {
     operation: ScompTransportRequestEnvelope["op"],
     meta?: ScompTransportMessageMeta,
   ): void {
-    const decision = resolveScompPriority({
-      route,
-      operation,
-      meta: meta as
-        | (ScompTransportMessageMeta & Record<string, unknown>)
-        | undefined,
-    });
-    this.emitEvent({
-      type: "priority_decision",
-      direction,
-      route,
-      operation,
-      source: decision.source,
-      requested: decision.requested,
-      effective: decision.effective,
-    });
+    this.emitEvent(
+      buildPriorityDecisionEvent(direction, route, operation, meta),
+    );
   }
 
   private now(): number {
@@ -1050,6 +374,16 @@ export function createRabbitMqTransport(
 ): RabbitMQTransport {
   return new RabbitMQTransport(config);
 }
+
+export {
+  StreamClosedError,
+  type RabbitMQTransportRetryConfig,
+  type RabbitMQTransportSecurityConfig,
+  type RabbitMQTransportPerformanceConfig,
+  type RabbitMQTransportEvent,
+  type RabbitMQTransportObservabilityConfig,
+  type RabbitMQTransportConfig,
+} from "./types";
 
 export {
   createJsonSerializer,

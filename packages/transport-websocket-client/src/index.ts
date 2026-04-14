@@ -9,11 +9,19 @@ import type {
   ScompTransportMessageMeta,
   ScompTransportOperation,
   ScompTransportPrincipal,
-  ScompTransportSecurityContext,
-  ScompTransportSecurityPolicy,
   ScompTransportRequestEnvelope,
   ScompTransportResponseEnvelope,
+  ScompTransportSecurityPolicy,
 } from "@scomp/types";
+import {
+  toPriorityMeta,
+  toPrincipalMeta,
+  mergeMeta,
+  safeJsonParse,
+  isFeedChunkEnvelope,
+  checkSecurity,
+  type TransportMessage,
+} from "@scomp/transport-shared";
 import WebSocket, { type RawData } from "ws";
 
 export class SocketDisconnectedError extends Error {
@@ -34,11 +42,6 @@ interface FeedState {
   closed: boolean;
 }
 
-type TransportMessage =
-  | ScompTransportRequestEnvelope
-  | ScompTransportResponseEnvelope
-  | ScompFeedChunkEnvelope;
-
 export interface WebSocketClientTransportConfig {
   url: string;
   protocols?: string | Array<string>;
@@ -46,48 +49,6 @@ export interface WebSocketClientTransportConfig {
     | ScompTransportMessageMeta
     | (() => ScompTransportMessageMeta | Promise<ScompTransportMessageMeta>);
   security?: ScompTransportSecurityPolicy;
-}
-
-function toPriorityMeta(
-  options?: ScompClientInvokeOptions,
-): ScompTransportMessageMeta | undefined {
-  if (!options) {
-    return undefined;
-  }
-
-  const { priority, priorityClass, deadlineAtMs, targetLatencyMs } = options;
-  if (
-    priority === undefined &&
-    priorityClass === undefined &&
-    deadlineAtMs === undefined &&
-    targetLatencyMs === undefined
-  ) {
-    return undefined;
-  }
-
-  const meta: ScompTransportMessageMeta = {};
-  if (priority !== undefined) {
-    meta.priority = priority;
-  }
-  if (priorityClass !== undefined) {
-    meta.priorityClass = priorityClass;
-  }
-  if (deadlineAtMs !== undefined) {
-    meta.deadlineAtMs = deadlineAtMs;
-  }
-  if (targetLatencyMs !== undefined) {
-    meta.targetLatencyMs = targetLatencyMs;
-  }
-
-  return meta;
-}
-
-function safeJsonParse(text: string): any {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return {};
-  }
 }
 
 function toText(data: RawData): string {
@@ -104,12 +65,6 @@ function toText(data: RawData): string {
   }
 
   return Buffer.from(data).toString("utf8");
-}
-
-function isFeedChunkEnvelope(
-  message: TransportMessage,
-): message is ScompFeedChunkEnvelope {
-  return (message as ScompFeedChunkEnvelope).channel === "feed";
 }
 
 export class WebSocketClientTransport implements ITransport {
@@ -188,9 +143,9 @@ export class WebSocketClientTransport implements ITransport {
     const socket = await this.getSocket();
     const operation: ScompTransportOperation = "signal";
     const priorityMeta = toPriorityMeta(options);
-    const baseMeta = this.mergeMeta(await this.resolveMeta(), options?.meta);
-    const effectiveMeta = this.mergeMeta(baseMeta, priorityMeta);
-    const { allowed, principal } = await this.checkSecurity({
+    const baseMeta = mergeMeta(await this.resolveMeta(), options?.meta);
+    const effectiveMeta = mergeMeta(baseMeta, priorityMeta);
+    const { allowed, principal } = await checkSecurity(this.config.security, {
       direction: "outbound",
       transport: "websocket",
       route,
@@ -205,7 +160,7 @@ export class WebSocketClientTransport implements ITransport {
       route,
       op: "signal",
       payload,
-      meta: this.mergeMeta(effectiveMeta, this.toPrincipalMeta(principal)),
+      meta: mergeMeta(effectiveMeta, toPrincipalMeta(principal)),
     };
 
     if (options?.feed) {
@@ -321,7 +276,11 @@ export class WebSocketClientTransport implements ITransport {
 
   private attachSocketHandlers(socket: WebSocket): void {
     socket.on("message", (data: RawData) => {
-      const message = safeJsonParse(toText(data)) as TransportMessage;
+      const parsed = safeJsonParse(toText(data));
+      if (!parsed.ok) {
+        return;
+      }
+      const message = parsed.value as TransportMessage;
       this.handleIncoming(message);
     });
 
@@ -412,9 +371,9 @@ export class WebSocketClientTransport implements ITransport {
   ): Promise<any> {
     const socket = await this.getSocket();
     const priorityMeta = toPriorityMeta(options);
-    const baseMeta = this.mergeMeta(await this.resolveMeta(), options?.meta);
-    const effectiveMeta = this.mergeMeta(baseMeta, priorityMeta);
-    const { allowed, principal } = await this.checkSecurity({
+    const baseMeta = mergeMeta(await this.resolveMeta(), options?.meta);
+    const effectiveMeta = mergeMeta(baseMeta, priorityMeta);
+    const { allowed, principal } = await checkSecurity(this.config.security, {
       direction: "outbound",
       transport: "websocket",
       route,
@@ -436,7 +395,7 @@ export class WebSocketClientTransport implements ITransport {
       route,
       op,
       payload,
-      meta: this.mergeMeta(effectiveMeta, this.toPrincipalMeta(principal)),
+      meta: mergeMeta(effectiveMeta, toPrincipalMeta(principal)),
     };
 
     if (options?.feed) {
@@ -498,67 +457,6 @@ export class WebSocketClientTransport implements ITransport {
     }
 
     return metaConfig;
-  }
-
-  private toPrincipalMeta(
-    principal: ScompTransportPrincipal | undefined,
-  ): ScompTransportMessageMeta | undefined {
-    if (!principal) {
-      return undefined;
-    }
-
-    return {
-      auth: {
-        subject: principal.subject,
-        tenantId: principal.tenantId,
-        scopes: principal.scopes,
-        claims: principal.claims,
-        issuedAt: principal.issuedAt,
-        expiresAt: principal.expiresAt,
-        authType: principal.authType,
-      },
-      tenantId: principal.tenantId,
-    };
-  }
-
-  private mergeMeta(
-    baseMeta: ScompTransportMessageMeta | undefined,
-    principalMeta: ScompTransportMessageMeta | undefined,
-  ): ScompTransportMessageMeta | undefined {
-    if (!baseMeta && !principalMeta) {
-      return undefined;
-    }
-
-    return {
-      ...(baseMeta ?? {}),
-      ...(principalMeta ?? {}),
-    };
-  }
-
-  private async checkSecurity(
-    ctx: Omit<ScompTransportSecurityContext, "principal">,
-  ): Promise<{ allowed: boolean; principal?: ScompTransportPrincipal }> {
-    const policy = this.config.security;
-    if (!policy) {
-      return { allowed: true };
-    }
-
-    const principal = policy.authenticate
-      ? await policy.authenticate(ctx)
-      : undefined;
-
-    if (!policy.authorize) {
-      return { allowed: true, principal: principal ?? undefined };
-    }
-
-    const allowed = Boolean(
-      await policy.authorize({
-        ...ctx,
-        principal: principal ?? undefined,
-      }),
-    );
-
-    return { allowed, principal: principal ?? undefined };
   }
 }
 

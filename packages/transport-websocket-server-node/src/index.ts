@@ -13,6 +13,7 @@ import type {
   ScompFeedChunkEnvelope,
   ScompTransportMessageMeta,
 } from "@scomp/types";
+import { toPrincipalMeta } from "@scomp/transport-shared";
 import {
   parseTransportMessage,
   StreamClosedError,
@@ -61,27 +62,6 @@ function toText(data: RawData): string {
   }
 
   return Buffer.from(data).toString("utf8");
-}
-
-function toPrincipalMeta(
-  principal: ScompTransportPrincipal | undefined,
-): ScompTransportMessageMeta | undefined {
-  if (!principal) {
-    return undefined;
-  }
-
-  return {
-    auth: {
-      subject: principal.subject,
-      tenantId: principal.tenantId,
-      scopes: principal.scopes,
-      claims: principal.claims,
-      issuedAt: principal.issuedAt,
-      expiresAt: principal.expiresAt,
-      authType: principal.authType,
-    },
-    tenantId: principal.tenantId,
-  };
 }
 
 export class WebSocketServerTransport implements ITransport {
@@ -143,7 +123,10 @@ export class WebSocketServerTransport implements ITransport {
       this.sockets.add(socketWithPrincipal);
 
       socket.on("message", async (data: RawData) => {
-        const body = parseTransportMessage(toText(data)) as TransportMessage;
+        const body = parseTransportMessage(toText(data));
+        if (!body) {
+          return;
+        }
         await this.runtime.handleIncoming(socketWithPrincipal, body);
       });
 
