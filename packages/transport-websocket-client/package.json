@@ -7,10 +7,11 @@
   "scripts": {
     "build": "tsc -b tsconfig.json",
     "lint": "bunx tsc -b tsconfig.json --pretty false",
-    "test": "echo \"No tests configured for @scomp/transport-websocket-client\""
+    "test": "jest --config jest.config.cjs"
   },
   "dependencies": {
     "@scomp/core": "workspace:*",
+    "@scomp/transport-shared": "workspace:*",
     "@scomp/types": "workspace:*",
     "@types/ws": "^8.18.1",
     "ws": "^8.18.3"

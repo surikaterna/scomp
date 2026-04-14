@@ -4,12 +4,8 @@
     "composite": true,
     "rootDir": "src",
     "outDir": "dist",
-    "tsBuildInfoFile": "dist/.tsbuildinfo",
-    "lib": ["es2019", "dom"]
+    "tsBuildInfoFile": "dist/.tsbuildinfo"
   },
-  "references": [
-    { "path": "../core" },
-    { "path": "../types" }
-  ],
+  "references": [{ "path": "../core" }, { "path": "../types" }],
   "include": ["src/**/*"]
 }

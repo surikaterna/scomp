@@ -1,66 +1,87 @@
 import assert from "node:assert/strict";
-import {
-  type ScompTransportSecurityPolicy,
-  type ScompTransportRequestEnvelope,
-  type ScompTransportResponseEnvelope,
+import type {
+  ScompTransportSecurityPolicy,
+  ScompTransportRequestEnvelope,
+  ScompTransportResponseEnvelope,
 } from "@scomp/types";
-import { SocketDisconnectedError, WebSocketBrowserTransport } from "../src";
+import {
+  SocketDisconnectedError,
+  WebSocketClientTransport,
+  type ISocketAdapter,
+  type SocketAdapterFactory,
+} from "../src";
 
-class FakeWebSocket {
-  static readonly CONNECTING = 0;
-  static readonly OPEN = 1;
+// ---------------------------------------------------------------------------
+// FakeSocketAdapter — in-memory ISocketAdapter for testing
+// ---------------------------------------------------------------------------
 
-  public readyState = FakeWebSocket.CONNECTING;
-  private readonly listeners = new Map<string, Array<(event: any) => void>>();
+class FakeSocketAdapter implements ISocketAdapter {
+  readyState = 0; // CONNECTING
+
+  private openHandlers: Array<() => void> = [];
+  private messageHandlers: Array<(text: string) => void> = [];
+  private closeHandlers: Array<() => void> = [];
+  private errorHandlers: Array<(error: unknown) => void> = [];
   private readonly sent: Array<string>;
 
-  constructor(
-    private readonly _url: string,
-    _protocols: string | Array<string> | undefined,
-    sent: Array<string>,
-  ) {
+  constructor(sent: Array<string>) {
     this.sent = sent;
     queueMicrotask(() => {
-      this.readyState = FakeWebSocket.OPEN;
-      this.emit("open", {});
+      this.readyState = 1; // OPEN
+      for (const h of this.openHandlers) h();
     });
   }
 
-  addEventListener(type: string, listener: (event: any) => void): void {
-    const queue = this.listeners.get(type) ?? [];
-    queue.push(listener);
-    this.listeners.set(type, queue);
-  }
-
-  removeEventListener(type: string, listener: (event: any) => void): void {
-    const queue = this.listeners.get(type) ?? [];
-    this.listeners.set(
-      type,
-      queue.filter((entry) => entry !== listener),
-    );
-  }
-
-  send(payload: string): void {
-    this.sent.push(payload);
+  send(data: string): void {
+    this.sent.push(data);
   }
 
   close(): void {
     this.readyState = 3;
-    this.emit("close", {});
+    for (const h of this.closeHandlers) h();
   }
 
-  emit(type: string, event: any): void {
-    const queue = this.listeners.get(type) ?? [];
-    for (const listener of queue) {
-      listener(event);
-    }
+  onOpen(handler: () => void): void {
+    this.openHandlers.push(handler);
+  }
+  onMessage(handler: (text: string) => void): void {
+    this.messageHandlers.push(handler);
+  }
+  onClose(handler: () => void): void {
+    this.closeHandlers.push(handler);
+  }
+  onError(handler: (error: unknown) => void): void {
+    this.errorHandlers.push(handler);
+  }
+
+  removeAllHandlers(): void {
+    this.openHandlers = [];
+    this.messageHandlers = [];
+    this.closeHandlers = [];
+    this.errorHandlers = [];
+  }
+
+  // --- Test helpers ---
+  emitMessage(text: string): void {
+    for (const h of this.messageHandlers) h(text);
+  }
+  emitClose(): void {
+    this.readyState = 3;
+    for (const h of this.closeHandlers) h();
+  }
+  emitError(error: unknown): void {
+    for (const h of this.errorHandlers) h(error);
   }
 }
 
-interface BrowserHarness {
-  transport: WebSocketBrowserTransport;
+// ---------------------------------------------------------------------------
+// Harness
+// ---------------------------------------------------------------------------
+
+interface Harness {
+  transport: WebSocketClientTransport;
   sent: Array<string>;
-  getSocket: () => FakeWebSocket;
+  getSocket: () => FakeSocketAdapter;
 }
 
 function createHarness(options?: {
@@ -68,35 +89,27 @@ function createHarness(options?: {
     | Record<string, unknown>
     | (() => Record<string, unknown> | Promise<Record<string, unknown>>);
   security?: ScompTransportSecurityPolicy;
-}): BrowserHarness {
+}): Harness {
   const sent: Array<string> = [];
-  let socket: FakeWebSocket | undefined;
+  let socket: FakeSocketAdapter | undefined;
 
-  const webSocketCtor = class {
-    constructor(url: string, protocols?: string | Array<string>) {
-      socket = new FakeWebSocket(url, protocols, sent);
-      return socket;
-    }
-  } as unknown as new (
-    url: string,
-    protocols?: string | Array<string>,
-  ) => WebSocket;
+  const socketAdapter: SocketAdapterFactory = (_url, _protocols) => {
+    socket = new FakeSocketAdapter(sent);
+    return socket;
+  };
 
-  const transport = new WebSocketBrowserTransport({
+  const transport = new WebSocketClientTransport({
     url: "ws://example.test",
     meta: options?.meta,
     security: options?.security,
-    webSocketCtor,
+    socketAdapter,
   });
 
   return {
     transport,
     sent,
     getSocket: () => {
-      if (!socket) {
-        throw new Error("Expected socket to initialize");
-      }
-
+      if (!socket) throw new Error("Expected socket to initialize");
       return socket;
     },
   };
@@ -106,11 +119,11 @@ function parseEnvelope(payload: string): ScompTransportRequestEnvelope {
   return JSON.parse(payload) as ScompTransportRequestEnvelope;
 }
 
-function parseResponse(payload: string): ScompTransportResponseEnvelope {
-  return JSON.parse(payload) as ScompTransportResponseEnvelope;
-}
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
 
-describe("WebSocketBrowserTransport invocation parity", () => {
+describe("WebSocketClientTransport (unified)", () => {
   it("includes invocation options in request envelope metadata", async () => {
     const harness = createHarness({
       meta: {
@@ -144,12 +157,12 @@ describe("WebSocketBrowserTransport invocation parity", () => {
     assert.equal(outbound.meta?.targetLatencyMs, 20);
     assert.deepEqual(outbound.meta?.tags, { source: "browser" });
 
-    harness.getSocket().emit("message", {
-      data: JSON.stringify({
+    harness.getSocket().emitMessage(
+      JSON.stringify({
         id: outbound.id,
         payload: { ok: true },
       } satisfies ScompTransportResponseEnvelope),
-    });
+    );
 
     assert.deepEqual(await pending, { ok: true });
   });
@@ -183,7 +196,7 @@ describe("WebSocketBrowserTransport invocation parity", () => {
     assert.equal(outbound.meta?.targetLatencyMs, 50);
   });
 
-  it("uses identical metadata for feed start and unsubscribe signal", async () => {
+  it("uses identical metadata for feed start and sends unsubscribe signal", async () => {
     const harness = createHarness({
       meta: {
         traceId: "trace-feed",
@@ -216,30 +229,28 @@ describe("WebSocketBrowserTransport invocation parity", () => {
     assert.equal(feedStart.meta?.deadlineAtMs, 2500);
     assert.equal(feedStart.meta?.targetLatencyMs, 75);
 
-    harness.getSocket().emit("message", {
-      data: JSON.stringify({
+    harness.getSocket().emitMessage(
+      JSON.stringify({
         id: feedStart.id,
         payload: { feed: "feed-1", exchange: "scomp.live.feed-1" },
       } satisfies ScompTransportResponseEnvelope),
-    });
+    );
 
-    harness.getSocket().emit("message", {
-      data: JSON.stringify({
+    harness.getSocket().emitMessage(
+      JSON.stringify({
         channel: "feed",
         feed: "feed-1",
         type: "next",
         payload: { seq: 1 },
       }),
-    });
+    );
 
     const first = await pendingNext;
     assert.equal(first.done, false);
     assert.deepEqual(first.value, { seq: 1 });
 
     const pendingReturn = iterator.return?.(undefined);
-    if (!pendingReturn) {
-      throw new Error("Expected feed iterator return()");
-    }
+    if (!pendingReturn) throw new Error("Expected feed iterator return()");
 
     await new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -252,7 +263,7 @@ describe("WebSocketBrowserTransport invocation parity", () => {
     assert.equal(stopResult.done, true);
   });
 
-  it("executes authenticate and authorize hooks for request/signal/feed operations", async () => {
+  it("executes authenticate and authorize hooks", async () => {
     const observedOps: Array<string> = [];
     const observedSubjects: Array<string | undefined> = [];
 
@@ -286,58 +297,52 @@ describe("WebSocketBrowserTransport invocation parity", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     const requestEnvelope = parseEnvelope(harness.sent[0]);
-    harness.getSocket().emit("message", {
-      data: JSON.stringify({
+    harness.getSocket().emitMessage(
+      JSON.stringify({
         id: requestEnvelope.id,
         payload: { ok: true },
       } satisfies ScompTransportResponseEnvelope),
-    });
+    );
     await requestPending;
 
     await harness.transport.signal(
       "users.notify",
       { id: 2 },
-      {
-        meta: { tenantId: "tenant-signal" },
-      },
+      { meta: { tenantId: "tenant-signal" } },
     );
 
     const iterator = harness.transport
       .feed(
         "users.live",
         { room: "alpha" },
-        {
-          meta: { tenantId: "tenant-feed" },
-        },
+        { meta: { tenantId: "tenant-feed" } },
       )
       [Symbol.asyncIterator]();
     const pendingNext = iterator.next();
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     const feedStartEnvelope = parseEnvelope(harness.sent[2]);
-    harness.getSocket().emit("message", {
-      data: JSON.stringify({
+    harness.getSocket().emitMessage(
+      JSON.stringify({
         id: feedStartEnvelope.id,
         payload: {
           feed: "feed-security",
           exchange: "scomp.live.feed-security",
         },
       } satisfies ScompTransportResponseEnvelope),
-    });
-    harness.getSocket().emit("message", {
-      data: JSON.stringify({
+    );
+    harness.getSocket().emitMessage(
+      JSON.stringify({
         channel: "feed",
         feed: "feed-security",
         type: "next",
         payload: { seq: 1 },
       }),
-    });
+    );
     await pendingNext;
 
     const pendingReturn = iterator.return?.(undefined);
-    if (!pendingReturn) {
-      throw new Error("Expected feed iterator return()");
-    }
+    if (!pendingReturn) throw new Error("Expected feed iterator return()");
 
     await new Promise((resolve) => setTimeout(resolve, 0));
     await pendingReturn;
@@ -351,7 +356,8 @@ describe("WebSocketBrowserTransport invocation parity", () => {
 
     assert.equal(requestEnvelope.meta?.tenantId, "tenant-principal");
     assert.equal(
-      (requestEnvelope.meta?.auth as { subject?: string } | undefined)?.subject,
+      (requestEnvelope.meta?.auth as { subject?: string } | undefined)
+        ?.subject,
       "subject:request",
     );
   });
@@ -382,30 +388,30 @@ describe("WebSocketBrowserTransport invocation parity", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     const feedStart = parseEnvelope(harness.sent[0]);
-    harness.getSocket().emit("message", {
-      data: JSON.stringify({
+
+    // Chunk arrives BEFORE the feed-start response
+    harness.getSocket().emitMessage(
+      JSON.stringify({
         channel: "feed",
         feed: "feed-race",
         type: "next",
         payload: { seq: 1 },
       }),
-    });
+    );
 
-    harness.getSocket().emit("message", {
-      data: JSON.stringify({
+    harness.getSocket().emitMessage(
+      JSON.stringify({
         id: feedStart.id,
         payload: { feed: "feed-race", exchange: "scomp.live.feed-race" },
       } satisfies ScompTransportResponseEnvelope),
-    });
+    );
 
     const first = await pendingFirst;
     assert.equal(first.done, false);
     assert.deepEqual(first.value, { seq: 1 });
 
     const pendingStop = iterator.return?.(undefined);
-    if (!pendingStop) {
-      throw new Error("Expected feed iterator return()");
-    }
+    if (!pendingStop) throw new Error("Expected feed iterator return()");
 
     await new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -430,18 +436,18 @@ describe("WebSocketBrowserTransport invocation parity", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     const feedStart = parseEnvelope(harness.sent[1]);
-    harness.getSocket().emit("message", {
-      data: JSON.stringify({
+    harness.getSocket().emitMessage(
+      JSON.stringify({
         id: feedStart.id,
         payload: {
           feed: "feed-disconnect",
           exchange: "scomp.live.feed-disconnect",
         },
       } satisfies ScompTransportResponseEnvelope),
-    });
+    );
 
     await new Promise((resolve) => setTimeout(resolve, 0));
-    harness.getSocket().close();
+    harness.getSocket().emitClose();
 
     await assert.rejects(pendingRequest, SocketDisconnectedError);
     const feedResult = await pendingFeedNext;

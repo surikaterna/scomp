@@ -10,8 +10,13 @@ import {
   type CompiledRouter,
 } from "@scomp/core";
 import type { ScompTransportSecurityContext } from "@scomp/types";
-import { WebSocketClientTransport } from "@scomp/transport-websocket-client";
-import { WebSocketServerTransport } from "../src";
+import {
+  WebSocketClientTransport,
+  createNodeSocketAdapterFactory,
+} from "@scomp/transport-websocket-client";
+import { NodeWebSocketServerTransport } from "../src/node";
+
+const nodeSocketAdapter = createNodeSocketAdapterFactory();
 
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -29,7 +34,7 @@ async function collect<T>(iterable: AsyncIterable<T>): Promise<Array<T>> {
 type Harness = {
   httpServer: HttpServer;
   url: string;
-  serverTransport: WebSocketServerTransport;
+  serverTransport: NodeWebSocketServerTransport;
 };
 
 async function createHarness(router: CompiledRouter): Promise<Harness> {
@@ -41,7 +46,7 @@ async function createHarness(router: CompiledRouter): Promise<Harness> {
   const address = httpServer.address() as AddressInfo;
   const url = `ws://127.0.0.1:${address.port}`;
 
-  const serverTransport = new WebSocketServerTransport({
+  const serverTransport = new NodeWebSocketServerTransport({
     server: httpServer,
     outbound: { url },
   });
@@ -75,7 +80,7 @@ async function closeClientTransport(
   await client.close();
 }
 
-describe("WebSocket transports", () => {
+describe("WebSocket transports (Node)", () => {
   it("keeps grouped and composed fragment routers transport-compatible", async () => {
     interface UsersContract {
       getUser(input: { id: number }): Promise<{ id: number; name: string }>;
@@ -153,7 +158,7 @@ describe("WebSocket transports", () => {
       assert.equal(router["users.liveUsers"].kind, "feed");
 
       const harness = await createHarness(router);
-      const client = new WebSocketClientTransport({ url: harness.url });
+      const client = new WebSocketClientTransport({ url: harness.url, socketAdapter: nodeSocketAdapter });
 
       try {
         const requestResult = await client.request("users.getUser", { id: 7 });
@@ -205,7 +210,7 @@ describe("WebSocket transports", () => {
     };
 
     const harness = await createHarness(router);
-    const client = new WebSocketClientTransport({ url: harness.url });
+    const client = new WebSocketClientTransport({ url: harness.url, socketAdapter: nodeSocketAdapter });
 
     try {
       const requestResult = await client.request("math.double", 21);
@@ -246,8 +251,8 @@ describe("WebSocket transports", () => {
     };
 
     const harness = await createHarness(router);
-    const clientA = new WebSocketClientTransport({ url: harness.url });
-    const clientB = new WebSocketClientTransport({ url: harness.url });
+    const clientA = new WebSocketClientTransport({ url: harness.url, socketAdapter: nodeSocketAdapter });
+    const clientB = new WebSocketClientTransport({ url: harness.url, socketAdapter: nodeSocketAdapter });
 
     try {
       const [valuesA, valuesB] = await Promise.all([
@@ -341,7 +346,7 @@ describe("WebSocket transports", () => {
     const address = httpServer.address() as AddressInfo;
     const url = `ws://127.0.0.1:${address.port}`;
 
-    const transport = new WebSocketServerTransport({
+    const transport = new NodeWebSocketServerTransport({
       server: httpServer,
       security: {
         authenticate: ({
@@ -369,10 +374,12 @@ describe("WebSocket transports", () => {
     const deniedClient = new WebSocketClientTransport({
       url,
       meta: { auth: { token: "deny" } },
+      socketAdapter: nodeSocketAdapter,
     });
     const allowedClient = new WebSocketClientTransport({
       url,
       meta: { auth: { token: "allow" } },
+      socketAdapter: nodeSocketAdapter,
     });
 
     try {

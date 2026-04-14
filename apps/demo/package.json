@@ -13,7 +13,7 @@
     "@scomp/client": "workspace:*",
     "@scomp/core": "workspace:*",
     "@scomp/transport-rabbitmq": "workspace:*",
-    "@scomp/transport-websocket-browser": "workspace:*",
+    "@scomp/transport-websocket-client": "workspace:*",
     "@scomp/transport-websocket-server": "workspace:*",
     "@scomp/types": "workspace:*"
   },

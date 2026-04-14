@@ -1,44 +1,14 @@
 import { createScompClient, type ClientRouteHints } from "@scomp/client";
 import { createContractToken, createScompService } from "@scomp/core";
-import { createWebSocketBrowserTransport } from "@scomp/transport-websocket-browser";
-// @ts-expect-error pre-existing module resolution issue
-import { createWebSocketServerTransport } from "@scomp/transport-websocket-server-node";
+import {
+  createWebSocketClientTransport,
+  createNodeSocketAdapterFactory,
+} from "@scomp/transport-websocket-client";
+import { createNodeWebSocketServerTransport } from "@scomp/transport-websocket-server";
 import type {
   ScompTransportSecurityContext,
   ScompTransportSecurityPolicy,
 } from "@scomp/types";
-
-type WsSocketEvent = "open" | "close" | "error";
-
-interface WsSocketLike {
-  readyState: number;
-  send(payload: string): void;
-  close(): void;
-  on(type: "message", listener: (data: unknown) => void): void;
-  on(type: WsSocketEvent, listener: (event: unknown) => void): void;
-  off(type: "message", listener: (data: unknown) => void): void;
-  off(type: WsSocketEvent, listener: (event: unknown) => void): void;
-}
-
-type WsSocketCtor = new (
-  url: string,
-  protocols?: string | Array<string>,
-) => WsSocketLike;
-
-interface BrowserCompatibleSocket {
-  readyState: number;
-  send(payload: string): void;
-  close(): void;
-  addEventListener(type: string, listener: (event: unknown) => void): void;
-  removeEventListener(type: string, listener: (event: unknown) => void): void;
-}
-
-type BrowserCompatibleSocketCtor = new (
-  url: string,
-  protocols?: string | Array<string>,
-) => BrowserCompatibleSocket;
-
-const WsWebSocket = require("ws") as WsSocketCtor;
 import type {
   DemoApiContract,
   LiveTickerInput,
@@ -50,44 +20,6 @@ const routeHints: ClientRouteHints = {
   "users.notifyLogin": "signal",
   "users.liveTicker": "feed",
 };
-
-class WsBrowserAdapter {
-  private readonly socket: WsSocketLike;
-
-  constructor(url: string, protocols?: string | Array<string>) {
-    this.socket = new WsWebSocket(url, protocols as never);
-  }
-
-  get readyState(): number {
-    return this.socket.readyState;
-  }
-
-  send(payload: string): void {
-    this.socket.send(payload);
-  }
-
-  close(): void {
-    this.socket.close();
-  }
-
-  addEventListener(type: string, listener: (event: unknown) => void): void {
-    if (type === "message") {
-      this.socket.on("message", (data: unknown) => listener({ data }));
-      return;
-    }
-
-    this.socket.on(type as "open" | "close" | "error", listener as () => void);
-  }
-
-  removeEventListener(type: string, listener: (event: unknown) => void): void {
-    if (type === "message") {
-      this.socket.off("message", listener as (event: unknown) => void);
-      return;
-    }
-
-    this.socket.off(type as "open" | "close" | "error", listener as () => void);
-  }
-}
 
 const usersToken = createContractToken<DemoApiContract["users"]>("users");
 
@@ -157,17 +89,16 @@ async function runBrowserDemo() {
       route.startsWith("users."),
   };
 
-  const server = createWebSocketServerTransport({
+  const server = createNodeWebSocketServerTransport({
     port,
     host: "127.0.0.1",
     security: securityPolicy,
   });
   await server.registerRoutes(usersService.router);
 
-  const transport = createWebSocketBrowserTransport({
+  const transport = createWebSocketClientTransport({
     url,
-    // @ts-expect-error pre-existing: BrowserCompatibleSocketCtor readyState type mismatch
-    webSocketCtor: WsBrowserAdapter as unknown as BrowserCompatibleSocketCtor,
+    socketAdapter: createNodeSocketAdapterFactory(),
     meta: {
       traceId: "demo-browser-trace",
       tags: { source: "demo-browser" },

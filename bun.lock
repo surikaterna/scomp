@@ -44,7 +44,7 @@
         "@scomp/client": "workspace:*",
         "@scomp/core": "workspace:*",
         "@scomp/transport-rabbitmq": "workspace:*",
-        "@scomp/transport-websocket-browser": "workspace:*",
+        "@scomp/transport-websocket-client": "workspace:*",
         "@scomp/transport-websocket-server": "workspace:*",
         "@scomp/types": "workspace:*",
       },
@@ -87,6 +87,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@scomp/core": "workspace:*",
+        "@scomp/transport-shared": "workspace:*",
         "@scomp/types": "workspace:*",
       },
     },
@@ -102,12 +103,13 @@
       "version": "0.1.0",
       "dependencies": {
         "@scomp/core": "workspace:*",
+        "@scomp/transport-shared": "workspace:*",
         "@scomp/types": "workspace:*",
         "amqplib": "^0.10.9",
       },
     },
-    "packages/transport-websocket-browser": {
-      "name": "@scomp/transport-websocket-browser",
+    "packages/transport-shared": {
+      "name": "@scomp/transport-shared",
       "version": "0.1.0",
       "dependencies": {
         "@scomp/core": "workspace:*",
@@ -119,6 +121,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@scomp/core": "workspace:*",
+        "@scomp/transport-shared": "workspace:*",
         "@scomp/types": "workspace:*",
         "@types/ws": "^8.18.1",
         "ws": "^8.18.3",
@@ -129,17 +132,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@scomp/core": "workspace:*",
-        "@scomp/transport-websocket-browser": "workspace:*",
-        "@scomp/transport-websocket-client": "workspace:*",
-        "@scomp/transport-websocket-server-runtime": "workspace:*",
-        "@scomp/types": "workspace:*",
-      },
-    },
-    "packages/transport-websocket-server-node": {
-      "name": "@scomp/transport-websocket-server-node",
-      "version": "0.1.0",
-      "dependencies": {
-        "@scomp/core": "workspace:*",
+        "@scomp/transport-shared": "workspace:*",
         "@scomp/transport-websocket-client": "workspace:*",
         "@scomp/transport-websocket-server-runtime": "workspace:*",
         "@scomp/types": "workspace:*",
@@ -152,6 +145,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@scomp/core": "workspace:*",
+        "@scomp/transport-shared": "workspace:*",
         "@scomp/types": "workspace:*",
       },
     },
@@ -539,13 +533,11 @@
 
     "@scomp/transport-rabbitmq": ["@scomp/transport-rabbitmq@workspace:packages/transport-rabbitmq"],
 
-    "@scomp/transport-websocket-browser": ["@scomp/transport-websocket-browser@workspace:packages/transport-websocket-browser"],
+    "@scomp/transport-shared": ["@scomp/transport-shared@workspace:packages/transport-shared"],
 
     "@scomp/transport-websocket-client": ["@scomp/transport-websocket-client@workspace:packages/transport-websocket-client"],
 
     "@scomp/transport-websocket-server": ["@scomp/transport-websocket-server@workspace:packages/transport-websocket-server"],
-
-    "@scomp/transport-websocket-server-node": ["@scomp/transport-websocket-server-node@workspace:packages/transport-websocket-server-node"],
 
     "@scomp/transport-websocket-server-runtime": ["@scomp/transport-websocket-server-runtime@workspace:packages/transport-websocket-server-runtime"],
 

@@ -1,8 +1,13 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
 import { createServer } from "node:net";
-import { WebSocketClientTransport } from "../../transport-websocket-client/src";
-import { WebSocketServerTransport } from "../src";
+import {
+  WebSocketClientTransport,
+  createNodeSocketAdapterFactory,
+} from "../../transport-websocket-client/src";
+import { BunWebSocketServerTransport } from "../src/bun";
+
+const nodeSocketAdapter = createNodeSocketAdapterFactory();
 
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -47,7 +52,7 @@ async function reservePort(): Promise<number> {
   return port;
 }
 
-const transports: Array<WebSocketServerTransport | WebSocketClientTransport> =
+const transports: Array<BunWebSocketServerTransport | WebSocketClientTransport> =
   [];
 
 afterEach(async () => {
@@ -57,11 +62,11 @@ afterEach(async () => {
   }
 });
 
-describe("WebSocketServerTransport Bun integration", () => {
+describe("BunWebSocketServerTransport Bun integration", () => {
   test("starts server and upgrades only configured path", async () => {
     const port = await reservePort();
 
-    const serverTransport = new WebSocketServerTransport({
+    const serverTransport = new BunWebSocketServerTransport({
       port,
       path: "/ws",
     });
@@ -80,6 +85,7 @@ describe("WebSocketServerTransport Bun integration", () => {
 
     const client = new WebSocketClientTransport({
       url: `ws://127.0.0.1:${port}/ws`,
+      socketAdapter: nodeSocketAdapter,
     });
     transports.push(client);
 
@@ -91,7 +97,7 @@ describe("WebSocketServerTransport Bun integration", () => {
     const port = await reservePort();
     const seenSignals: Array<unknown> = [];
 
-    const serverTransport = new WebSocketServerTransport({ port, path: "/ws" });
+    const serverTransport = new BunWebSocketServerTransport({ port, path: "/ws" });
     transports.push(serverTransport);
 
     await serverTransport.registerRoutes({
@@ -123,6 +129,7 @@ describe("WebSocketServerTransport Bun integration", () => {
 
     const client = new WebSocketClientTransport({
       url: `ws://127.0.0.1:${port}/ws`,
+      socketAdapter: nodeSocketAdapter,
     });
     transports.push(client);
 
@@ -141,7 +148,7 @@ describe("WebSocketServerTransport Bun integration", () => {
     const port = await reservePort();
     const deniedSignals: Array<unknown> = [];
 
-    const serverTransport = new WebSocketServerTransport({
+    const serverTransport = new BunWebSocketServerTransport({
       port,
       path: "/ws",
       security: {
@@ -184,12 +191,14 @@ describe("WebSocketServerTransport Bun integration", () => {
 
     const deniedClient = new WebSocketClientTransport({
       url: `ws://127.0.0.1:${port}/ws`,
+      socketAdapter: nodeSocketAdapter,
       meta: { auth: { token: "deny" } },
     });
     transports.push(deniedClient);
 
     const allowedClient = new WebSocketClientTransport({
       url: `ws://127.0.0.1:${port}/ws`,
+      socketAdapter: nodeSocketAdapter,
       meta: { auth: { token: "allow" } },
     });
     transports.push(allowedClient);

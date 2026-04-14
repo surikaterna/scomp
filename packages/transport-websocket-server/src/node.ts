@@ -9,38 +9,26 @@ import type {
   ScompTransportPrincipal,
   ScompTransportRequestEnvelope,
   ScompTransportResponseEnvelope,
-  ScompTransportSecurityPolicy,
   ScompFeedChunkEnvelope,
-  ScompTransportMessageMeta,
 } from "@scomp/types";
+import { toPrincipalMeta } from "@scomp/transport-shared";
 import {
   parseTransportMessage,
-  StreamClosedError,
   WebSocketServerRuntime,
 } from "@scomp/transport-websocket-server-runtime";
-import {
-  WebSocketClientTransport,
-  type WebSocketClientTransportConfig,
-} from "@scomp/transport-websocket-client";
+import { createNodeSocketAdapterFactory } from "@scomp/transport-websocket-client";
 import WebSocket, { type RawData, WebSocketServer } from "ws";
+import {
+  type NodeWebSocketServerTransportConfig,
+  resolveOutboundTransport,
+} from "./shared";
 
-export { StreamClosedError };
+const nodeSocketAdapter = createNodeSocketAdapterFactory();
+
+export type { NodeWebSocketServerTransportConfig };
 
 interface SocketWithPrincipal extends WebSocket {
   scompPrincipal?: ScompTransportPrincipal;
-}
-
-type RouterTable = Record<string, CompiledRoute>;
-
-type TransportMessage = ScompTransportRequestEnvelope;
-
-export interface WebSocketServerTransportConfig {
-  port?: number;
-  host?: string;
-  path?: string;
-  server?: HttpServer | HttpsServer;
-  outbound?: WebSocketClientTransportConfig | WebSocketClientTransport;
-  security?: ScompTransportSecurityPolicy;
 }
 
 function toFeedExchange(hash: string): string {
@@ -63,35 +51,14 @@ function toText(data: RawData): string {
   return Buffer.from(data).toString("utf8");
 }
 
-function toPrincipalMeta(
-  principal: ScompTransportPrincipal | undefined,
-): ScompTransportMessageMeta | undefined {
-  if (!principal) {
-    return undefined;
-  }
-
-  return {
-    auth: {
-      subject: principal.subject,
-      tenantId: principal.tenantId,
-      scopes: principal.scopes,
-      claims: principal.claims,
-      issuedAt: principal.issuedAt,
-      expiresAt: principal.expiresAt,
-      authType: principal.authType,
-    },
-    tenantId: principal.tenantId,
-  };
-}
-
-export class WebSocketServerTransport implements ITransport {
-  private readonly config: WebSocketServerTransportConfig;
+export class NodeWebSocketServerTransport implements ITransport {
+  private readonly config: NodeWebSocketServerTransportConfig;
   private server?: WebSocketServer;
   private readonly sockets = new Set<SocketWithPrincipal>();
   private outboundTransport?: ITransport;
   private readonly runtime: WebSocketServerRuntime<SocketWithPrincipal>;
 
-  constructor(config: WebSocketServerTransportConfig) {
+  constructor(config: NodeWebSocketServerTransportConfig) {
     this.config = config;
     this.runtime = new WebSocketServerRuntime<SocketWithPrincipal>({
       security: this.config.security,
@@ -130,7 +97,9 @@ export class WebSocketServerTransport implements ITransport {
     });
   }
 
-  async registerRoutes(router: RouterTable): Promise<void> {
+  async registerRoutes(
+    router: Record<string, CompiledRoute>,
+  ): Promise<void> {
     this.runtime.setRouter(router);
     const server = this.getServer();
 
@@ -143,7 +112,10 @@ export class WebSocketServerTransport implements ITransport {
       this.sockets.add(socketWithPrincipal);
 
       socket.on("message", async (data: RawData) => {
-        const body = parseTransportMessage(toText(data)) as TransportMessage;
+        const body = parseTransportMessage(toText(data));
+        if (!body) {
+          return;
+        }
         await this.runtime.handleIncoming(socketWithPrincipal, body);
       });
 
@@ -188,8 +160,7 @@ export class WebSocketServerTransport implements ITransport {
     payload: any,
     options?: ScompClientInvokeOptions,
   ): Promise<any> {
-    const transport = this.getOutboundTransport();
-    return transport.request(route, payload, options);
+    return this.getOutboundTransport().request(route, payload, options);
   }
 
   async signal(
@@ -197,8 +168,7 @@ export class WebSocketServerTransport implements ITransport {
     payload: any,
     options?: ScompClientInvokeOptions,
   ): Promise<void> {
-    const transport = this.getOutboundTransport();
-    await transport.signal(route, payload, options);
+    await this.getOutboundTransport().signal(route, payload, options);
   }
 
   feed(
@@ -206,27 +176,15 @@ export class WebSocketServerTransport implements ITransport {
     payload: any,
     options?: ScompClientInvokeOptions,
   ): AsyncIterable<any> {
-    const transport = this.getOutboundTransport();
-    return transport.feed(route, payload, options);
+    return this.getOutboundTransport().feed(route, payload, options);
   }
 
   private getOutboundTransport(): ITransport {
-    if (this.outboundTransport) {
-      return this.outboundTransport;
-    }
-
-    const outboundConfig = this.config.outbound;
-    if (!outboundConfig) {
-      throw new Error(
-        "WebSocketServerTransport outbound is not configured. Provide config.outbound to use request/signal/feed.",
-      );
-    }
-
-    this.outboundTransport =
-      outboundConfig instanceof WebSocketClientTransport
-        ? outboundConfig
-        : new WebSocketClientTransport(outboundConfig);
-
+    this.outboundTransport = resolveOutboundTransport(
+      this.config,
+      this.outboundTransport,
+      nodeSocketAdapter,
+    );
     return this.outboundTransport;
   }
 
@@ -245,7 +203,7 @@ export class WebSocketServerTransport implements ITransport {
 
     if (!this.config.port) {
       throw new Error(
-        "WebSocketServerTransport requires either a port or an existing HTTP server.",
+        "NodeWebSocketServerTransport requires either a port or an existing HTTP server.",
       );
     }
 
@@ -259,8 +217,24 @@ export class WebSocketServerTransport implements ITransport {
   }
 }
 
-export function createWebSocketServerTransport(
-  config: WebSocketServerTransportConfig,
-): WebSocketServerTransport {
-  return new WebSocketServerTransport(config);
+export function createNodeWebSocketServerTransport(
+  config: NodeWebSocketServerTransportConfig,
+): NodeWebSocketServerTransport {
+  return new NodeWebSocketServerTransport(config);
 }
+
+/**
+ * @deprecated Use `NodeWebSocketServerTransport` instead.
+ */
+export const WebSocketServerTransport = NodeWebSocketServerTransport;
+
+/**
+ * @deprecated Use `NodeWebSocketServerTransportConfig` instead.
+ */
+export type WebSocketServerTransportConfig = NodeWebSocketServerTransportConfig;
+
+/**
+ * @deprecated Use `createNodeWebSocketServerTransport` instead.
+ */
+export const createWebSocketServerTransport =
+  createNodeWebSocketServerTransport;
