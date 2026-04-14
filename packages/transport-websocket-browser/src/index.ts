@@ -9,135 +9,30 @@ import type {
   ScompTransportMessageMeta,
   ScompTransportOperation,
   ScompTransportPrincipal,
-  ScompTransportSecurityContext,
-  ScompTransportSecurityPolicy,
   ScompTransportRequestEnvelope,
   ScompTransportResponseEnvelope,
 } from "@scomp/types";
-
-export class SocketDisconnectedError extends Error {
-  constructor(message = "WebSocket connection closed.") {
-    super(message);
-    this.name = "SocketDisconnectedError";
-  }
-}
-
-interface PendingRequest {
-  resolve: (value: unknown) => void;
-  reject: (error: unknown) => void;
-}
-
-interface FeedState {
-  queue: Array<unknown | Promise<never>>;
-  waiters: Array<() => void>;
-  closed: boolean;
-  terminalError?: Error;
-}
-
-function toDisconnectError(error: unknown): Error {
-  if (error instanceof Error) {
-    return error;
-  }
-
-  const message =
-    typeof error === "string" && error.length > 0
-      ? error
-      : "WebSocket connection closed.";
-  return new SocketDisconnectedError(message);
-}
-
-type BrowserSocket = Pick<
-  WebSocket,
-  "send" | "close" | "addEventListener" | "removeEventListener" | "readyState"
->;
-
-type BrowserWebSocketCtor = new (
-  url: string,
-  protocols?: string | Array<string>,
-) => BrowserSocket;
-
-type TransportMessage =
-  | ScompTransportRequestEnvelope
-  | ScompTransportResponseEnvelope
-  | ScompFeedChunkEnvelope;
-
-export interface WebSocketBrowserTransportConfig {
-  url: string;
-  protocols?: string | Array<string>;
-  meta?:
-    | ScompTransportMessageMeta
-    | (() => ScompTransportMessageMeta | Promise<ScompTransportMessageMeta>);
-  security?: ScompTransportSecurityPolicy;
-  webSocketCtor?: BrowserWebSocketCtor;
-}
-
-function toPriorityMeta(
-  options?: ScompClientInvokeOptions,
-): ScompTransportMessageMeta | undefined {
-  if (!options) {
-    return undefined;
-  }
-
-  const { priority, priorityClass, deadlineAtMs, targetLatencyMs } = options;
-  if (
-    priority === undefined &&
-    priorityClass === undefined &&
-    deadlineAtMs === undefined &&
-    targetLatencyMs === undefined
-  ) {
-    return undefined;
-  }
-
-  const meta: ScompTransportMessageMeta = {};
-  if (priority !== undefined) {
-    meta.priority = priority;
-  }
-  if (priorityClass !== undefined) {
-    meta.priorityClass = priorityClass;
-  }
-  if (deadlineAtMs !== undefined) {
-    meta.deadlineAtMs = deadlineAtMs;
-  }
-  if (targetLatencyMs !== undefined) {
-    meta.targetLatencyMs = targetLatencyMs;
-  }
-
-  return meta;
-}
-
-function safeJsonParse(text: string): any {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return {};
-  }
-}
-
-function isFeedChunkEnvelope(
-  message: TransportMessage,
-): message is ScompFeedChunkEnvelope {
-  return (message as ScompFeedChunkEnvelope).channel === "feed";
-}
-
-async function toText(data: unknown): Promise<string> {
-  if (typeof data === "string") {
-    return data;
-  }
-
-  if (data instanceof ArrayBuffer) {
-    return new TextDecoder().decode(data);
-  }
-
-  if (ArrayBuffer.isView(data)) {
-    return new TextDecoder().decode(data);
-  }
-
-  if (typeof Blob !== "undefined" && data instanceof Blob) {
-    return data.text();
-  }
-
-  return String(data ?? "");
-}
+import {
+  toPriorityMeta,
+  toPrincipalMeta,
+  mergeMeta,
+  safeJsonParse,
+  isFeedChunkEnvelope,
+  checkSecurity,
+  type TransportMessage,
+} from "@scomp/transport-shared";
+import {
+  SocketDisconnectedError,
+  toText,
+  enqueueFeedChunk,
+  drainPendingFeedChunks,
+  handleDisconnect,
+  type BrowserSocket,
+  type BrowserWebSocketCtor,
+  type FeedState,
+  type PendingRequest,
+  type WebSocketBrowserTransportConfig,
+} from "./types";
 
 export class WebSocketBrowserTransport implements ITransport {
   private readonly config: WebSocketBrowserTransportConfig;
@@ -161,22 +56,16 @@ export class WebSocketBrowserTransport implements ITransport {
 
   async close(): Promise<void> {
     const socket = this.socket;
-    this.handleDisconnect(
+    this.onDisconnect(
       new SocketDisconnectedError("WebSocket transport closed."),
     );
 
-    if (!socket) {
-      return;
-    }
-
-    if (socket.readyState >= 2) {
-      return;
-    }
-
+    if (!socket) return;
+    if (socket.readyState >= 2) return;
     try {
       socket.close();
     } catch {
-      // no-op
+      /* no-op */
     }
   }
 
@@ -196,9 +85,9 @@ export class WebSocketBrowserTransport implements ITransport {
     const socket = await this.getSocket();
     const operation: ScompTransportOperation = "signal";
     const priorityMeta = toPriorityMeta(options);
-    const baseMeta = this.mergeMeta(await this.resolveMeta(), options?.meta);
-    const effectiveMeta = this.mergeMeta(baseMeta, priorityMeta);
-    const { allowed, principal } = await this.checkSecurity({
+    const baseMeta = mergeMeta(await this.resolveMeta(), options?.meta);
+    const effectiveMeta = mergeMeta(baseMeta, priorityMeta);
+    const { allowed, principal } = await checkSecurity(this.config.security, {
       direction: "outbound",
       transport: "websocket",
       route,
@@ -206,23 +95,16 @@ export class WebSocketBrowserTransport implements ITransport {
       payload,
       meta: effectiveMeta,
     });
-    if (!allowed) {
-      throw new Error(`signal not authorized for route: ${route}`);
-    }
+    if (!allowed) throw new Error(`signal not authorized for route: ${route}`);
 
     const envelope: Record<string, unknown> = {
       route,
       op: "signal",
       payload,
-      meta: this.mergeMeta(effectiveMeta, this.toPrincipalMeta(principal)),
+      meta: mergeMeta(effectiveMeta, toPrincipalMeta(principal)),
     };
-
-    if (options?.feed) {
-      envelope.feed = options.feed;
-    }
-    if (options?.method) {
-      envelope.method = options.method;
-    }
+    if (options?.feed) envelope.feed = options.feed;
+    if (options?.method) envelope.method = options.method;
 
     this.sendJson(socket, envelope);
   }
@@ -238,12 +120,10 @@ export class WebSocketBrowserTransport implements ITransport {
       async *[Symbol.asyncIterator]() {
         const handshake = await self.sendRpc(route, "feed", payload, options);
         const feedHash = String(handshake?.feed ?? "");
-
-        if (!feedHash) {
+        if (!feedHash)
           throw new Error(
             "Feed start response did not include a feed identifier.",
           );
-        }
 
         const state: FeedState = {
           queue: [],
@@ -251,7 +131,6 @@ export class WebSocketBrowserTransport implements ITransport {
           closed: false,
           terminalError: undefined,
         };
-
         self.feeds.set(feedHash, state);
         if (!self.socket || !self.isOpen(self.socket)) {
           state.closed = true;
@@ -262,34 +141,22 @@ export class WebSocketBrowserTransport implements ITransport {
           );
         }
 
-        self.drainPendingFeedChunks(feedHash, state);
+        drainPendingFeedChunks(feedHash, state, self.pendingFeedChunks);
 
         try {
           while (true) {
             if (state.queue.length > 0) {
               const value = state.queue.shift();
-              if (value instanceof Promise) {
-                await value;
-              }
-
+              if (value instanceof Promise) await value;
               if (state.closed && value === undefined) {
-                const terminalError =
-                  state.terminalError ?? self.lastDisconnectError;
-                if (terminalError) {
-                  throw terminalError;
-                }
+                if (state.terminalError ?? self.lastDisconnectError)
+                  throw state.terminalError ?? self.lastDisconnectError;
                 return;
               }
-
-              if (value !== undefined) {
-                yield value;
-              }
+              if (value !== undefined) yield value;
             } else if (state.closed) {
-              const terminalError =
-                state.terminalError ?? self.lastDisconnectError;
-              if (terminalError) {
-                throw terminalError;
-              }
+              if (state.terminalError ?? self.lastDisconnectError)
+                throw state.terminalError ?? self.lastDisconnectError;
               return;
             } else {
               await new Promise<void>((resolve) => state.waiters.push(resolve));
@@ -299,10 +166,7 @@ export class WebSocketBrowserTransport implements ITransport {
           self.feeds.delete(feedHash);
           self.pendingFeedChunks.delete(feedHash);
           const activeSocket = self.socket;
-          if (!activeSocket || !self.isOpen(activeSocket)) {
-            return;
-          }
-
+          if (!activeSocket || !self.isOpen(activeSocket)) return;
           try {
             self.sendJson(activeSocket, {
               route,
@@ -312,9 +176,7 @@ export class WebSocketBrowserTransport implements ITransport {
               payload: {},
             });
           } catch (error) {
-            if (!(error instanceof SocketDisconnectedError)) {
-              throw error;
-            }
+            if (!(error instanceof SocketDisconnectedError)) throw error;
           }
         }
       },
@@ -322,16 +184,12 @@ export class WebSocketBrowserTransport implements ITransport {
   }
 
   private resolveWebSocketCtor(): BrowserWebSocketCtor {
-    if (this.config.webSocketCtor) {
-      return this.config.webSocketCtor;
-    }
-
+    if (this.config.webSocketCtor) return this.config.webSocketCtor;
     if (typeof globalThis.WebSocket !== "function") {
       throw new Error(
         "No WebSocket constructor found. Provide config.webSocketCtor in non-browser environments.",
       );
     }
-
     return globalThis.WebSocket as unknown as BrowserWebSocketCtor;
   }
 
@@ -341,13 +199,8 @@ export class WebSocketBrowserTransport implements ITransport {
   }
 
   private async getSocket(): Promise<BrowserSocket> {
-    if (this.socket && this.isOpen(this.socket)) {
-      return this.socket;
-    }
-
-    if (this.openingPromise) {
-      return this.openingPromise;
-    }
+    if (this.socket && this.isOpen(this.socket)) return this.socket;
+    if (this.openingPromise) return this.openingPromise;
 
     this.openingPromise = new Promise<BrowserSocket>((resolve, reject) => {
       const WebSocketCtor = this.resolveWebSocketCtor();
@@ -361,13 +214,11 @@ export class WebSocketBrowserTransport implements ITransport {
         this.openingPromise = undefined;
         resolve(socket);
       };
-
       const onError = (event: Event) => {
         cleanup();
         this.openingPromise = undefined;
         reject(event);
       };
-
       const cleanup = () => {
         socket.removeEventListener("open", onOpen as EventListener);
         socket.removeEventListener("error", onError as EventListener);
@@ -385,20 +236,15 @@ export class WebSocketBrowserTransport implements ITransport {
   private attachSocketHandlers(socket: BrowserSocket): void {
     socket.addEventListener("message", (event: MessageEvent) => {
       void (async () => {
-        const message = safeJsonParse(
-          await toText(event.data),
-        ) as TransportMessage;
-        this.handleIncoming(message);
+        const parsed = safeJsonParse(await toText(event.data));
+        if (!parsed.ok) return;
+        this.handleIncoming(parsed.value as TransportMessage);
       })();
     });
-
-    socket.addEventListener("close", () => {
-      this.handleDisconnect(new SocketDisconnectedError());
-    });
-
-    socket.addEventListener("error", (event) => {
-      this.handleDisconnect(event);
-    });
+    socket.addEventListener("close", () =>
+      this.onDisconnect(new SocketDisconnectedError()),
+    );
+    socket.addEventListener("error", (event) => this.onDisconnect(event));
   }
 
   private handleIncoming(message: TransportMessage): void {
@@ -411,21 +257,14 @@ export class WebSocketBrowserTransport implements ITransport {
         this.pendingFeedChunks.set(feedId, pending);
         return;
       }
-
-      this.enqueueFeedChunk(feed, message);
+      enqueueFeedChunk(feed, message);
       return;
     }
 
     const id = String((message as ScompTransportResponseEnvelope).id ?? "");
-    if (!id) {
-      return;
-    }
-
+    if (!id) return;
     const pending = this.pendingRequests.get(id);
-    if (!pending) {
-      return;
-    }
-
+    if (!pending) return;
     this.pendingRequests.delete(id);
 
     if (
@@ -436,36 +275,22 @@ export class WebSocketBrowserTransport implements ITransport {
       pending.reject(new Error(message.error));
       return;
     }
-
     if ("payload" in message) {
       pending.resolve(message.payload);
       return;
     }
-
     pending.resolve(undefined);
   }
 
-  private handleDisconnect(error: unknown): void {
+  private onDisconnect(error: unknown): void {
     this.socket = undefined;
-    const disconnectError = toDisconnectError(error);
+    const { disconnectError } = handleDisconnect(
+      this.pendingRequests,
+      this.feeds,
+      this.pendingFeedChunks,
+      error,
+    );
     this.lastDisconnectError = disconnectError;
-
-    for (const pending of this.pendingRequests.values()) {
-      pending.reject(disconnectError);
-    }
-    this.pendingRequests.clear();
-
-    this.pendingFeedChunks.clear();
-
-    for (const feed of this.feeds.values()) {
-      feed.closed = true;
-      feed.terminalError = disconnectError;
-      feed.queue.push(Promise.reject(disconnectError));
-      while (feed.waiters.length > 0) {
-        const waiter = feed.waiters.shift();
-        waiter?.();
-      }
-    }
   }
 
   private async sendRpc(
@@ -476,9 +301,9 @@ export class WebSocketBrowserTransport implements ITransport {
   ): Promise<any> {
     const socket = await this.getSocket();
     const priorityMeta = toPriorityMeta(options);
-    const baseMeta = this.mergeMeta(await this.resolveMeta(), options?.meta);
-    const effectiveMeta = this.mergeMeta(baseMeta, priorityMeta);
-    const { allowed, principal } = await this.checkSecurity({
+    const baseMeta = mergeMeta(await this.resolveMeta(), options?.meta);
+    const effectiveMeta = mergeMeta(baseMeta, priorityMeta);
+    const { allowed, principal } = await checkSecurity(this.config.security, {
       direction: "outbound",
       transport: "websocket",
       route,
@@ -486,9 +311,7 @@ export class WebSocketBrowserTransport implements ITransport {
       payload,
       meta: effectiveMeta,
     });
-    if (!allowed) {
-      throw new Error(`${op} not authorized for route: ${route}`);
-    }
+    if (!allowed) throw new Error(`${op} not authorized for route: ${route}`);
     const id = randomUUID();
 
     const response = new Promise<unknown>((resolve, reject) => {
@@ -496,7 +319,6 @@ export class WebSocketBrowserTransport implements ITransport {
     });
 
     const outboundMeta = await this.composeOutboundMeta(options, principal);
-
     const envelope: ScompTransportRequestEnvelope = {
       id,
       route,
@@ -504,88 +326,22 @@ export class WebSocketBrowserTransport implements ITransport {
       payload,
       meta: outboundMeta,
     };
-
-    if (options?.feed) {
-      envelope.feed = options.feed;
-    }
-    if (options?.method) {
-      envelope.method = options.method;
-    }
+    if (options?.feed) envelope.feed = options.feed;
+    if (options?.method) envelope.method = options.method;
 
     this.sendJson(socket, envelope);
-
     return response;
   }
 
-  private drainPendingFeedChunks(hash: string, feed: FeedState): void {
-    const pending = this.pendingFeedChunks.get(hash);
-    if (!pending || pending.length === 0) {
-      return;
-    }
-
-    this.pendingFeedChunks.delete(hash);
-    for (const message of pending) {
-      this.enqueueFeedChunk(feed, message);
-    }
-  }
-
-  private enqueueFeedChunk(
-    feed: FeedState,
-    message: ScompFeedChunkEnvelope,
-  ): void {
-    if (message.type === "done") {
-      feed.closed = true;
-      feed.terminalError = undefined;
-    } else if (message.type === "error") {
-      feed.closed = true;
-      const error = new Error(String(message.message ?? "Feed error"));
-      feed.terminalError = error;
-      feed.queue.push(Promise.reject(error));
-    } else {
-      feed.queue.push(message.payload);
-    }
-
-    const waiter = feed.waiters.shift();
-    waiter?.();
-  }
-
   private sendJson(socket: BrowserSocket, payload: unknown): void {
-    const serialized = JSON.stringify(payload);
-    socket.send(serialized);
+    socket.send(JSON.stringify(payload));
   }
 
   private async resolveMeta(): Promise<ScompTransportMessageMeta | undefined> {
     const metaConfig = this.config.meta;
-    if (!metaConfig) {
-      return undefined;
-    }
-
-    if (typeof metaConfig === "function") {
-      return metaConfig();
-    }
-
+    if (!metaConfig) return undefined;
+    if (typeof metaConfig === "function") return metaConfig();
     return metaConfig;
-  }
-
-  private toPrincipalMeta(
-    principal: ScompTransportPrincipal | undefined,
-  ): ScompTransportMessageMeta | undefined {
-    if (!principal) {
-      return undefined;
-    }
-
-    return {
-      auth: {
-        subject: principal.subject,
-        tenantId: principal.tenantId,
-        scopes: principal.scopes,
-        claims: principal.claims,
-        issuedAt: principal.issuedAt,
-        expiresAt: principal.expiresAt,
-        authType: principal.authType,
-      },
-      tenantId: principal.tenantId,
-    };
   }
 
   /**
@@ -597,49 +353,9 @@ export class WebSocketBrowserTransport implements ITransport {
     principal: ScompTransportPrincipal | undefined,
   ): Promise<ScompTransportMessageMeta | undefined> {
     const priorityMeta = toPriorityMeta(options);
-    const baseMeta = this.mergeMeta(await this.resolveMeta(), options?.meta);
-    const effectiveMeta = this.mergeMeta(baseMeta, priorityMeta);
-    return this.mergeMeta(effectiveMeta, this.toPrincipalMeta(principal));
-  }
-
-  private mergeMeta(
-    baseMeta: ScompTransportMessageMeta | undefined,
-    overlayMeta: ScompTransportMessageMeta | undefined,
-  ): ScompTransportMessageMeta | undefined {
-    if (!baseMeta && !overlayMeta) {
-      return undefined;
-    }
-
-    return {
-      ...(baseMeta ?? {}),
-      ...(overlayMeta ?? {}),
-    };
-  }
-
-  private async checkSecurity(
-    ctx: Omit<ScompTransportSecurityContext, "principal">,
-  ): Promise<{ allowed: boolean; principal?: ScompTransportPrincipal }> {
-    const policy = this.config.security;
-    if (!policy) {
-      return { allowed: true };
-    }
-
-    const principal = policy.authenticate
-      ? await policy.authenticate(ctx)
-      : undefined;
-
-    if (!policy.authorize) {
-      return { allowed: true, principal: principal ?? undefined };
-    }
-
-    const allowed = Boolean(
-      await policy.authorize({
-        ...ctx,
-        principal: principal ?? undefined,
-      }),
-    );
-
-    return { allowed, principal: principal ?? undefined };
+    const baseMeta = mergeMeta(await this.resolveMeta(), options?.meta);
+    const effectiveMeta = mergeMeta(baseMeta, priorityMeta);
+    return mergeMeta(effectiveMeta, toPrincipalMeta(principal));
   }
 }
 
@@ -648,3 +364,8 @@ export function createWebSocketBrowserTransport(
 ): WebSocketBrowserTransport {
   return new WebSocketBrowserTransport(config);
 }
+
+export {
+  SocketDisconnectedError,
+  type WebSocketBrowserTransportConfig,
+} from "./types";

@@ -1,134 +1,46 @@
 import {
   SCOMP_FRAMEWORK_PREFIX,
+  SCOMP_SCOPE,
   ScompFrameworkMethods,
   type CompiledRoute,
-  type ControlledAsyncIterable,
 } from "@scomp/core";
 import {
   createFeedHash,
   type ScompErrorCode,
   type ScompFeedChunkEnvelope,
   type ScompTransportMessageMeta,
-  type ScompTransportPrincipal,
-  type ScompTransportRequestEnvelope,
-  type ScompTransportResponseEnvelope,
   type ScompTransportSecurityContext,
-  type ScompTransportSecurityPolicy,
 } from "@scomp/types";
+import { toPrincipalMeta } from "@scomp/transport-shared";
+import {
+  StreamClosedError,
+  ensureFeedIterable,
+  isControlledAsyncIterable,
+  type CheckSecurityResult,
+  type RunningFeed,
+  type RuntimeSocket,
+  type TransportMessage,
+  type WebSocketServerRuntimeConfig,
+} from "./types";
 
-export class StreamClosedError extends Error {
-  constructor(streamHash: string) {
-    super(`Feed stream closed for hash: ${streamHash}`);
-    this.name = "StreamClosedError";
-  }
-}
+export { StreamClosedError, parseTransportMessage } from "./types";
+export type {
+  RuntimeSocket,
+  TransportMessage,
+  WebSocketServerRuntimeConfig,
+} from "./types";
 
-export interface RuntimeSocket {
-  readyState: number;
-  send(payload: string): void;
-}
-
-interface RunningFeed<Socket extends RuntimeSocket> {
-  key: string;
-  exchange: string;
-  subscribers: Set<Socket>;
-  abortController: AbortController;
-  controller?: Record<string, (payload: unknown) => unknown>;
-}
-
-export type TransportMessage = ScompTransportRequestEnvelope;
-
-type CheckSecurityResult = {
-  allowed: boolean;
-  principal?: ScompTransportPrincipal;
+type FeedChunkData = {
+  feed: string;
+  type: "next" | "done" | "error";
+  payload?: unknown;
+  message?: string;
 };
-
-type RuntimeHandlers<Socket extends RuntimeSocket> = {
-  invokeRoute: (
-    route: CompiledRoute,
-    message: TransportMessage,
-  ) => Promise<unknown>;
-  isSocketOpen: (socket: Socket) => boolean;
-  onReply: (socket: Socket, response: ScompTransportResponseEnvelope) => void;
-  onFeedChunk: (socket: Socket, chunk: ScompFeedChunkEnvelope) => void;
-  onFeedExchange: (hash: string) => string;
-  toPrincipalMeta?: (
-    principal: ScompTransportPrincipal | undefined,
-  ) => ScompTransportMessageMeta | undefined;
-};
-
-export type WebSocketServerRuntimeConfig<Socket extends RuntimeSocket> = {
-  security?: ScompTransportSecurityPolicy;
-  getSocketPrincipal: (socket: Socket) => ScompTransportPrincipal | undefined;
-  setSocketPrincipal: (
-    socket: Socket,
-    principal: ScompTransportPrincipal,
-  ) => void;
-} & RuntimeHandlers<Socket>;
-
-function safeJsonParse(text: string): any {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return {};
-  }
-}
-
-export function parseTransportMessage(text: string): TransportMessage {
-  return safeJsonParse(text) as TransportMessage;
-}
-
-function ensureFeedIterable(value: unknown): AsyncIterable<unknown> {
-  if (
-    value &&
-    typeof (value as AsyncIterable<unknown>)[Symbol.asyncIterator] ===
-      "function"
-  ) {
-    return value as AsyncIterable<unknown>;
-  }
-
-  throw new Error("Feed route handler did not return an AsyncIterable.");
-}
-
-function isControlledAsyncIterable(
-  value: unknown,
-): value is ControlledAsyncIterable<unknown, Record<string, Function>> {
-  return (
-    value != null &&
-    typeof (value as ControlledAsyncIterable<unknown>).controller ===
-      "object" &&
-    (value as ControlledAsyncIterable<unknown>).controller !== null
-  );
-}
-
-function defaultToPrincipalMeta(
-  principal: ScompTransportPrincipal | undefined,
-): ScompTransportMessageMeta | undefined {
-  if (!principal) {
-    return undefined;
-  }
-
-  return {
-    auth: {
-      subject: principal.subject,
-      tenantId: principal.tenantId,
-      scopes: principal.scopes,
-      claims: principal.claims,
-      issuedAt: principal.issuedAt,
-      expiresAt: principal.expiresAt,
-      authType: principal.authType,
-    },
-    tenantId: principal.tenantId,
-  };
-}
 
 export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
   private router?: Record<string, CompiledRoute>;
   private readonly runningFeeds = new Map<string, RunningFeed<Socket>>();
-  /**
-   * Shared controllers for fanout feeds, keyed by route+feedHash.
-   * Multiple RunningFeed entries may reference the same shared controller.
-   */
+  /** Shared controllers for fanout feeds, keyed by route+feedHash. */
   private readonly sharedControllers = new Map<
     string,
     Record<string, (payload: unknown) => unknown>
@@ -154,9 +66,7 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
       meta: body.meta,
     });
 
-    const meta = (this.config.toPrincipalMeta ?? defaultToPrincipalMeta)(
-      principal,
-    );
+    const meta = (this.config.toPrincipalMeta ?? toPrincipalMeta)(principal);
 
     if (!allowed) {
       this.replyWithError(
@@ -203,7 +113,7 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
       try {
         await this.config.invokeRoute(routeEntry, body);
       } catch {
-        // Signals are fire-and-forget and do not reply.
+        /* fire-and-forget */
       }
       return;
     }
@@ -218,10 +128,7 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
 
   detachSocketFromFeeds(socket: Socket): void {
     for (const runningFeed of this.runningFeeds.values()) {
-      if (!runningFeed.subscribers.has(socket)) {
-        continue;
-      }
-
+      if (!runningFeed.subscribers.has(socket)) continue;
       runningFeed.subscribers.delete(socket);
       if (runningFeed.subscribers.size === 0) {
         runningFeed.abortController.abort(
@@ -296,7 +203,7 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
       try {
         await controller[method](body.payload);
       } catch {
-        // Signals are fire-and-forget and do not reply.
+        /* fire-and-forget */
       }
       return;
     }
@@ -352,13 +259,10 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
         string,
         (payload: unknown) => unknown
       >;
-
-      if (result.__scope === "fanout") {
+      if (result[SCOMP_SCOPE] === "fanout") {
         const existing = this.sharedControllers.get(hash);
         runningFeed.controller = existing ?? controllerRef;
-        if (!existing) {
-          this.sharedControllers.set(hash, controllerRef);
-        }
+        if (!existing) this.sharedControllers.set(hash, controllerRef);
       } else {
         runningFeed.controller = controllerRef;
       }
@@ -378,14 +282,12 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
         if (runningFeed.abortController.signal.aborted) {
           throw runningFeed.abortController.signal.reason;
         }
-
         this.broadcastFeedChunk(runningFeed, {
           feed: runningFeed.key,
           type: "next",
           payload: chunk,
         });
       }
-
       this.broadcastFeedChunk(runningFeed, {
         feed: runningFeed.key,
         type: "done",
@@ -404,18 +306,10 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
 
   private broadcastFeedChunk(
     runningFeed: RunningFeed<Socket>,
-    chunk: {
-      feed: string;
-      type: "next" | "done" | "error";
-      payload?: unknown;
-      message?: string;
-    },
+    chunk: FeedChunkData,
   ): void {
     for (const socket of runningFeed.subscribers) {
-      if (!this.config.isSocketOpen(socket)) {
-        continue;
-      }
-
+      if (!this.config.isSocketOpen(socket)) continue;
       this.config.onFeedChunk(socket, {
         channel: "feed",
         ...chunk,
@@ -429,15 +323,12 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
     payload: unknown,
     meta?: ScompTransportMessageMeta,
   ): void {
-    if (!id || !this.config.isSocketOpen(socket)) {
-      return;
-    }
-
+    if (!id || !this.config.isSocketOpen(socket)) return;
     this.config.onReply(socket, {
       id,
       payload,
       meta,
-    } satisfies ScompTransportResponseEnvelope);
+    } satisfies import("@scomp/types").ScompTransportResponseEnvelope);
   }
 
   private replyWithError(
@@ -447,16 +338,13 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
     meta?: ScompTransportMessageMeta,
     code?: ScompErrorCode,
   ): void {
-    if (!id || !this.config.isSocketOpen(socket)) {
-      return;
-    }
-
+    if (!id || !this.config.isSocketOpen(socket)) return;
     this.config.onReply(socket, {
       id,
       error: error instanceof Error ? error.message : String(error),
       code,
       meta,
-    } satisfies ScompTransportResponseEnvelope);
+    } satisfies import("@scomp/types").ScompTransportResponseEnvelope);
   }
 
   private async checkSecurity(
@@ -475,22 +363,15 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
     const principal = policy.authenticate
       ? await policy.authenticate(ctx)
       : rememberedPrincipal;
-
-    if (principal) {
-      this.config.setSocketPrincipal(socket, principal);
-    }
+    if (principal) this.config.setSocketPrincipal(socket, principal);
 
     if (!policy.authorize) {
       return { allowed: true, principal: principal ?? undefined };
     }
 
     const allowed = Boolean(
-      await policy.authorize({
-        ...ctx,
-        principal: principal ?? undefined,
-      }),
+      await policy.authorize({ ...ctx, principal: principal ?? undefined }),
     );
-
     return { allowed, principal: principal ?? undefined };
   }
 }

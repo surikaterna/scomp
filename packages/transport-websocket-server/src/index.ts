@@ -9,6 +9,7 @@ import {
   type ScompTransportMessageMeta,
   type ScompTransportResponseEnvelope,
 } from "@scomp/types";
+import { toPrincipalMeta } from "@scomp/transport-shared";
 import {
   parseTransportMessage,
   StreamClosedError,
@@ -92,27 +93,6 @@ function toText(data: string | Buffer | ArrayBuffer | Uint8Array): string {
   return Buffer.from(data).toString("utf8");
 }
 
-function toPrincipalMeta(
-  principal: ScompTransportPrincipal | undefined,
-): ScompTransportMessageMeta | undefined {
-  if (!principal) {
-    return undefined;
-  }
-
-  return {
-    auth: {
-      subject: principal.subject,
-      tenantId: principal.tenantId,
-      scopes: principal.scopes,
-      claims: principal.claims,
-      issuedAt: principal.issuedAt,
-      expiresAt: principal.expiresAt,
-      authType: principal.authType,
-    },
-    tenantId: principal.tenantId,
-  };
-}
-
 function ensureSocketState(socket: BunLikeServerWebSocket): BunSocketWithState {
   const withState = socket as BunSocketWithState;
   withState.data = withState.data ?? {};
@@ -194,6 +174,9 @@ export class WebSocketServerTransport implements ITransport {
         message: (socket: BunLikeServerWebSocket, data) => {
           const socketWithState = ensureSocketState(socket);
           const body = parseTransportMessage(toText(data));
+          if (!body) {
+            return;
+          }
           void this.runtime.handleIncoming(socketWithState, body);
         },
         close: (socket: BunLikeServerWebSocket) => {

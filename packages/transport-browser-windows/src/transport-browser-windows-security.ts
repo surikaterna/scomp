@@ -3,9 +3,13 @@ import type {
   ScompTransportMessageMeta,
   ScompTransportOperation,
   ScompTransportPrincipal,
-  ScompTransportSecurityContext,
 } from "@scomp/types";
-import { mergeMeta, toPrincipalMeta, toPriorityMeta } from "./shared-worker-internal";
+import {
+  checkSecurity,
+  mergeMeta,
+  toPrincipalMeta,
+  toPriorityMeta,
+} from "@scomp/transport-shared";
 import type { BrowserWindowsTransportConfig } from "./types";
 
 export class BrowserWindowsTransportSecurity {
@@ -40,8 +44,11 @@ export class BrowserWindowsTransportSecurity {
     const configMeta = await this.resolveConfigMeta();
     const optionsMeta = options?.meta;
     const priorityMeta = toPriorityMeta(options);
-    const effectiveMeta = mergeMeta(mergeMeta(configMeta, optionsMeta), priorityMeta);
-    const { allowed, principal } = await this.checkSecurity({
+    const effectiveMeta = mergeMeta(
+      mergeMeta(configMeta, optionsMeta),
+      priorityMeta,
+    );
+    const { allowed, principal } = await checkSecurity(this.config.security, {
       direction: "outbound",
       transport: "browser-windows",
       route,
@@ -66,7 +73,7 @@ export class BrowserWindowsTransportSecurity {
     payload: unknown,
     meta: ScompTransportMessageMeta | undefined,
   ): Promise<void> {
-    const { allowed } = await this.checkSecurity({
+    const { allowed } = await checkSecurity(this.config.security, {
       direction: "inbound",
       transport: "browser-windows",
       route,
@@ -78,29 +85,5 @@ export class BrowserWindowsTransportSecurity {
     if (!allowed) {
       throw new Error(`${operation} not authorized for route: ${route}`);
     }
-  }
-
-  private async checkSecurity(
-    ctx: Omit<ScompTransportSecurityContext, "principal">,
-  ): Promise<{ allowed: boolean; principal?: ScompTransportPrincipal }> {
-    const policy = this.config.security;
-    if (!policy) {
-      return { allowed: true };
-    }
-
-    const principal = policy.authenticate ? await policy.authenticate(ctx) : undefined;
-
-    if (!policy.authorize) {
-      return { allowed: true, principal: principal ?? undefined };
-    }
-
-    const allowed = Boolean(
-      await policy.authorize({
-        ...ctx,
-        principal: principal ?? undefined,
-      }),
-    );
-
-    return { allowed, principal: principal ?? undefined };
   }
 }

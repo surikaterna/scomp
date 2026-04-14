@@ -7,6 +7,7 @@ export {
 } from "./framework-methods";
 
 export {
+  SCOMP_SCOPE,
   createControlledFeed,
   type ControlledAsyncIterable,
   type ControlledFeedOptions,
