@@ -26,6 +26,9 @@ export interface ClientContext {
   security?: RabbitMQTransportSecurityConfig;
   serializer: ScompSerializer;
   contentType: string;
+  configMeta?:
+    | ScompTransportMessageMeta
+    | (() => ScompTransportMessageMeta | Promise<ScompTransportMessageMeta>);
   getChannel: () => Promise<Channel>;
   emitEvent: (event: RabbitMQTransportEvent) => void;
   emitPriorityDecision: (
@@ -45,6 +48,14 @@ export interface ClientContext {
   getMaxInFlightRequests: () => number;
 }
 
+async function resolveMeta(
+  configMeta: ClientContext["configMeta"],
+): Promise<ScompTransportMessageMeta | undefined> {
+  if (!configMeta) return undefined;
+  if (typeof configMeta === "function") return configMeta();
+  return configMeta;
+}
+
 export async function sendRpc(
   ctx: ClientContext,
   route: string,
@@ -53,7 +64,11 @@ export async function sendRpc(
   options?: ScompClientInvokeOptions,
 ): Promise<unknown> {
   const priorityMeta = toPriorityMeta(options);
-  const baseMeta = mergeMeta(options?.meta, priorityMeta);
+  const resolvedConfigMeta = await resolveMeta(ctx.configMeta);
+  const baseMeta = mergeMeta(
+    mergeMeta(resolvedConfigMeta, options?.meta),
+    priorityMeta,
+  );
   ctx.emitPriorityDecision("outbound", route, op, baseMeta);
   const { allowed, principal } = await checkTransportSecurity(ctx.security, {
     direction: "outbound",
