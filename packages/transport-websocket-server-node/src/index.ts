@@ -95,7 +95,8 @@ export class WebSocketServerTransport implements ITransport {
     this.config = config;
     this.runtime = new WebSocketServerRuntime<SocketWithPrincipal>({
       security: this.config.security,
-      getSocketPrincipal: (socket: SocketWithPrincipal) => socket.scompPrincipal,
+      getSocketPrincipal: (socket: SocketWithPrincipal) =>
+        socket.scompPrincipal,
       setSocketPrincipal: (
         socket: SocketWithPrincipal,
         principal: ScompTransportPrincipal,
@@ -110,14 +111,18 @@ export class WebSocketServerTransport implements ITransport {
         const payload = route.parser ? route.parser(rawPayload) : rawPayload;
         return route.handler(payload);
       },
-      isSocketOpen: (socket: SocketWithPrincipal) => socket.readyState === WebSocket.OPEN,
+      isSocketOpen: (socket: SocketWithPrincipal) =>
+        socket.readyState === WebSocket.OPEN,
       onReply: (
         socket: SocketWithPrincipal,
         response: ScompTransportResponseEnvelope,
       ) => {
         socket.send(JSON.stringify(response));
       },
-      onFeedChunk: (socket: SocketWithPrincipal, chunk: ScompFeedChunkEnvelope) => {
+      onFeedChunk: (
+        socket: SocketWithPrincipal,
+        chunk: ScompFeedChunkEnvelope,
+      ) => {
         socket.send(JSON.stringify(chunk));
       },
       onFeedExchange: toFeedExchange,
@@ -125,7 +130,7 @@ export class WebSocketServerTransport implements ITransport {
     });
   }
 
-  async listen(router: RouterTable): Promise<void> {
+  async registerRoutes(router: RouterTable): Promise<void> {
     this.runtime.setRouter(router);
     const server = this.getServer();
 

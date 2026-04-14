@@ -119,13 +119,17 @@ describe("WebSocketBrowserTransport invocation parity", () => {
       },
     });
 
-    const pending = harness.transport.request("users.get", { id: 1 }, {
-      meta: { tenantId: "tenant-a" },
-      priority: "P0",
-      priorityClass: "P1",
-      deadlineAtMs: 500,
-      targetLatencyMs: 20,
-    });
+    const pending = harness.transport.request(
+      "users.get",
+      { id: 1 },
+      {
+        meta: { tenantId: "tenant-a" },
+        priority: "P0",
+        priorityClass: "P1",
+        deadlineAtMs: 500,
+        targetLatencyMs: 20,
+      },
+    );
 
     await new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -157,13 +161,17 @@ describe("WebSocketBrowserTransport invocation parity", () => {
       },
     });
 
-    await harness.transport.signal("users.notify", { id: 2 }, {
-      meta: { tenantId: "tenant-s" },
-      priority: "P2",
-      priorityClass: "P3",
-      deadlineAtMs: 1000,
-      targetLatencyMs: 50,
-    });
+    await harness.transport.signal(
+      "users.notify",
+      { id: 2 },
+      {
+        meta: { tenantId: "tenant-s" },
+        priority: "P2",
+        priorityClass: "P3",
+        deadlineAtMs: 1000,
+        targetLatencyMs: 50,
+      },
+    );
 
     const outbound = parseEnvelope(harness.sent[0]);
     assert.equal(outbound.op, "signal");
@@ -175,7 +183,7 @@ describe("WebSocketBrowserTransport invocation parity", () => {
     assert.equal(outbound.meta?.targetLatencyMs, 50);
   });
 
-  it("uses identical metadata for feed_start and feed_stop", async () => {
+  it("uses identical metadata for feed start and unsubscribe signal", async () => {
     const harness = createHarness({
       meta: {
         traceId: "trace-feed",
@@ -183,20 +191,24 @@ describe("WebSocketBrowserTransport invocation parity", () => {
     });
 
     const iterator = harness.transport
-      .feed("users.live", { room: "alpha" }, {
-        meta: { tenantId: "tenant-f" },
-        priority: "P1",
-        priorityClass: "P2",
-        deadlineAtMs: 2500,
-        targetLatencyMs: 75,
-      })
+      .feed(
+        "users.live",
+        { room: "alpha" },
+        {
+          meta: { tenantId: "tenant-f" },
+          priority: "P1",
+          priorityClass: "P2",
+          deadlineAtMs: 2500,
+          targetLatencyMs: 75,
+        },
+      )
       [Symbol.asyncIterator]();
 
     const pendingNext = iterator.next();
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     const feedStart = parseEnvelope(harness.sent[0]);
-    assert.equal(feedStart.op, "feed_start");
+    assert.equal(feedStart.op, "feed");
     assert.equal(feedStart.meta?.traceId, "trace-feed");
     assert.equal(feedStart.meta?.tenantId, "tenant-f");
     assert.equal(feedStart.meta?.priority, "P1");
@@ -207,14 +219,14 @@ describe("WebSocketBrowserTransport invocation parity", () => {
     harness.getSocket().emit("message", {
       data: JSON.stringify({
         id: feedStart.id,
-        payload: { hash: "feed-1", exchange: "scomp.live.feed-1" },
+        payload: { feed: "feed-1", exchange: "scomp.live.feed-1" },
       } satisfies ScompTransportResponseEnvelope),
     });
 
     harness.getSocket().emit("message", {
       data: JSON.stringify({
         channel: "feed",
-        hash: "feed-1",
+        feed: "feed-1",
         type: "next",
         payload: { seq: 1 },
       }),
@@ -232,16 +244,9 @@ describe("WebSocketBrowserTransport invocation parity", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     const feedStop = parseEnvelope(harness.sent[1]);
-    assert.equal(feedStop.op, "feed_stop");
-    assert.deepEqual(feedStop.payload, { hash: "feed-1" });
-    assert.deepEqual(feedStop.meta, feedStart.meta);
-
-    harness.getSocket().emit("message", {
-      data: JSON.stringify({
-        id: feedStop.id,
-        payload: { ok: true },
-      } satisfies ScompTransportResponseEnvelope),
-    });
+    assert.equal(feedStop.op, "signal");
+    assert.equal(feedStop.feed, "feed-1");
+    assert.equal(feedStop.method, "__scomp.unsubscribe");
 
     const stopResult = await pendingReturn;
     assert.equal(stopResult.done, true);
@@ -267,12 +272,16 @@ describe("WebSocketBrowserTransport invocation parity", () => {
       },
     });
 
-    const requestPending = harness.transport.request("users.get", { id: 1 }, {
-      meta: {
-        tenantId: "tenant-invoke",
-        auth: { source: "invoke" },
+    const requestPending = harness.transport.request(
+      "users.get",
+      { id: 1 },
+      {
+        meta: {
+          tenantId: "tenant-invoke",
+          auth: { source: "invoke" },
+        },
       },
-    });
+    );
 
     await new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -285,14 +294,22 @@ describe("WebSocketBrowserTransport invocation parity", () => {
     });
     await requestPending;
 
-    await harness.transport.signal("users.notify", { id: 2 }, {
-      meta: { tenantId: "tenant-signal" },
-    });
+    await harness.transport.signal(
+      "users.notify",
+      { id: 2 },
+      {
+        meta: { tenantId: "tenant-signal" },
+      },
+    );
 
     const iterator = harness.transport
-      .feed("users.live", { room: "alpha" }, {
-        meta: { tenantId: "tenant-feed" },
-      })
+      .feed(
+        "users.live",
+        { room: "alpha" },
+        {
+          meta: { tenantId: "tenant-feed" },
+        },
+      )
       [Symbol.asyncIterator]();
     const pendingNext = iterator.next();
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -301,13 +318,16 @@ describe("WebSocketBrowserTransport invocation parity", () => {
     harness.getSocket().emit("message", {
       data: JSON.stringify({
         id: feedStartEnvelope.id,
-        payload: { hash: "feed-security", exchange: "scomp.live.feed-security" },
+        payload: {
+          feed: "feed-security",
+          exchange: "scomp.live.feed-security",
+        },
       } satisfies ScompTransportResponseEnvelope),
     });
     harness.getSocket().emit("message", {
       data: JSON.stringify({
         channel: "feed",
-        hash: "feed-security",
+        feed: "feed-security",
         type: "next",
         payload: { seq: 1 },
       }),
@@ -320,28 +340,13 @@ describe("WebSocketBrowserTransport invocation parity", () => {
     }
 
     await new Promise((resolve) => setTimeout(resolve, 0));
-
-    const feedStopEnvelope = parseEnvelope(harness.sent[3]);
-    harness.getSocket().emit("message", {
-      data: JSON.stringify({
-        id: feedStopEnvelope.id,
-        payload: { ok: true },
-      } satisfies ScompTransportResponseEnvelope),
-    });
-
     await pendingReturn;
 
-    assert.deepEqual(observedOps, [
-      "request",
-      "signal",
-      "feed_start",
-      "feed_stop",
-    ]);
+    assert.deepEqual(observedOps, ["request", "signal", "feed"]);
     assert.deepEqual(observedSubjects, [
       "subject:request",
       "subject:signal",
-      "subject:feed_start",
-      "subject:feed_stop",
+      "subject:feed",
     ]);
 
     assert.equal(requestEnvelope.meta?.tenantId, "tenant-principal");
@@ -366,7 +371,7 @@ describe("WebSocketBrowserTransport invocation parity", () => {
     assert.equal(harness.sent.length, 0);
   });
 
-  it("delivers queued feed chunks that arrive before feed_start response", async () => {
+  it("delivers queued feed chunks that arrive before feed start response", async () => {
     const harness = createHarness();
 
     const iterator = harness.transport
@@ -380,7 +385,7 @@ describe("WebSocketBrowserTransport invocation parity", () => {
     harness.getSocket().emit("message", {
       data: JSON.stringify({
         channel: "feed",
-        hash: "feed-race",
+        feed: "feed-race",
         type: "next",
         payload: { seq: 1 },
       }),
@@ -389,7 +394,7 @@ describe("WebSocketBrowserTransport invocation parity", () => {
     harness.getSocket().emit("message", {
       data: JSON.stringify({
         id: feedStart.id,
-        payload: { hash: "feed-race", exchange: "scomp.live.feed-race" },
+        payload: { feed: "feed-race", exchange: "scomp.live.feed-race" },
       } satisfies ScompTransportResponseEnvelope),
     });
 
@@ -405,12 +410,9 @@ describe("WebSocketBrowserTransport invocation parity", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     const feedStop = parseEnvelope(harness.sent[1]);
-    harness.getSocket().emit("message", {
-      data: JSON.stringify({
-        id: feedStop.id,
-        payload: { ok: true },
-      } satisfies ScompTransportResponseEnvelope),
-    });
+    assert.equal(feedStop.op, "signal");
+    assert.equal(feedStop.feed, "feed-race");
+    assert.equal(feedStop.method, "__scomp.unsubscribe");
 
     const stopResult = await pendingStop;
     assert.equal(stopResult.done, true);
@@ -431,7 +433,10 @@ describe("WebSocketBrowserTransport invocation parity", () => {
     harness.getSocket().emit("message", {
       data: JSON.stringify({
         id: feedStart.id,
-        payload: { hash: "feed-disconnect", exchange: "scomp.live.feed-disconnect" },
+        payload: {
+          feed: "feed-disconnect",
+          exchange: "scomp.live.feed-disconnect",
+        },
       } satisfies ScompTransportResponseEnvelope),
     });
 

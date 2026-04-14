@@ -44,6 +44,8 @@ export {
   type ScompFeedChunkEnvelope,
   type ScompFeedChunkType,
   type ScompSerializer,
+  type ScompErrorCode,
+  SCOMP_ERROR_CODES,
   type ScompTransportErrorResponseEnvelope,
   type ScompTransportOperation,
   type ScompTransportRequest,

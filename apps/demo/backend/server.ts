@@ -1,13 +1,23 @@
 import {
   composeScompFragments,
+  createContractToken,
   createScompFragment,
   createScompService,
   type CompiledRouter,
-} from '@scomp/core';
-import { createRabbitMqTransport, type RabbitMQTransportConfig } from '@scomp/transport-rabbitmq';
-import type { DemoApiContract, LiveTickerInput, LiveTickerTick } from '../shared/api.contract';
+} from "@scomp/core";
+import {
+  createRabbitMqTransport,
+  type RabbitMQTransportConfig,
+} from "@scomp/transport-rabbitmq";
+import type {
+  DemoApiContract,
+  LiveTickerInput,
+  LiveTickerTick,
+} from "../shared/api.contract";
 
-export const usersService = createScompService<DemoApiContract['users']>('users').implement({
+const usersToken = createContractToken<DemoApiContract["users"]>("users");
+
+export const usersService = createScompService(usersToken).implement({
   requests: {
     getUser: {
       parser: (payload): { id: number } => {
@@ -16,9 +26,9 @@ export const usersService = createScompService<DemoApiContract['users']>('users'
       },
       handler: async (input) => ({
         id: input.id,
-        name: `user-${input.id}`
-      })
-    }
+        name: `user-${input.id}`,
+      }),
+    },
   },
   signals: {
     notifyLogin: {
@@ -26,19 +36,21 @@ export const usersService = createScompService<DemoApiContract['users']>('users'
         const input = payload as { userId: number; at: string };
         return {
           userId: Number(input.userId),
-          at: String(input.at)
+          at: String(input.at),
         };
       },
       handler: async (input) => {
         console.log(`[signal] user login notified`, input);
-      }
-    }
+      },
+    },
   },
   feeds: {
     liveTicker: {
-      strategy: 'fanout',
+      strategy: "fanout",
       hashKey: (input: LiveTickerInput) => input.channel,
-      handler: async function* (input: LiveTickerInput): AsyncIterable<LiveTickerTick> {
+      handler: async function* (
+        input: LiveTickerInput,
+      ): AsyncIterable<LiveTickerTick> {
         let sequence = 0;
         try {
           while (true) {
@@ -47,18 +59,20 @@ export const usersService = createScompService<DemoApiContract['users']>('users'
             yield {
               channel: input.channel,
               sequence,
-              at: new Date().toISOString()
+              at: new Date().toISOString(),
             };
           }
         } finally {
           console.log(`[feed] teardown for channel`, input.channel);
         }
-      }
-    }
-  }
+      },
+    },
+  },
 });
 
-export const usersRequestsFragment = createScompFragment<DemoApiContract['users']>('users').implement({
+export const usersRequestsFragment = createScompFragment<
+  DemoApiContract["users"]
+>("users").implement({
   requests: {
     getUser: {
       parser: (payload): { id: number } => {
@@ -67,35 +81,41 @@ export const usersRequestsFragment = createScompFragment<DemoApiContract['users'
       },
       handler: async (input) => ({
         id: input.id,
-        name: `user-${input.id}`
-      })
-    }
-  }
+        name: `user-${input.id}`,
+      }),
+    },
+  },
 });
 
-export const usersSignalsFragment = createScompFragment<DemoApiContract['users']>('users').implement({
+export const usersSignalsFragment = createScompFragment<
+  DemoApiContract["users"]
+>("users").implement({
   signals: {
     notifyLogin: {
       parser: (payload): { userId: number; at: string } => {
         const input = payload as { userId: number; at: string };
         return {
           userId: Number(input.userId),
-          at: String(input.at)
+          at: String(input.at),
         };
       },
       handler: async (input) => {
         console.log(`[signal] user login notified`, input);
-      }
-    }
-  }
+      },
+    },
+  },
 });
 
-export const usersFeedsFragment = createScompFragment<DemoApiContract['users']>('users').implement({
+export const usersFeedsFragment = createScompFragment<DemoApiContract["users"]>(
+  "users",
+).implement({
   feeds: {
     liveTicker: {
-      strategy: 'fanout',
+      strategy: "fanout",
       hashKey: (input: LiveTickerInput) => input.channel,
-      handler: async function* (input: LiveTickerInput): AsyncIterable<LiveTickerTick> {
+      handler: async function* (
+        input: LiveTickerInput,
+      ): AsyncIterable<LiveTickerTick> {
         let sequence = 0;
         try {
           while (true) {
@@ -104,21 +124,21 @@ export const usersFeedsFragment = createScompFragment<DemoApiContract['users']>(
             yield {
               channel: input.channel,
               sequence,
-              at: new Date().toISOString()
+              at: new Date().toISOString(),
             };
           }
         } finally {
           console.log(`[feed] teardown for channel`, input.channel);
         }
-      }
-    }
-  }
+      },
+    },
+  },
 });
 
 export const usersComposedFragment = composeScompFragments(
   usersRequestsFragment,
   usersSignalsFragment,
-  usersFeedsFragment
+  usersFeedsFragment,
 );
 
 export function getDemoRouter(): CompiledRouter {
@@ -127,6 +147,6 @@ export function getDemoRouter(): CompiledRouter {
 
 export async function startDemoServer(config: RabbitMQTransportConfig) {
   const transport = createRabbitMqTransport(config);
-  await transport.listen(getDemoRouter());
+  await transport.registerRoutes(getDemoRouter());
   return transport;
 }

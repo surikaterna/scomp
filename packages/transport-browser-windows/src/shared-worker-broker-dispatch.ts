@@ -106,7 +106,11 @@ export function handleInvokeFeedStart(
     return;
   }
 
-  const key = createFeedKey(message.route, message.payloadKey, message.payloadHash);
+  const key = createFeedKey(
+    message.route,
+    message.payloadKey,
+    message.payloadHash,
+  );
 
   const subscription = context.state.feedSubscriptions.get(key) ?? {
     route: message.route,
@@ -151,7 +155,7 @@ export function handleInvokeFeedStart(
     invokeId: message.sourceId,
     requestId: message.requestId,
     route: message.route,
-    operation: "feed_start",
+    operation: "feed",
     payload: message.payload,
     payloadKey: message.payloadKey,
     payloadHash: message.payloadHash,
@@ -195,7 +199,8 @@ export function handleInvokeFeedStop(
     invokeId: pending.invokeId,
     requestId: activeUpstream.sourceRequestId,
     route: activeUpstream.route,
-    operation: "feed_stop",
+    operation: "signal",
+    method: "__scomp.unsubscribe",
     payloadKey: activeUpstream.payloadKey,
     payloadHash: activeUpstream.payloadHash,
     meta: message.meta,
@@ -237,7 +242,11 @@ export function handleHostFeedStarted(
     return;
   }
 
-  const key = createFeedKey(pending.route, message.payloadKey, message.payloadHash);
+  const key = createFeedKey(
+    pending.route,
+    message.payloadKey,
+    message.payloadHash,
+  );
   const existing = context.state.activeUpstreamFeeds.get(key);
   if (!existing) {
     return;
@@ -264,8 +273,12 @@ export function handleHostFeedChunk(
     return;
   }
 
-  for (const [subscriberRequestId, subscriberInvokeId] of subscription.subscribersByRequestId) {
-    const subscriberMeta = subscription.metaByRequestId.get(subscriberRequestId);
+  for (const [
+    subscriberRequestId,
+    subscriberInvokeId,
+  ] of subscription.subscribersByRequestId) {
+    const subscriberMeta =
+      subscription.metaByRequestId.get(subscriberRequestId);
     context.sendToParticipant(subscriberInvokeId, {
       type: "invoke_feed_chunk",
       sourceId: "broker",

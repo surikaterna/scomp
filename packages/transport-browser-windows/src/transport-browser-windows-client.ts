@@ -37,10 +37,13 @@ export interface BrowserWindowsTransportClientContext {
     detail: string | undefined,
     status: BrowserWindowsTransportHealthStatus,
   ): void;
-  assertOutboundAllowed(route: string, operation: "request" | "signal" | "feed_start" | "feed_stop"): void;
+  assertOutboundAllowed(
+    route: string,
+    operation: "request" | "signal" | "feed",
+  ): void;
   composeMetaForOperation(
     route: string,
-    operation: "request" | "signal" | "feed_start" | "feed_stop",
+    operation: "request" | "signal" | "feed",
     payload: unknown,
     options?: ScompClientInvokeOptions,
   ): Promise<{ meta: ScompTransportMessageMeta | undefined }>;
@@ -66,7 +69,9 @@ export async function requestWithContext(
   let meta: ScompTransportMessageMeta | undefined;
   try {
     context.assertOutboundAllowed(route, "request");
-    meta = (await context.composeMetaForOperation(route, "request", payload, options)).meta;
+    meta = (
+      await context.composeMetaForOperation(route, "request", payload, options)
+    ).meta;
   } finally {
     context.decrementPreparingRequests();
   }
@@ -117,7 +122,12 @@ export async function signalWithContext(
   options?: ScompClientInvokeOptions,
 ): Promise<void> {
   context.assertOutboundAllowed(route, "signal");
-  const { meta } = await context.composeMetaForOperation(route, "signal", payload, options);
+  const { meta } = await context.composeMetaForOperation(
+    route,
+    "signal",
+    payload,
+    options,
+  );
 
   context.postMessage({
     type: "invoke_signal",
@@ -159,9 +169,9 @@ export function feedWithContext(
       let feedStarted = false;
 
       try {
-        context.assertOutboundAllowed(route, "feed_start");
+        context.assertOutboundAllowed(route, "feed");
         const feedStartMeta = (
-          await context.composeMetaForOperation(route, "feed_start", payload, options)
+          await context.composeMetaForOperation(route, "feed", payload, options)
         ).meta;
         state.meta = feedStartMeta;
 
@@ -172,7 +182,7 @@ export function feedWithContext(
           sentAtMs: Date.now(),
           requestId,
           route,
-          operation: "feed_start",
+          operation: "feed",
           payload,
           payloadKey,
           payloadHash,
@@ -210,11 +220,11 @@ export function feedWithContext(
       } finally {
         context.feedStates.delete(requestId);
         if (feedStarted && !state.stopSent) {
-          context.assertOutboundAllowed(route, "feed_stop");
+          context.assertOutboundAllowed(route, "signal");
           const feedStopMeta = (
             await context.composeMetaForOperation(
               route,
-              "feed_stop",
+              "signal",
               { payloadKey: state.payloadKey, payloadHash: state.payloadHash },
               options,
             )
@@ -228,7 +238,8 @@ export function feedWithContext(
             sentAtMs: Date.now(),
             requestId,
             route,
-            operation: "feed_stop",
+            operation: "signal",
+            method: "__scomp.unsubscribe",
             payloadKey: state.payloadKey,
             payloadHash: state.payloadHash,
           });
@@ -303,7 +314,10 @@ export function handleInvokeFeedChunkMessage(
 
     state.queue.push(message.payload);
   } else if (message.chunkType === "error") {
-    if (typeof message.message === "string" && /host disconnected/i.test(message.message)) {
+    if (
+      typeof message.message === "string" &&
+      /host disconnected/i.test(message.message)
+    ) {
       reportHealth("host-disconnected", message.message, "degraded");
     }
     terminateFeedState(

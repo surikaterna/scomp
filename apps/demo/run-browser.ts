@@ -1,9 +1,7 @@
-import {
-  createScompClient,
-  type ClientRouteHints,
-} from "@scomp/client";
-import { createScompService } from "@scomp/core";
+import { createScompClient, type ClientRouteHints } from "@scomp/client";
+import { createContractToken, createScompService } from "@scomp/core";
 import { createWebSocketBrowserTransport } from "@scomp/transport-websocket-browser";
+// @ts-expect-error pre-existing module resolution issue
 import { createWebSocketServerTransport } from "@scomp/transport-websocket-server-node";
 import type {
   ScompTransportSecurityContext,
@@ -22,7 +20,10 @@ interface WsSocketLike {
   off(type: WsSocketEvent, listener: (event: unknown) => void): void;
 }
 
-type WsSocketCtor = new (url: string, protocols?: string | Array<string>) => WsSocketLike;
+type WsSocketCtor = new (
+  url: string,
+  protocols?: string | Array<string>,
+) => WsSocketLike;
 
 interface BrowserCompatibleSocket {
   readyState: number;
@@ -55,7 +56,6 @@ class WsBrowserAdapter {
 
   constructor(url: string, protocols?: string | Array<string>) {
     this.socket = new WsWebSocket(url, protocols as never);
-
   }
 
   get readyState(): number {
@@ -89,7 +89,9 @@ class WsBrowserAdapter {
   }
 }
 
-const usersService = createScompService<DemoApiContract["users"]>("users").implement({
+const usersToken = createContractToken<DemoApiContract["users"]>("users");
+
+const usersService = createScompService(usersToken).implement({
   getUser: {
     kind: "request",
     parser: (payload: unknown): { id: number } => {
@@ -118,7 +120,9 @@ const usersService = createScompService<DemoApiContract["users"]>("users").imple
     kind: "feed",
     strategy: "fanout",
     hashKey: (input: LiveTickerInput) => input.channel,
-    handler: async function* (input: LiveTickerInput): AsyncIterable<LiveTickerTick> {
+    handler: async function* (
+      input: LiveTickerInput,
+    ): AsyncIterable<LiveTickerTick> {
       let sequence = 0;
       try {
         while (true) {
@@ -142,7 +146,9 @@ async function runBrowserDemo() {
   const url = `ws://127.0.0.1:${port}`;
 
   const securityPolicy: ScompTransportSecurityPolicy = {
-    authenticate: ({ operation }: Omit<ScompTransportSecurityContext, "principal">) => ({
+    authenticate: ({
+      operation,
+    }: Omit<ScompTransportSecurityContext, "principal">) => ({
       subject: `browser-demo:${operation}`,
       tenantId: "tenant-browser-demo",
       claims: { source: "run-browser" },
@@ -156,22 +162,26 @@ async function runBrowserDemo() {
     host: "127.0.0.1",
     security: securityPolicy,
   });
-  await server.listen(usersService.router);
+  await server.registerRoutes(usersService.router);
 
   const transport = createWebSocketBrowserTransport({
     url,
+    // @ts-expect-error pre-existing: BrowserCompatibleSocketCtor readyState type mismatch
     webSocketCtor: WsBrowserAdapter as unknown as BrowserCompatibleSocketCtor,
     meta: {
       traceId: "demo-browser-trace",
       tags: { source: "demo-browser" },
     },
     security: {
-      authenticate: ({ operation }: Omit<ScompTransportSecurityContext, "principal">) => ({
+      authenticate: ({
+        operation,
+      }: Omit<ScompTransportSecurityContext, "principal">) => ({
         subject: `client:${operation}`,
         tenantId: "tenant-client",
         claims: { source: "browser-client-hook" },
       }),
-      authorize: ({ route }: ScompTransportSecurityContext) => route.startsWith("users."),
+      authorize: ({ route }: ScompTransportSecurityContext) =>
+        route.startsWith("users."),
     },
   });
 

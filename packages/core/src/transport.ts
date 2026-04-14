@@ -1,14 +1,14 @@
 import type {
   ScompTransportMessageMeta,
   ScompTransportPriorityHints,
-} from '@scomp/types'
+} from "@scomp/types";
 
 export interface ScompClientInvokeOptions extends ScompTransportPriorityHints {
-  meta?: ScompTransportMessageMeta
+  meta?: ScompTransportMessageMeta;
 }
 
 export interface ITransport {
-  listen(router: Record<string, unknown>): Promise<void> | void;
+  registerRoutes(router: Record<string, unknown>): Promise<void> | void;
   close(): Promise<void> | void;
   request(
     route: string,

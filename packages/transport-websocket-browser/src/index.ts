@@ -44,11 +44,7 @@ function toDisconnectError(error: unknown): Error {
 
 type BrowserSocket = Pick<
   WebSocket,
-  | "send"
-  | "close"
-  | "addEventListener"
-  | "removeEventListener"
-  | "readyState"
+  "send" | "close" | "addEventListener" | "removeEventListener" | "readyState"
 >;
 
 type BrowserWebSocketCtor = new (
@@ -155,10 +151,8 @@ export class WebSocketBrowserTransport implements ITransport {
     this.config = config;
   }
 
-  async listen(_router: Record<string, unknown>): Promise<void> {
-    throw new Error(
-      "WebSocketBrowserTransport.listen() is not supported. Use WebSocketServerTransport to host routes.",
-    );
+  async registerRoutes(_router: Record<string, unknown>): Promise<void> {
+    // No-op — client-only transport does not host routes.
   }
 
   async close(): Promise<void> {
@@ -231,16 +225,13 @@ export class WebSocketBrowserTransport implements ITransport {
 
     return {
       async *[Symbol.asyncIterator]() {
-        const handshake = await self.sendRpc(
-          route,
-          "feed_start",
-          payload,
-          options,
-        );
-        const feedHash = String(handshake?.hash ?? "");
+        const handshake = await self.sendRpc(route, "feed", payload, options);
+        const feedHash = String(handshake?.feed ?? "");
 
         if (!feedHash) {
-          throw new Error("Feed start response did not include a hash.");
+          throw new Error(
+            "Feed start response did not include a feed identifier.",
+          );
         }
 
         const state: FeedState = {
@@ -302,7 +293,13 @@ export class WebSocketBrowserTransport implements ITransport {
           }
 
           try {
-            await self.sendRpc(route, "feed_stop", { hash: feedHash }, options);
+            self.sendJson(activeSocket, {
+              route,
+              op: "signal",
+              feed: feedHash,
+              method: "__scomp.unsubscribe",
+              payload: {},
+            });
           } catch (error) {
             if (!(error instanceof SocketDisconnectedError)) {
               throw error;
@@ -328,8 +325,7 @@ export class WebSocketBrowserTransport implements ITransport {
   }
 
   private isOpen(socket: BrowserSocket): boolean {
-    const openState =
-      typeof WebSocket !== "undefined" ? WebSocket.OPEN : 1;
+    const openState = typeof WebSocket !== "undefined" ? WebSocket.OPEN : 1;
     return socket.readyState === openState;
   }
 
@@ -378,7 +374,9 @@ export class WebSocketBrowserTransport implements ITransport {
   private attachSocketHandlers(socket: BrowserSocket): void {
     socket.addEventListener("message", (event: MessageEvent) => {
       void (async () => {
-        const message = safeJsonParse(await toText(event.data)) as TransportMessage;
+        const message = safeJsonParse(
+          await toText(event.data),
+        ) as TransportMessage;
         this.handleIncoming(message);
       })();
     });
@@ -394,12 +392,12 @@ export class WebSocketBrowserTransport implements ITransport {
 
   private handleIncoming(message: TransportMessage): void {
     if (isFeedChunkEnvelope(message)) {
-      const hash = String(message.hash ?? "");
-      const feed = this.feeds.get(hash);
+      const feedId = String(message.feed ?? "");
+      const feed = this.feeds.get(feedId);
       if (!feed) {
-        const pending = this.pendingFeedChunks.get(hash) ?? [];
+        const pending = this.pendingFeedChunks.get(feedId) ?? [];
         pending.push(message);
-        this.pendingFeedChunks.set(hash, pending);
+        this.pendingFeedChunks.set(feedId, pending);
         return;
       }
 
@@ -511,7 +509,10 @@ export class WebSocketBrowserTransport implements ITransport {
     }
   }
 
-  private enqueueFeedChunk(feed: FeedState, message: ScompFeedChunkEnvelope): void {
+  private enqueueFeedChunk(
+    feed: FeedState,
+    message: ScompFeedChunkEnvelope,
+  ): void {
     if (message.type === "done") {
       feed.closed = true;
       feed.terminalError = undefined;

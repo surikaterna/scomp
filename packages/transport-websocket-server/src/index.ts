@@ -154,14 +154,16 @@ export class WebSocketServerTransport implements ITransport {
     });
   }
 
-  async listen(router: Record<string, CompiledRoute>): Promise<void> {
+  async registerRoutes(router: Record<string, CompiledRoute>): Promise<void> {
     this.runtime.setRouter(router);
     if (this.server) {
       return;
     }
 
     if (!this.config.port) {
-      throw new Error("WebSocketServerTransport requires a port for Bun.serve.");
+      throw new Error(
+        "WebSocketServerTransport requires a port for Bun.serve.",
+      );
     }
 
     const expectedPath = this.config.path ?? "/";

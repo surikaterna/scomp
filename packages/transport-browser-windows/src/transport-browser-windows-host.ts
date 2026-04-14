@@ -4,7 +4,10 @@ import type {
   BrowserWindowsHostRequestMessage,
   BrowserWindowsHostSignalMessage,
 } from "./protocol";
-import type { HostedFeedState, RuntimeRoute } from "./transport-browser-windows-state";
+import type {
+  HostedFeedState,
+  RuntimeRoute,
+} from "./transport-browser-windows-state";
 import { routeOperation } from "./transport-browser-windows-state";
 import { toAsyncIterable, toError } from "./transport-browser-windows-runtime";
 
@@ -15,7 +18,7 @@ interface HostContext {
   postMessage(message: unknown): void;
   assertInboundAllowed(
     route: string,
-    operation: "request" | "signal" | "feed_start" | "feed_stop",
+    operation: "request" | "signal" | "feed",
     payload: unknown,
     meta: unknown,
   ): Promise<void>;
@@ -62,7 +65,9 @@ export async function handleHostRequest(
       message.meta,
     );
 
-    const parsedPayload = route.parser ? route.parser(message.payload) : message.payload;
+    const parsedPayload = route.parser
+      ? route.parser(message.payload)
+      : message.payload;
     const response = await route.handler(parsedPayload);
     context.postMessage({
       type: "host_response",
@@ -105,7 +110,9 @@ export async function handleHostSignal(
       message.meta,
     );
 
-    const parsedPayload = route.parser ? route.parser(message.payload) : message.payload;
+    const parsedPayload = route.parser
+      ? route.parser(message.payload)
+      : message.payload;
     await route.handler(parsedPayload);
   } catch {
     // signal has no response path
@@ -154,12 +161,14 @@ export async function handleHostFeedStart(
   try {
     await context.assertInboundAllowed(
       message.route,
-      "feed_start",
+      "feed",
       message.payload,
       message.meta,
     );
 
-    const parsedPayload = route.parser ? route.parser(message.payload) : message.payload;
+    const parsedPayload = route.parser
+      ? route.parser(message.payload)
+      : message.payload;
     const produced = route.handler(parsedPayload);
     const asyncIterable = toAsyncIterable(produced);
     const hostedState: HostedFeedState = { stopped: false };
@@ -168,7 +177,8 @@ export async function handleHostFeedStart(
       typeof produced === "object" &&
       produced !== null &&
       "unsubscribe" in produced &&
-      typeof (produced as { unsubscribe?: () => void }).unsubscribe === "function"
+      typeof (produced as { unsubscribe?: () => void }).unsubscribe ===
+        "function"
     ) {
       hostedState.unsubscribe = () => {
         (produced as { unsubscribe: () => void }).unsubscribe();
@@ -252,7 +262,7 @@ export async function handleHostFeedStop(
   try {
     await context.assertInboundAllowed(
       message.route,
-      "feed_stop",
+      "signal",
       { payloadKey: message.payloadKey, payloadHash: message.payloadHash },
       message.meta,
     );

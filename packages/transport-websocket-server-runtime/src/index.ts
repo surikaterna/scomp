@@ -1,6 +1,7 @@
 import type { CompiledRoute } from "@scomp/core";
 import {
   createFeedHash,
+  type ScompErrorCode,
   type ScompFeedChunkEnvelope,
   type ScompTransportMessageMeta,
   type ScompTransportPrincipal,
@@ -37,12 +38,12 @@ type CheckSecurityResult = {
 };
 
 type RuntimeHandlers<Socket extends RuntimeSocket> = {
-  invokeRoute: (route: CompiledRoute, message: TransportMessage) => Promise<unknown>;
+  invokeRoute: (
+    route: CompiledRoute,
+    message: TransportMessage,
+  ) => Promise<unknown>;
   isSocketOpen: (socket: Socket) => boolean;
-  onReply: (
-    socket: Socket,
-    response: ScompTransportResponseEnvelope,
-  ) => void;
+  onReply: (socket: Socket, response: ScompTransportResponseEnvelope) => void;
   onFeedChunk: (socket: Socket, chunk: ScompFeedChunkEnvelope) => void;
   onFeedExchange: (hash: string) => string;
   toPrincipalMeta?: (
@@ -53,7 +54,10 @@ type RuntimeHandlers<Socket extends RuntimeSocket> = {
 export type WebSocketServerRuntimeConfig<Socket extends RuntimeSocket> = {
   security?: ScompTransportSecurityPolicy;
   getSocketPrincipal: (socket: Socket) => ScompTransportPrincipal | undefined;
-  setSocketPrincipal: (socket: Socket, principal: ScompTransportPrincipal) => void;
+  setSocketPrincipal: (
+    socket: Socket,
+    principal: ScompTransportPrincipal,
+  ) => void;
 } & RuntimeHandlers<Socket>;
 
 function safeJsonParse(text: string): any {
@@ -71,7 +75,8 @@ export function parseTransportMessage(text: string): TransportMessage {
 function ensureFeedIterable(value: unknown): AsyncIterable<unknown> {
   if (
     value &&
-    typeof (value as AsyncIterable<unknown>)[Symbol.asyncIterator] === "function"
+    typeof (value as AsyncIterable<unknown>)[Symbol.asyncIterator] ===
+      "function"
   ) {
     return value as AsyncIterable<unknown>;
   }
@@ -124,7 +129,9 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
       meta: body.meta,
     });
 
-    const meta = (this.config.toPrincipalMeta ?? defaultToPrincipalMeta)(principal);
+    const meta = (this.config.toPrincipalMeta ?? defaultToPrincipalMeta)(
+      principal,
+    );
 
     if (!allowed) {
       this.replyWithError(
@@ -132,17 +139,29 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
         body.id,
         `Inbound operation not authorized for route: ${routeName}`,
         meta,
+        "UNAUTHORIZED",
       );
       return;
     }
 
     if (!routeEntry) {
-      this.replyWithError(socket, body.id, `Route not found: ${routeName}`, meta);
+      this.replyWithError(
+        socket,
+        body.id,
+        `Route not found: ${routeName}`,
+        meta,
+        "ROUTE_NOT_FOUND",
+      );
+      return;
+    }
+
+    if (op === "signal" && body.method === "__scomp.unsubscribe" && body.feed) {
+      this.handleFeedUnsubscribe(socket, body);
       return;
     }
 
     if (routeEntry.kind === "feed") {
-      await this.handleFeedRpc(socket, routeEntry, body, op);
+      await this.handleFeedRpc(socket, routeEntry, body);
       return;
     }
 
@@ -171,47 +190,49 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
 
       runningFeed.subscribers.delete(socket);
       if (runningFeed.subscribers.size === 0) {
-        runningFeed.abortController.abort(new StreamClosedError(runningFeed.key));
+        runningFeed.abortController.abort(
+          new StreamClosedError(runningFeed.key),
+        );
       }
     }
+  }
+
+  private handleFeedUnsubscribe(socket: Socket, body: TransportMessage): void {
+    const feedId = String(body.feed ?? "");
+    if (!feedId) {
+      this.replyWithPayload(socket, body.id, { ok: true });
+      return;
+    }
+
+    const running = this.runningFeeds.get(feedId);
+    if (running) {
+      running.subscribers.delete(socket);
+      if (running.subscribers.size === 0) {
+        running.abortController.abort(new StreamClosedError(feedId));
+      }
+    }
+
+    this.replyWithPayload(socket, body.id, { ok: true });
   }
 
   private async handleFeedRpc(
     socket: Socket,
     route: CompiledRoute,
     body: TransportMessage,
-    op: string,
   ): Promise<void> {
     const rawPayload = body.payload;
     const parsedPayload = route.parser ? route.parser(rawPayload) : rawPayload;
-    const payloadRecord =
-      body.payload && typeof body.payload === "object"
-        ? (body.payload as { hash?: unknown })
-        : undefined;
     const hash = String(
-      payloadRecord?.hash ??
+      body.feed ??
         createFeedHash(route.route, parsedPayload, { hashKey: route.hashKey }),
     );
-
-    if (op === "feed_stop") {
-      const running = this.runningFeeds.get(hash);
-      if (running) {
-        running.subscribers.delete(socket);
-        if (running.subscribers.size === 0) {
-          running.abortController.abort(new StreamClosedError(hash));
-        }
-      }
-
-      this.replyWithPayload(socket, body.id, { ok: true });
-      return;
-    }
 
     const existing = this.runningFeeds.get(hash);
     if (existing) {
       existing.subscribers.add(socket);
       this.replyWithPayload(socket, body.id, {
         exchange: existing.exchange,
-        hash,
+        feed: hash,
       });
       return;
     }
@@ -226,7 +247,7 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
     this.runningFeeds.set(hash, runningFeed);
     this.replyWithPayload(socket, body.id, {
       exchange: runningFeed.exchange,
-      hash,
+      feed: hash,
     });
 
     const result = await this.config.invokeRoute(route, body);
@@ -247,19 +268,19 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
         }
 
         this.broadcastFeedChunk(runningFeed, {
-          hash: runningFeed.key,
+          feed: runningFeed.key,
           type: "next",
           payload: chunk,
         });
       }
 
       this.broadcastFeedChunk(runningFeed, {
-        hash: runningFeed.key,
+        feed: runningFeed.key,
         type: "done",
       });
     } catch (error) {
       this.broadcastFeedChunk(runningFeed, {
-        hash: runningFeed.key,
+        feed: runningFeed.key,
         type: "error",
         message: error instanceof Error ? error.message : String(error),
       });
@@ -271,7 +292,7 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
   private broadcastFeedChunk(
     runningFeed: RunningFeed<Socket>,
     chunk: {
-      hash: string;
+      feed: string;
       type: "next" | "done" | "error";
       payload?: unknown;
       message?: string;
@@ -311,6 +332,7 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
     id: string | undefined,
     error: unknown,
     meta?: ScompTransportMessageMeta,
+    code?: ScompErrorCode,
   ): void {
     if (!id || !this.config.isSocketOpen(socket)) {
       return;
@@ -319,6 +341,7 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
     this.config.onReply(socket, {
       id,
       error: error instanceof Error ? error.message : String(error),
+      code,
       meta,
     } satisfies ScompTransportResponseEnvelope);
   }
@@ -329,7 +352,10 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
   ): Promise<CheckSecurityResult> {
     const policy = this.config.security;
     if (!policy) {
-      return { allowed: true, principal: this.config.getSocketPrincipal(socket) };
+      return {
+        allowed: true,
+        principal: this.config.getSocketPrincipal(socket),
+      };
     }
 
     const rememberedPrincipal = this.config.getSocketPrincipal(socket);

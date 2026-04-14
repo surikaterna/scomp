@@ -39,115 +39,98 @@ export interface BrowserWindowsProtocolEnvelopeBase {
   meta?: ScompTransportMessageMeta;
 }
 
-export interface BrowserWindowsHelloMessage
-  extends BrowserWindowsProtocolEnvelopeBase {
+export interface BrowserWindowsHelloMessage extends BrowserWindowsProtocolEnvelopeBase {
   type: "hello";
 }
 
-export interface BrowserWindowsHelloAckMessage
-  extends BrowserWindowsProtocolEnvelopeBase {
+export interface BrowserWindowsHelloAckMessage extends BrowserWindowsProtocolEnvelopeBase {
   type: "hello_ack";
 }
 
-export interface BrowserWindowsParticipantDisconnectMessage
-  extends BrowserWindowsProtocolEnvelopeBase {
+export interface BrowserWindowsParticipantDisconnectMessage extends BrowserWindowsProtocolEnvelopeBase {
   type: "participant_disconnect";
 }
 
-export interface BrowserWindowsHeartbeatMessage
-  extends BrowserWindowsProtocolEnvelopeBase {
+export interface BrowserWindowsHeartbeatMessage extends BrowserWindowsProtocolEnvelopeBase {
   type: "heartbeat";
 }
 
-export interface BrowserWindowsRoutesRegisterMessage
-  extends BrowserWindowsProtocolEnvelopeBase {
+export interface BrowserWindowsRoutesRegisterMessage extends BrowserWindowsProtocolEnvelopeBase {
   type: "routes_register";
   routes: Array<string>;
 }
 
-export interface BrowserWindowsRoutesUnregisterMessage
-  extends BrowserWindowsProtocolEnvelopeBase {
+export interface BrowserWindowsRoutesUnregisterMessage extends BrowserWindowsProtocolEnvelopeBase {
   type: "routes_unregister";
   routes: Array<string>;
 }
 
-interface BrowserWindowsProtocolInvokeBase
-  extends BrowserWindowsProtocolEnvelopeBase {
+interface BrowserWindowsProtocolInvokeBase extends BrowserWindowsProtocolEnvelopeBase {
   requestId: BrowserWindowsRequestId;
   route: string;
 }
 
-export interface BrowserWindowsInvokeRequestMessage
-  extends BrowserWindowsProtocolInvokeBase {
+export interface BrowserWindowsInvokeRequestMessage extends BrowserWindowsProtocolInvokeBase {
   type: "invoke_request";
   operation: Extract<ScompTransportOperation, "request">;
   payload: unknown;
 }
 
-export interface BrowserWindowsInvokeSignalMessage
-  extends BrowserWindowsProtocolInvokeBase {
+export interface BrowserWindowsInvokeSignalMessage extends BrowserWindowsProtocolInvokeBase {
   type: "invoke_signal";
   operation: Extract<ScompTransportOperation, "signal">;
   payload: unknown;
 }
 
-export interface BrowserWindowsInvokeFeedStartMessage
-  extends BrowserWindowsProtocolInvokeBase {
+export interface BrowserWindowsInvokeFeedStartMessage extends BrowserWindowsProtocolInvokeBase {
   type: "invoke_feed_start";
-  operation: Extract<ScompTransportOperation, "feed_start">;
+  operation: Extract<ScompTransportOperation, "feed">;
   payload: unknown;
   payloadKey: BrowserWindowsPayloadKey;
   payloadHash: BrowserWindowsCanonicalPayloadHash;
 }
 
-export interface BrowserWindowsInvokeFeedStopMessage
-  extends BrowserWindowsProtocolInvokeBase {
+export interface BrowserWindowsInvokeFeedStopMessage extends BrowserWindowsProtocolInvokeBase {
   type: "invoke_feed_stop";
-  operation: Extract<ScompTransportOperation, "feed_stop">;
+  operation: Extract<ScompTransportOperation, "signal">;
+  method: "__scomp.unsubscribe";
   payloadKey: BrowserWindowsPayloadKey;
   payloadHash: BrowserWindowsCanonicalPayloadHash;
 }
 
-interface BrowserWindowsProtocolHostBase
-  extends BrowserWindowsProtocolEnvelopeBase {
+interface BrowserWindowsProtocolHostBase extends BrowserWindowsProtocolEnvelopeBase {
   requestId: BrowserWindowsRequestId;
   invokeId: BrowserWindowsParticipantId;
   route: string;
 }
 
-export interface BrowserWindowsHostRequestMessage
-  extends BrowserWindowsProtocolHostBase {
+export interface BrowserWindowsHostRequestMessage extends BrowserWindowsProtocolHostBase {
   type: "host_request";
   operation: Extract<ScompTransportOperation, "request">;
   payload: unknown;
 }
 
-export interface BrowserWindowsHostSignalMessage
-  extends BrowserWindowsProtocolHostBase {
+export interface BrowserWindowsHostSignalMessage extends BrowserWindowsProtocolHostBase {
   type: "host_signal";
   operation: Extract<ScompTransportOperation, "signal">;
   payload: unknown;
 }
-
-export interface BrowserWindowsHostFeedStartMessage
-  extends BrowserWindowsProtocolHostBase {
+export interface BrowserWindowsHostFeedStartMessage extends BrowserWindowsProtocolHostBase {
   type: "host_feed_start";
-  operation: Extract<ScompTransportOperation, "feed_start">;
+  operation: Extract<ScompTransportOperation, "feed">;
   payload: unknown;
   payloadKey: BrowserWindowsPayloadKey;
   payloadHash: BrowserWindowsCanonicalPayloadHash;
 }
 
-export interface BrowserWindowsHostFeedStopMessage
-  extends BrowserWindowsProtocolHostBase {
+export interface BrowserWindowsHostFeedStopMessage extends BrowserWindowsProtocolHostBase {
   type: "host_feed_stop";
-  operation: Extract<ScompTransportOperation, "feed_stop">;
+  operation: Extract<ScompTransportOperation, "signal">;
+  method: "__scomp.unsubscribe";
   payloadKey: BrowserWindowsPayloadKey;
   payloadHash: BrowserWindowsCanonicalPayloadHash;
 }
-
-export interface BrowserWindowsHostResponseMessage
-  extends BrowserWindowsProtocolEnvelopeBase {
+export interface BrowserWindowsHostResponseMessage extends BrowserWindowsProtocolEnvelopeBase {
   type: "host_response";
   requestId: BrowserWindowsRequestId;
   invokeId: BrowserWindowsParticipantId;
@@ -156,8 +139,7 @@ export interface BrowserWindowsHostResponseMessage
   error?: string;
 }
 
-export interface BrowserWindowsHostFeedStartedMessage
-  extends BrowserWindowsProtocolEnvelopeBase {
+export interface BrowserWindowsHostFeedStartedMessage extends BrowserWindowsProtocolEnvelopeBase {
   type: "host_feed_started";
   requestId: BrowserWindowsRequestId;
   invokeId: BrowserWindowsParticipantId;
@@ -166,8 +148,7 @@ export interface BrowserWindowsHostFeedStartedMessage
   payloadHash: BrowserWindowsCanonicalPayloadHash;
 }
 
-export interface BrowserWindowsHostFeedChunkMessage
-  extends BrowserWindowsProtocolEnvelopeBase {
+export interface BrowserWindowsHostFeedChunkMessage extends BrowserWindowsProtocolEnvelopeBase {
   type: "host_feed_chunk";
   requestId: BrowserWindowsRequestId;
   invokeId: BrowserWindowsParticipantId;
@@ -179,8 +160,7 @@ export interface BrowserWindowsHostFeedChunkMessage
   message?: string;
 }
 
-export interface BrowserWindowsInvokeResponseMessage
-  extends BrowserWindowsProtocolEnvelopeBase {
+export interface BrowserWindowsInvokeResponseMessage extends BrowserWindowsProtocolEnvelopeBase {
   type: "invoke_response";
   requestId: BrowserWindowsRequestId;
   hostId: BrowserWindowsParticipantId;
@@ -188,8 +168,7 @@ export interface BrowserWindowsInvokeResponseMessage
   error?: string;
 }
 
-export interface BrowserWindowsInvokeFeedChunkMessage
-  extends BrowserWindowsProtocolEnvelopeBase {
+export interface BrowserWindowsInvokeFeedChunkMessage extends BrowserWindowsProtocolEnvelopeBase {
   type: "invoke_feed_chunk";
   requestId: BrowserWindowsRequestId;
   hostId: BrowserWindowsParticipantId;

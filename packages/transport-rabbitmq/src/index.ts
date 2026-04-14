@@ -9,6 +9,7 @@ import {
 } from "@scomp/core";
 import {
   createFeedHash,
+  type ScompErrorCode,
   type ScompFeedChunkEnvelope,
   type ScompTransportMessageMeta,
   type ScompTransportPrincipal,
@@ -206,7 +207,7 @@ export class RabbitMQTransport implements ITransport {
     }
   }
 
-  async listen(router: RouterTable): Promise<void> {
+  async registerRoutes(router: RouterTable): Promise<void> {
     this.router = router;
     const channel = await this.getChannel();
     await channel.assertExchange(SIGNAL_EXCHANGE, "topic", { durable: true });
@@ -386,13 +387,13 @@ export class RabbitMQTransport implements ITransport {
         const channel = await self.getChannel();
         const handshake = (await self.sendRpc(
           route,
-          "feed_start",
+          "feed",
           payload,
           options,
-        )) as { exchange: string; hash: string };
+        )) as { exchange: string; feed: string };
 
         const exchangeName = String(handshake.exchange);
-        const feedHash = String(handshake.hash);
+        const feedHash = String(handshake.feed);
         const queueName = (
           await channel.assertQueue("", { exclusive: true, durable: false })
         ).queue;
@@ -462,7 +463,14 @@ export class RabbitMQTransport implements ITransport {
           await channel.unbindQueue(queueName, exchangeName, "");
           await channel.deleteQueue(queueName);
           self.emitEvent({ type: "feed_stopped", route, hash: feedHash });
-          await self.sendRpc(route, "feed_stop", { hash: feedHash }, options);
+          await self.signal(route, {}, {
+            ...options,
+            meta: {
+              ...options?.meta,
+              __scomp_feed: feedHash,
+              __scomp_method: "__scomp.unsubscribe",
+            },
+          } as ScompClientInvokeOptions);
         }
       },
     };
@@ -671,6 +679,7 @@ export class RabbitMQTransport implements ITransport {
       this.replyWithError(
         message,
         `Inbound operation not authorized for route: ${route}`,
+        "UNAUTHORIZED",
       );
       return;
     }
@@ -679,7 +688,11 @@ export class RabbitMQTransport implements ITransport {
 
     if (!routeEntry) {
       channel.ack(message);
-      this.replyWithError(message, `Route not found: ${route}`);
+      this.replyWithError(
+        message,
+        `Route not found: ${route}`,
+        "ROUTE_NOT_FOUND",
+      );
       return;
     }
 
@@ -704,38 +717,10 @@ export class RabbitMQTransport implements ITransport {
     message: ConsumeMessage,
     body: ScompTransportRequestEnvelope,
   ): Promise<void> {
-    const payloadRecord =
-      body.payload && typeof body.payload === "object"
-        ? (body.payload as { hash?: unknown })
-        : undefined;
-
-    if (body.op === "feed_stop") {
-      const stopHash = String(payloadRecord?.hash ?? "");
-      if (!stopHash) {
-        this.replyWithError(
-          message,
-          "Feed stop request did not include a hash.",
-        );
-        return;
-      }
-
-      const running = this.runningFeeds.get(stopHash);
-      if (running) {
-        running.subscribers = Math.max(0, running.subscribers - 1);
-      }
-      this.emitEvent({
-        type: "feed_stopped",
-        route: route.route,
-        hash: stopHash,
-      });
-      this.replyWithPayload(message, { ok: true });
-      return;
-    }
-
     const rawPayload = body.payload;
     const parsedPayload = route.parser ? route.parser(rawPayload) : rawPayload;
     const hash = String(
-      payloadRecord?.hash ??
+      body.feed ??
         createFeedHash(route.route, parsedPayload, { hashKey: route.hashKey }),
     );
 
@@ -743,7 +728,10 @@ export class RabbitMQTransport implements ITransport {
     if (existing) {
       existing.subscribers += 1;
       this.emitEvent({ type: "feed_joined", route: route.route, hash });
-      this.replyWithPayload(message, { exchange: existing.exchange, hash });
+      this.replyWithPayload(message, {
+        exchange: existing.exchange,
+        feed: hash,
+      });
       return;
     }
 
@@ -767,7 +755,7 @@ export class RabbitMQTransport implements ITransport {
     const iterable = route.handler(parsedPayload) as AsyncIterable<unknown>;
     void this.publishFeed(runningFeed, iterable);
 
-    this.replyWithPayload(message, { exchange, hash });
+    this.replyWithPayload(message, { exchange, feed: hash });
   }
 
   private async publishFeed(
@@ -787,7 +775,7 @@ export class RabbitMQTransport implements ITransport {
           "",
           this.serializeToBuffer({
             channel: "feed",
-            hash: runningFeed.key,
+            feed: runningFeed.key,
             type: "next",
             payload: chunk,
           } satisfies ScompFeedChunkEnvelope),
@@ -804,7 +792,7 @@ export class RabbitMQTransport implements ITransport {
         "",
         this.serializeToBuffer({
           channel: "feed",
-          hash: runningFeed.key,
+          feed: runningFeed.key,
           type: "done",
         } satisfies ScompFeedChunkEnvelope),
         {
@@ -819,7 +807,7 @@ export class RabbitMQTransport implements ITransport {
         "",
         this.serializeToBuffer({
           channel: "feed",
-          hash: runningFeed.key,
+          feed: runningFeed.key,
           type: "error",
           message: error instanceof Error ? error.message : String(error),
         } satisfies ScompFeedChunkEnvelope),
@@ -861,7 +849,11 @@ export class RabbitMQTransport implements ITransport {
     );
   }
 
-  private replyWithError(message: ConsumeMessage, error: unknown): void {
+  private replyWithError(
+    message: ConsumeMessage,
+    error: unknown,
+    code?: ScompErrorCode,
+  ): void {
     const replyTo = message.properties.replyTo;
     if (!replyTo) {
       return;
@@ -871,6 +863,7 @@ export class RabbitMQTransport implements ITransport {
       replyTo,
       this.serializeToBuffer({
         error: error instanceof Error ? error.message : String(error),
+        code,
       } satisfies ScompTransportResponseEnvelope),
       {
         correlationId: message.properties.correlationId,
@@ -1020,7 +1013,9 @@ export class RabbitMQTransport implements ITransport {
     const decision = resolveScompPriority({
       route,
       operation,
-      meta: meta as (ScompTransportMessageMeta & Record<string, unknown>) | undefined,
+      meta: meta as
+        | (ScompTransportMessageMeta & Record<string, unknown>)
+        | undefined,
     });
     this.emitEvent({
       type: "priority_decision",

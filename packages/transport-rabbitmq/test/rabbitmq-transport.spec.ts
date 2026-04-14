@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   composeScompFragments,
+  createContractToken,
   createScompFragment,
   createScompService,
 } from "@scomp/core";
@@ -139,16 +140,15 @@ describe("RabbitMQTransport NFR behavior", () => {
     };
 
     const transport = new RabbitMQTransport({ url: "amqp://test" });
-    await transport.listen({ "users.liveTicker": route } as unknown as Record<
-      string,
-      unknown
-    >);
+    await transport.registerRoutes({
+      "users.liveTicker": route,
+    } as unknown as Record<string, unknown>);
 
     const rpcConsumer = fake.queueConsumers.get("scomp.rpc.users");
     await rpcConsumer?.(
       createMessage({
         route: "users.liveTicker",
-        op: "feed_start",
+        op: "feed",
         payload: { room: "room-x" },
       }),
     );
@@ -178,7 +178,9 @@ describe("RabbitMQTransport NFR behavior", () => {
     }
 
     const groupedSignals: Array<unknown> = [];
-    const grouped = createScompService<UsersContract>("users").implement({
+    const grouped = createScompService<UsersContract>(
+      createContractToken("users"),
+    ).implement({
       requests: {
         getUser: async ({ id }: { id: number }) => ({ id, name: `u-${id}` }),
       },
@@ -199,22 +201,22 @@ describe("RabbitMQTransport NFR behavior", () => {
     });
 
     const composedSignals: Array<unknown> = [];
-    const requestFragment = createScompFragment<UsersContract>("users").implement(
-      {
-        requests: {
-          getUser: async ({ id }: { id: number }) => ({ id, name: `u-${id}` }),
+    const requestFragment = createScompFragment<UsersContract>(
+      "users",
+    ).implement({
+      requests: {
+        getUser: async ({ id }: { id: number }) => ({ id, name: `u-${id}` }),
+      },
+    });
+    const signalFragment = createScompFragment<UsersContract>(
+      "users",
+    ).implement({
+      signals: {
+        notifyLogin: async (payload: { id: number }) => {
+          composedSignals.push(payload);
         },
       },
-    );
-    const signalFragment = createScompFragment<UsersContract>("users").implement(
-      {
-        signals: {
-          notifyLogin: async (payload: { id: number }) => {
-            composedSignals.push(payload);
-          },
-        },
-      },
-    );
+    });
     const feedFragment = createScompFragment<UsersContract>("users").implement({
       feeds: {
         liveUsers: {
@@ -242,7 +244,9 @@ describe("RabbitMQTransport NFR behavior", () => {
       mockConnect.mockResolvedValue(fake.connection);
 
       const transport = new RabbitMQTransport({ url: "amqp://test" });
-      await transport.listen(router as unknown as Record<string, unknown>);
+      await transport.registerRoutes(
+        router as unknown as Record<string, unknown>,
+      );
 
       // Intentional parity assertion: grouped/composed outputs still classify
       // request/signal/feed exactly as legacy transport dispatch expects.
@@ -295,7 +299,7 @@ describe("RabbitMQTransport NFR behavior", () => {
         createMessage(
           {
             route: "users.liveUsers",
-            op: "feed_start",
+            op: "feed",
             payload: { room: "general" },
           },
           {
@@ -578,7 +582,7 @@ describe("RabbitMQTransport NFR behavior", () => {
       },
     });
 
-    await transport.listen({
+    await transport.registerRoutes({
       "users.getUser": {
         route: "users.getUser",
         kind: "request",
@@ -684,7 +688,7 @@ describe("RabbitMQTransport NFR behavior", () => {
       },
     });
 
-    await transport.listen({
+    await transport.registerRoutes({
       "users.getUser": {
         route: "users.getUser",
         kind: "request",
@@ -748,7 +752,10 @@ describe("RabbitMQTransport NFR behavior", () => {
     assert.equal(explicitMeta?.priority, "P1");
     assert.equal(explicitMeta?.priorityClass, "P2");
     assert.equal(explicitMeta?.tags?.priority, "P3");
-    assert.equal(seenMeta.some((entry) => entry === undefined), true);
+    assert.equal(
+      seenMeta.some((entry) => entry === undefined),
+      true,
+    );
   });
 
   it("enforces max in-flight requests and request timeout", async () => {
