@@ -210,13 +210,11 @@ export class WebSocketBrowserTransport implements ITransport {
       throw new Error(`signal not authorized for route: ${route}`);
     }
 
-    const outboundMeta = await this.composeOutboundMeta(options, principal);
-
     const envelope: Record<string, unknown> = {
       route,
       op: "signal",
       payload,
-      meta: outboundMeta,
+      meta: this.mergeMeta(effectiveMeta, this.toPrincipalMeta(principal)),
     };
 
     if (options?.feed) {
