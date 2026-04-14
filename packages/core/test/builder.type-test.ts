@@ -2,8 +2,8 @@ import {
   composeScompFragments,
   createScompFragment,
   createScompService,
-} from "./builder";
-import { createContractToken } from "./contract-token";
+} from "../src/builder";
+import { createContractToken } from "../src/contract-token";
 
 interface GroupedTypesContract {
   getUser(input: { id: number }): Promise<{ id: number }>;

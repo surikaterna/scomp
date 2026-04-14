@@ -54,6 +54,8 @@ export interface ScompServiceDescriptor<
 
 /**
  * Client/server transport abstraction.
+ *
+ * @deprecated Use {@link ITransport} instead. This legacy interface will be removed in a future release.
  */
 export interface ScompTransport {
   /** Performs a unary request/response call. */
@@ -145,6 +147,8 @@ function buildServiceDefinition<
 
 /**
  * Fluent builder for creating type-safe service definitions.
+ *
+ * @deprecated Use {@link createScompService} with contract tokens instead. This class will be removed in a future release.
  */
 export class ScompServiceBuilder<
   Requests extends RequestHandlers,
@@ -265,6 +269,8 @@ export function createScompService<
 
 /**
  * Creates a transport-backed client from a service definition.
+ *
+ * @deprecated Use {@link createScompPeer} instead. This function will be removed in a future release.
  */
 export function createScompClient<
   Service extends ScompServiceDefinition<RequestHandlers, FeedHandlers, CommandHandlers>
