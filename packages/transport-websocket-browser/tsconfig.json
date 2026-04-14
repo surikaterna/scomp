@@ -9,6 +9,7 @@
   },
   "references": [
     { "path": "../core" },
+    { "path": "../transport-shared" },
     { "path": "../types" }
   ],
   "include": ["src/**/*"]

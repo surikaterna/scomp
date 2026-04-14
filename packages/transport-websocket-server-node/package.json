@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@scomp/core": "workspace:*",
+    "@scomp/transport-shared": "workspace:*",
     "@scomp/types": "workspace:*",
     "@scomp/transport-websocket-client": "workspace:*",
     "@scomp/transport-websocket-server-runtime": "workspace:*",

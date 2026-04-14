@@ -1,3 +1,10 @@
+/**
+ * Cross-realm safe symbol used to tag the feed scoping mode on a
+ * {@link ControlledAsyncIterable}.  Prefer this over a plain string
+ * property so the key never collides with user-defined properties.
+ */
+export const SCOMP_SCOPE = Symbol.for("scomp.scope");
+
 export interface ControlledFeedOptions {
   /**
    * Feed scoping mode.
@@ -17,7 +24,7 @@ export interface ControlledAsyncIterable<
 > extends AsyncIterable<T> {
   readonly controller: C;
   /** @internal Feed scoping mode for the runtime. */
-  readonly __scope?: "exclusive" | "fanout";
+  readonly [SCOMP_SCOPE]?: "exclusive" | "fanout";
 }
 
 /**
@@ -46,6 +53,6 @@ export function createControlledFeed<T, C extends object>(
       return iterable[Symbol.asyncIterator]();
     },
     controller: controllerMethods,
-    __scope: options?.scope ?? "exclusive",
+    [SCOMP_SCOPE]: options?.scope ?? "exclusive",
   };
 }

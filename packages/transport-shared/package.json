@@ -1,5 +1,5 @@
 {
-  "name": "@scomp/transport-websocket-client",
+  "name": "@scomp/transport-shared",
   "version": "0.1.0",
   "private": true,
   "main": "dist/index.js",
@@ -7,13 +7,10 @@
   "scripts": {
     "build": "tsc -b tsconfig.json",
     "lint": "bunx tsc -b tsconfig.json --pretty false",
-    "test": "echo \"No tests configured for @scomp/transport-websocket-client\""
+    "test": "jest --config jest.config.cjs --passWithNoTests"
   },
   "dependencies": {
     "@scomp/core": "workspace:*",
-    "@scomp/transport-shared": "workspace:*",
-    "@scomp/types": "workspace:*",
-    "@types/ws": "^8.18.1",
-    "ws": "^8.18.3"
+    "@scomp/types": "workspace:*"
   }
 }
