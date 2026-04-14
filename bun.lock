@@ -44,7 +44,7 @@
         "@scomp/client": "workspace:*",
         "@scomp/core": "workspace:*",
         "@scomp/transport-rabbitmq": "workspace:*",
-        "@scomp/transport-websocket-browser": "workspace:*",
+        "@scomp/transport-websocket-client": "workspace:*",
         "@scomp/transport-websocket-server": "workspace:*",
         "@scomp/types": "workspace:*",
       },
@@ -116,15 +116,6 @@
         "@scomp/types": "workspace:*",
       },
     },
-    "packages/transport-websocket-browser": {
-      "name": "@scomp/transport-websocket-browser",
-      "version": "0.1.0",
-      "dependencies": {
-        "@scomp/core": "workspace:*",
-        "@scomp/transport-shared": "workspace:*",
-        "@scomp/types": "workspace:*",
-      },
-    },
     "packages/transport-websocket-client": {
       "name": "@scomp/transport-websocket-client",
       "version": "0.1.0",
@@ -138,18 +129,6 @@
     },
     "packages/transport-websocket-server": {
       "name": "@scomp/transport-websocket-server",
-      "version": "0.1.0",
-      "dependencies": {
-        "@scomp/core": "workspace:*",
-        "@scomp/transport-shared": "workspace:*",
-        "@scomp/transport-websocket-browser": "workspace:*",
-        "@scomp/transport-websocket-client": "workspace:*",
-        "@scomp/transport-websocket-server-runtime": "workspace:*",
-        "@scomp/types": "workspace:*",
-      },
-    },
-    "packages/transport-websocket-server-node": {
-      "name": "@scomp/transport-websocket-server-node",
       "version": "0.1.0",
       "dependencies": {
         "@scomp/core": "workspace:*",
@@ -556,13 +535,9 @@
 
     "@scomp/transport-shared": ["@scomp/transport-shared@workspace:packages/transport-shared"],
 
-    "@scomp/transport-websocket-browser": ["@scomp/transport-websocket-browser@workspace:packages/transport-websocket-browser"],
-
     "@scomp/transport-websocket-client": ["@scomp/transport-websocket-client@workspace:packages/transport-websocket-client"],
 
     "@scomp/transport-websocket-server": ["@scomp/transport-websocket-server@workspace:packages/transport-websocket-server"],
-
-    "@scomp/transport-websocket-server-node": ["@scomp/transport-websocket-server-node@workspace:packages/transport-websocket-server-node"],
 
     "@scomp/transport-websocket-server-runtime": ["@scomp/transport-websocket-server-runtime@workspace:packages/transport-websocket-server-runtime"],
 

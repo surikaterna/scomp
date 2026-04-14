@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import type { CompiledRoute } from "@scomp/core";
 import { RabbitMQTransport } from "../src";
 import { createScompClient } from "../../client/src";
-import { WebSocketClientTransport } from "../../transport-websocket-client/src";
+import {
+  WebSocketClientTransport,
+  createNodeSocketAdapterFactory,
+  SOCKET_OPEN,
+} from "../../transport-websocket-client/src";
 
 const mockConnect = jest.fn();
 const mockRandomUUID = jest.fn();
@@ -104,19 +108,29 @@ function stripId(payload: Record<string, unknown>) {
   return clone;
 }
 
+const nodeSocketAdapter = createNodeSocketAdapterFactory();
+
 function createPatchedWebSocketClient() {
-  const client = new WebSocketClientTransport({ url: "ws://placeholder" });
+  const client = new WebSocketClientTransport({ url: "ws://placeholder", socketAdapter: nodeSocketAdapter });
   const sentPayloads: Array<string> = [];
 
+  const fakeSocket = {
+    readyState: SOCKET_OPEN,
+    send: (payload: string) => { sentPayloads.push(payload); },
+    close: () => {},
+    onOpen: () => {},
+    onMessage: () => {},
+    onClose: () => {},
+    onError: () => {},
+    removeAllHandlers: () => {},
+  };
+
+  (client as unknown as { socket: unknown }).socket = fakeSocket;
   (
     client as unknown as {
       getSocket: () => Promise<{ send: (payload: string) => void }>;
     }
-  ).getSocket = async () => ({
-    send: (payload: string) => {
-      sentPayloads.push(payload);
-    },
-  });
+  ).getSocket = async () => fakeSocket;
 
   return { client, sentPayloads };
 }
@@ -256,6 +270,7 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
     });
     const websocket = new WebSocketClientTransport({
       url: "ws://placeholder",
+      socketAdapter: nodeSocketAdapter,
       meta: {
         traceId: "trace-1",
       },
@@ -268,15 +283,22 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
     });
 
     const sentPayloads: Array<string> = [];
+    const wsSocket = {
+      readyState: SOCKET_OPEN,
+      send: (payload: string) => { sentPayloads.push(payload); },
+      close: () => {},
+      onOpen: () => {},
+      onMessage: () => {},
+      onClose: () => {},
+      onError: () => {},
+      removeAllHandlers: () => {},
+    };
+    (websocket as unknown as { socket: unknown }).socket = wsSocket;
     (
       websocket as unknown as {
         getSocket: () => Promise<{ send: (payload: string) => void }>;
       }
-    ).getSocket = async () => ({
-      send: (payload: string) => {
-        sentPayloads.push(payload);
-      },
-    });
+    ).getSocket = async () => wsSocket;
 
     await Promise.all([
       rabbit.signal("users.notify", { id: 7 }),
@@ -433,6 +455,7 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
 
     const websocketClient = new WebSocketClientTransport({
       url: "ws://placeholder",
+      socketAdapter: nodeSocketAdapter,
       meta: {
         traceId: "trace-priority",
         priority: "P1",
@@ -444,15 +467,22 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
     });
 
     const sentPayloads: Array<string> = [];
+    const wsSocket3 = {
+      readyState: SOCKET_OPEN,
+      send: (payload: string) => { sentPayloads.push(payload); },
+      close: () => {},
+      onOpen: () => {},
+      onMessage: () => {},
+      onClose: () => {},
+      onError: () => {},
+      removeAllHandlers: () => {},
+    };
+    (websocketClient as unknown as { socket: unknown }).socket = wsSocket3;
     (
       websocketClient as unknown as {
         getSocket: () => Promise<{ send: (payload: string) => void }>;
       }
-    ).getSocket = async () => ({
-      send: (payload: string) => {
-        sentPayloads.push(payload);
-      },
-    });
+    ).getSocket = async () => wsSocket3;
 
     const rabbitPending = rabbit.request("users.get", { id: 11 });
     const websocketPending = websocketClient.request("users.get", { id: 11 });

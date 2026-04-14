@@ -8,9 +8,8 @@
       "@scomp/core": ["../../packages/core/src"],
       "@scomp/client": ["../../packages/client/src"],
       "@scomp/transport-rabbitmq": ["../../packages/transport-rabbitmq/src"],
-      "@scomp/transport-websocket-browser": ["../../packages/transport-websocket-browser/src"],
-      "@scomp/transport-websocket-server": ["../../packages/transport-websocket-server/src"],
-      "@scomp/transport-websocket-client": ["../../packages/transport-websocket-client/src"]
+      "@scomp/transport-websocket-client": ["../../packages/transport-websocket-client/src"],
+      "@scomp/transport-websocket-server": ["../../packages/transport-websocket-server/src"]
     },
     "rootDir": ".",
     "outDir": "dist",
@@ -21,7 +20,7 @@
     { "path": "../../packages/core" },
     { "path": "../../packages/client" },
     { "path": "../../packages/transport-rabbitmq" },
-    { "path": "../../packages/transport-websocket-browser" },
+    { "path": "../../packages/transport-websocket-client" },
     { "path": "../../packages/transport-websocket-server" }
   ],
   "include": [
