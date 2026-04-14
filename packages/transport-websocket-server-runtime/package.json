@@ -7,7 +7,7 @@
   "scripts": {
     "build": "tsc -b tsconfig.json",
     "lint": "bunx tsc -b tsconfig.json --pretty false",
-    "test": "echo \"No tests configured for @scomp/transport-websocket-server-runtime\""
+    "test": "jest --config jest.config.cjs --forceExit"
   },
   "dependencies": {
     "@scomp/core": "workspace:*",
