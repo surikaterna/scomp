@@ -1,0 +1,16 @@
+{
+  "name": "@scomp/transport-shared",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "lint": "bunx tsc -b tsconfig.json --pretty false",
+    "test": "jest --config jest.config.cjs --passWithNoTests"
+  },
+  "dependencies": {
+    "@scomp/core": "workspace:*",
+    "@scomp/types": "workspace:*"
+  }
+}

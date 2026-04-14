@@ -87,6 +87,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@scomp/core": "workspace:*",
+        "@scomp/transport-shared": "workspace:*",
         "@scomp/types": "workspace:*",
       },
     },
@@ -102,8 +103,17 @@
       "version": "0.1.0",
       "dependencies": {
         "@scomp/core": "workspace:*",
+        "@scomp/transport-shared": "workspace:*",
         "@scomp/types": "workspace:*",
         "amqplib": "^0.10.9",
+      },
+    },
+    "packages/transport-shared": {
+      "name": "@scomp/transport-shared",
+      "version": "0.1.0",
+      "dependencies": {
+        "@scomp/core": "workspace:*",
+        "@scomp/types": "workspace:*",
       },
     },
     "packages/transport-websocket-browser": {
@@ -111,6 +121,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@scomp/core": "workspace:*",
+        "@scomp/transport-shared": "workspace:*",
         "@scomp/types": "workspace:*",
       },
     },
@@ -119,6 +130,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@scomp/core": "workspace:*",
+        "@scomp/transport-shared": "workspace:*",
         "@scomp/types": "workspace:*",
         "@types/ws": "^8.18.1",
         "ws": "^8.18.3",
@@ -129,6 +141,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@scomp/core": "workspace:*",
+        "@scomp/transport-shared": "workspace:*",
         "@scomp/transport-websocket-browser": "workspace:*",
         "@scomp/transport-websocket-client": "workspace:*",
         "@scomp/transport-websocket-server-runtime": "workspace:*",
@@ -140,6 +153,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@scomp/core": "workspace:*",
+        "@scomp/transport-shared": "workspace:*",
         "@scomp/transport-websocket-client": "workspace:*",
         "@scomp/transport-websocket-server-runtime": "workspace:*",
         "@scomp/types": "workspace:*",
@@ -152,6 +166,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@scomp/core": "workspace:*",
+        "@scomp/transport-shared": "workspace:*",
         "@scomp/types": "workspace:*",
       },
     },
@@ -538,6 +553,8 @@
     "@scomp/transport-inprocess": ["@scomp/transport-inprocess@workspace:packages/transport-inprocess"],
 
     "@scomp/transport-rabbitmq": ["@scomp/transport-rabbitmq@workspace:packages/transport-rabbitmq"],
+
+    "@scomp/transport-shared": ["@scomp/transport-shared@workspace:packages/transport-shared"],
 
     "@scomp/transport-websocket-browser": ["@scomp/transport-websocket-browser@workspace:packages/transport-websocket-browser"],
 
