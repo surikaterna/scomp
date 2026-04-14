@@ -10,7 +10,6 @@
     { "path": "../core" },
     { "path": "../transport-shared" },
     { "path": "../types" },
-    { "path": "../transport-websocket-browser" },
     { "path": "../transport-websocket-client" },
     { "path": "../transport-websocket-server-runtime" }
   ],
