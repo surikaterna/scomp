@@ -16,7 +16,9 @@
     "@scomp/types": "workspace:*",
     "@scomp/transport-websocket-client": "workspace:*",
     "@scomp/transport-websocket-server-runtime": "workspace:*",
-    "@types/ws": "^8.18.1",
     "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.1"
   }
 }

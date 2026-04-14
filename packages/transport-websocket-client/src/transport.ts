@@ -76,15 +76,15 @@ export class WebSocketClientTransport implements ITransport {
 
   async request(
     route: string,
-    payload: any,
+    payload: unknown,
     options?: ScompClientInvokeOptions,
-  ): Promise<any> {
+  ): Promise<unknown> {
     return this.sendRpc(route, "request", payload, options);
   }
 
   async signal(
     route: string,
-    payload: any,
+    payload: unknown,
     options?: ScompClientInvokeOptions,
   ): Promise<void> {
     const socket = await this.getSocket();
@@ -113,9 +113,9 @@ export class WebSocketClientTransport implements ITransport {
 
   feed(
     route: string,
-    payload: any,
+    payload: unknown,
     options?: ScompClientInvokeOptions,
-  ): AsyncIterable<any> {
+  ): AsyncIterable<unknown> {
     const self = this;
 
     return {
@@ -323,7 +323,7 @@ export class WebSocketClientTransport implements ITransport {
     op: ScompTransportOperation,
     payload: unknown,
     options?: ScompClientInvokeOptions,
-  ): Promise<any> {
+  ): Promise<unknown> {
     const maxInFlight = this.config.maxInFlightRequests ?? 10_000;
     if (this.pendingRequests.size >= maxInFlight) {
       this.emitEvent({ type: "in_flight_limit", route, limit: maxInFlight });

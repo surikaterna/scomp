@@ -13,7 +13,9 @@
     "@scomp/core": "workspace:*",
     "@scomp/transport-shared": "workspace:*",
     "@scomp/types": "workspace:*",
-    "@types/ws": "^8.18.1",
     "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.1"
   }
 }
