@@ -10,6 +10,7 @@
     "test": "jest --config jest.config.cjs"
   },
   "dependencies": {
-    "@scomp/core": "workspace:*"
+    "@scomp/core": "workspace:*",
+    "@scomp/types": "workspace:*"
   }
 }
