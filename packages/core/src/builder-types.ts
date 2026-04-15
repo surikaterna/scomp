@@ -4,6 +4,53 @@ import type {
   ContractMethodInput,
 } from "@scomp/types";
 
+// ---------------------------------------------------------------------------
+// Contract validation types (compile-time only, zero runtime cost)
+// ---------------------------------------------------------------------------
+
+/**
+ * Checks that every own property of `C` is a function.
+ * Evaluates to `C` when valid, or maps non-function properties to `never`.
+ *
+ * Used as a self-referential constraint: `C extends ValidContract<C>`.
+ * This avoids `Record<string, ...>` which interfaces cannot satisfy due to
+ * missing implicit index signatures.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type ValidContract<C> = {
+  [K in keyof C]: C[K] extends (...args: any[]) => unknown ? C[K] : never;
+};
+
+/**
+ * Per-method diagnostic: produces a string-literal error when a method's
+ * return type is not one of the supported kinds (Promise, AsyncIterable, void).
+ */
+export type DiagnoseMethod<K extends string, M> =
+  M extends (...args: any[]) => infer R
+    ? R extends Promise<unknown> | AsyncIterable<unknown> | void | Promise<void>
+      ? M
+      : `⚠ "${K}" must return Promise<T>, AsyncIterable<T>, or void`
+    : `⚠ "${K}" is not a method`;
+
+/**
+ * Maps every method in a contract to either itself (valid) or a
+ * descriptive string-literal error message (invalid return type).
+ */
+export type DiagnoseContract<C> = {
+  [K in keyof C & string]: DiagnoseMethod<K, C[K]>;
+};
+
+/**
+ * Evaluates to `true` when every method in the contract has a supported
+ * return type and all properties are functions, `false` otherwise.
+ */
+export type IsValidContract<C extends object> =
+  C extends ValidContract<C>
+    ? DiagnoseContract<C> extends C
+      ? true
+      : false
+    : false;
+
 type RouteKind = "request" | "signal" | "feed";
 
 export interface RequestImplementationConfig<Input, Output> {

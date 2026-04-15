@@ -35,14 +35,21 @@ type UsersContract = {
 const Users = createContractToken<UsersContract>("users");
 ```
 
+Contract methods must return `Promise<T>` (request), `AsyncIterable<T>` (feed), or `void`/`Promise<void>` (signal).
+Invalid return types produce compile-time errors at the `createScompService` call site.
+
 ### Peer model
 
 A peer is a symmetric node that can host services and/or call remote services:
 
 ```ts
 import { createScompPeer, createScompService } from "@scomp/core";
+import { createScompClient } from "@scomp/client";
 
-const peer = createScompPeer({ transports: [transport] });
+const peer = createScompPeer({
+  transports: [transport],
+  clientFactory: createScompClient,
+});
 
 // Host a service
 peer.provides(
@@ -141,26 +148,24 @@ Fragment composition rejects duplicate methods across fragments.
 
 ## Packages
 
-- `@scomp/core` — contract tokens, peer, service builder, feed primitives, control plane, priority model
+- `@scomp/core` — contract tokens, peer, service builder, feed primitives, control plane, priority model, contract validation
 - `@scomp/types` — wire protocol types, contract type utilities, security types
-- `@scomp/client` — typed client proxy (used internally by peer; direct use is legacy)
+- `@scomp/client` — typed client proxy (provides `clientFactory` for peer model)
+- `@scomp/transport-shared` — cross-transport utilities (meta composition, security, parsing, feed detection)
+- `@scomp/transport-websocket-shared` — WebSocket adapter abstraction (`ISocketAdapter`, `NodeSocketAdapter`, `BrowserSocketAdapter`)
+- `@scomp/transport-websocket-client` — unified WebSocket client (Node + Browser via socket adapters)
+- `@scomp/transport-websocket-server` — unified WebSocket server (Bun + Node entry points)
+- `@scomp/transport-websocket-server-runtime` — internal shared server runtime (do not import directly)
 - `@scomp/transport-rabbitmq` — RabbitMQ transport
-- `@scomp/transport-websocket-server` — Bun WebSocket server transport
-- `@scomp/transport-websocket-server-node` — Node WebSocket server transport
-- `@scomp/transport-websocket-browser` — browser WebSocket client transport
-- `@scomp/transport-websocket-client` — Node WebSocket client transport
 - `@scomp/transport-browser-windows` — same-origin browser tab/window transport (SharedWorker primary, BroadcastChannel fallback)
-- `@scomp/transport-inprocess` — in-process transport (legacy compatibility only)
-- `@scomp/transport-websocket-server-runtime` — internal shared runtime (do not import directly)
+- `@scomp/transport-inprocess` — in-process transport
 
-## WebSocket server package split (Bun vs Node)
+## WebSocket server runtimes
 
-The websocket server transport is split by runtime:
+The websocket server package supports both runtimes from a single package:
 
-- **Bun runtime (`Bun.serve`)**: `@scomp/transport-websocket-server`
-- **Node runtime (`ws` + `http`)**: `@scomp/transport-websocket-server-node`
-
-See migration notes: [docs/migration-websocket-server-split.md](docs/migration-websocket-server-split.md)
+- **Bun**: `import { createBunWebSocketServerTransport } from "@scomp/transport-websocket-server"`
+- **Node**: `import { createNodeWebSocketServerTransport } from "@scomp/transport-websocket-server"`
 
 ## Security
 

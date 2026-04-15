@@ -36,14 +36,18 @@ export {
   createScompService,
   type CompiledRoute,
   type CompiledRouter,
+  type DiagnoseContract,
+  type DiagnoseMethod,
   type FragmentDefinition,
   type FragmentMethodImplementations,
   type FeedImplementationConfig,
   type GroupedFragmentMethodImplementations,
   type GroupedServiceMethodImplementations,
+  type IsValidContract,
   type RequestImplementationConfig,
   type ServiceDefinition,
   type SignalImplementationConfig,
+  type ValidContract,
 } from "./builder";
 
 export {

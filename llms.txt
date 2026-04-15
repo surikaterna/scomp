@@ -39,6 +39,10 @@ const TradingV2 = createContractToken<TradingContractV2>("trading.v2");
 
 Never pass a service name string and contract generic separately. Always use a token.
 
+Contract types are validated at compile time: `createScompService` and `createScompFragment`
+reject non-method properties and unsupported return types (anything that isn't `Promise<T>`,
+`AsyncIterable<T>`, or `void`/`Promise<void>`) with actionable error messages at the call site.
+
 ## 3) Peer model (provides / consumes)
 
 A peer is a symmetric node that can host services and/or call remote services.
@@ -46,8 +50,12 @@ There is no separate client/server distinction.
 
 ```ts
 import { createScompPeer, createScompService } from "@scomp/core";
+import { createScompClient } from "@scomp/client";
 
-const peer = createScompPeer({ transports: [transport] });
+const peer = createScompPeer({
+  transports: [transport],
+  clientFactory: createScompClient,
+});
 
 // Host a service (incoming calls)
 peer.provides(
@@ -225,15 +233,15 @@ const { intervalMs } = await feed.controller.getInterval({});
 
 ## 6) Transport interface
 
-`IScompTransport` is wire-level only. It moves messages between peers.
+`ITransport` is wire-level only. It moves messages between peers.
 
 ```ts
-interface IScompTransport {
+interface ITransport {
+  registerRoutes(router: Record<string, unknown>): Promise<void> | void;
+  close(): Promise<void> | void;
   request(route: string, payload: unknown, options?: ScompClientInvokeOptions): Promise<unknown>;
   signal(route: string, payload: unknown, options?: ScompClientInvokeOptions): Promise<void>;
   feed(route: string, payload: unknown, options?: ScompClientInvokeOptions): AsyncIterable<unknown>;
-  registerRoutes(router: CompiledRouter): Promise<void> | void;
-  close(): Promise<void> | void;
 }
 ```
 
@@ -245,32 +253,37 @@ interface IScompTransport {
 
 | Package | Factory | Runtime | Hosts routes? |
 | --- | --- | --- | --- |
-| `@scomp/transport-websocket-server` | `createWebSocketServerTransport` | Bun (`Bun.serve`) | Yes |
-| `@scomp/transport-websocket-server-node` | `createWebSocketServerTransport` | Node (`ws` + `http`) | Yes |
-| `@scomp/transport-websocket-browser` | `createWebSocketBrowserTransport` | Browser (`WebSocket`) | No |
-| `@scomp/transport-websocket-client` | `createWebSocketClientTransport` | Node (`ws`) | No |
+| `@scomp/transport-websocket-server` | `createBunWebSocketServerTransport` | Bun (`Bun.serve`) | Yes |
+| `@scomp/transport-websocket-server` | `createNodeWebSocketServerTransport` | Node (`ws` + `http`) | Yes |
+| `@scomp/transport-websocket-client` | `createWebSocketClientTransport` | Node (`ws`) or Browser (`WebSocket`) | No |
 | `@scomp/transport-rabbitmq` | `createRabbitMqTransport` | Node/Bun + RabbitMQ | Yes |
 | `@scomp/transport-browser-windows` | `createBrowserWindowsTransport` | Same-origin browser tabs | Yes |
-| `@scomp/transport-inprocess` | `createInprocessTransport` | Any (legacy compat only) | N/A |
+| `@scomp/transport-inprocess` | `createInprocessTransport` | Any | N/A (direct handler invocation) |
 
 ### Transport setup examples
 
 ```ts
 // Bun WebSocket server
-import { createWebSocketServerTransport } from "@scomp/transport-websocket-server";
-const transport = createWebSocketServerTransport({ port: 3399, path: "/" });
+import { createBunWebSocketServerTransport } from "@scomp/transport-websocket-server";
+const transport = createBunWebSocketServerTransport({ port: 3399, path: "/" });
 
 // Node WebSocket server
-import { createWebSocketServerTransport } from "@scomp/transport-websocket-server-node";
-const transport = createWebSocketServerTransport({ port: 3399, path: "/" });
+import { createNodeWebSocketServerTransport } from "@scomp/transport-websocket-server";
+const transport = createNodeWebSocketServerTransport({ port: 3399, path: "/" });
 
-// Browser WebSocket client
-import { createWebSocketBrowserTransport } from "@scomp/transport-websocket-browser";
-const transport = createWebSocketBrowserTransport({ url: "ws://127.0.0.1:3399" });
+// WebSocket client (Node — uses ws library via NodeSocketAdapter)
+import { createWebSocketClientTransport, createNodeSocketAdapterFactory } from "@scomp/transport-websocket-client";
+const transport = createWebSocketClientTransport({
+  url: "ws://127.0.0.1:3399",
+  socketAdapterFactory: createNodeSocketAdapterFactory(),
+});
 
-// Node WebSocket client
-import { createWebSocketClientTransport } from "@scomp/transport-websocket-client";
-const transport = createWebSocketClientTransport({ url: "ws://127.0.0.1:3399" });
+// WebSocket client (Browser — uses native WebSocket via BrowserSocketAdapter)
+import { createWebSocketClientTransport, createBrowserSocketAdapterFactory } from "@scomp/transport-websocket-client";
+const transport = createWebSocketClientTransport({
+  url: "ws://127.0.0.1:3399",
+  socketAdapterFactory: createBrowserSocketAdapterFactory(),
+});
 
 // RabbitMQ
 import { createRabbitMqTransport } from "@scomp/transport-rabbitmq";
@@ -432,7 +445,9 @@ Default operation priorities: request=P2, signal=P3, feed=P1.
 ## 12) Common mistakes
 
 - **Using a string name instead of a contract token**: always use `createContractToken&lt;C&gt;("name")`.
-- **Importing Node WS server from Bun package**: use `@scomp/transport-websocket-server-node` for Node.
+- **Importing Bun server factory from Node runtime**: use `createNodeWebSocketServerTransport` (not `createBunWebSocketServerTransport`) when running on Node.
+- **Not providing `socketAdapterFactory` to WebSocket client**: the client transport requires either `createNodeSocketAdapterFactory()` or `createBrowserSocketAdapterFactory()` depending on runtime.
+- **Not providing `clientFactory` to `createScompPeer`**: import `createScompClient` from `@scomp/client` and pass it.
 - **Trying to host routes on client transports**: browser/client transports do not host routes. Use a server transport.
 - **Using `@scomp/transport-websocket-server-runtime` directly**: it is an internal package. Import from the Bun or Node server package.
 - **Naming controller methods with `__scomp.` prefix**: this is reserved for framework methods.
@@ -442,17 +457,17 @@ Default operation priorities: request=P2, signal=P3, feed=P1.
 
 ## 13) Packages
 
-- `@scomp/core` — contract tokens, peer, service builder, feed primitives, control plane, priority model
+- `@scomp/core` — contract tokens, peer, service builder, feed primitives, control plane, priority model, contract validation
 - `@scomp/types` — wire protocol types, contract type utilities, security types
-- `@scomp/client` — typed client proxy (used internally by peer; direct use is legacy)
+- `@scomp/client` — typed client proxy (provides `clientFactory` for peer model)
+- `@scomp/transport-shared` — cross-transport utilities (meta composition, security, parsing, feed detection)
+- `@scomp/transport-websocket-shared` — WebSocket adapter abstraction (`ISocketAdapter`, `NodeSocketAdapter`, `BrowserSocketAdapter`)
+- `@scomp/transport-websocket-client` — unified WebSocket client (Node + Browser via socket adapters)
+- `@scomp/transport-websocket-server` — unified WebSocket server (Bun + Node entry points)
+- `@scomp/transport-websocket-server-runtime` — internal shared server runtime (do not import directly)
 - `@scomp/transport-rabbitmq` — RabbitMQ transport
-- `@scomp/transport-websocket-server` — Bun WebSocket server transport
-- `@scomp/transport-websocket-server-node` — Node WebSocket server transport
-- `@scomp/transport-websocket-browser` — browser WebSocket client transport
-- `@scomp/transport-websocket-client` — Node WebSocket client transport
-- `@scomp/transport-browser-windows` — same-origin browser tab/window transport
-- `@scomp/transport-inprocess` — in-process transport (legacy compatibility only)
-- `@scomp/transport-websocket-server-runtime` — internal shared runtime (do not import directly)
+- `@scomp/transport-browser-windows` — same-origin browser tab/window transport (SharedWorker primary, BroadcastChannel fallback)
+- `@scomp/transport-inprocess` — in-process transport
 
 ## 14) Validation commands
 
