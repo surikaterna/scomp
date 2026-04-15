@@ -10,6 +10,8 @@ import type {
   GroupedFragmentMethodImplementations,
   GroupedMethodImplementationsInput,
   GroupedServiceMethodImplementations,
+  IsValidContract,
+  DiagnoseContract,
   ProvidedMethodKeys,
   ServiceDefinition,
   ServiceMethodImplementationsInput,
@@ -19,15 +21,19 @@ import type {
 export type {
   CompiledRoute,
   CompiledRouter,
+  DiagnoseContract,
+  DiagnoseMethod,
   FeedImplementationConfig,
   FragmentDefinition,
   FragmentMethodImplementations,
   GroupedFragmentMethodImplementations,
   GroupedServiceMethodImplementations,
+  IsValidContract,
   RequestImplementationConfig,
   ServiceDefinition,
   ServiceMethodImplementations,
   SignalImplementationConfig,
+  ValidContract,
 } from "./builder-types";
 
 type RouteKind = "request" | "signal" | "feed";
@@ -207,6 +213,9 @@ function isGroupedMethods(methods: unknown): methods is {
 
 export function createScompService<Contract extends object>(
   token: ContractToken<Contract>,
+  ...errors: IsValidContract<Contract> extends true
+    ? []
+    : [diagnosis: DiagnoseContract<Contract>]
 ) {
   const name = token.name;
   return {
@@ -224,7 +233,12 @@ export function createScompService<Contract extends object>(
   };
 }
 
-export function createScompFragment<Contract extends object>(name: string) {
+export function createScompFragment<Contract extends object>(
+  name: string,
+  ...errors: IsValidContract<Contract> extends true
+    ? []
+    : [diagnosis: DiagnoseContract<Contract>]
+) {
   return {
     implement<
       Methods extends
