@@ -3,7 +3,7 @@ import type {
   ScompTransportMessageMeta,
   ScompTransportSecurityPolicy,
 } from "@scomp/types";
-import type { ISocketAdapter, SocketAdapterFactory } from "./socket-adapter";
+import type { ISocketAdapter, SocketAdapterFactory } from "@scomp/transport-websocket-shared";
 
 // ---------------------------------------------------------------------------
 // Errors

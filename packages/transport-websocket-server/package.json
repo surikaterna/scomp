@@ -15,6 +15,7 @@
     "@scomp/transport-shared": "workspace:*",
     "@scomp/types": "workspace:*",
     "@scomp/transport-websocket-client": "workspace:*",
+    "@scomp/transport-websocket-shared": "workspace:*",
     "@scomp/transport-websocket-server-runtime": "workspace:*",
     "ws": "^8.18.3"
   },

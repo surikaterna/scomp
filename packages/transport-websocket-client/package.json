@@ -12,10 +12,8 @@
   "dependencies": {
     "@scomp/core": "workspace:*",
     "@scomp/transport-shared": "workspace:*",
-    "@scomp/types": "workspace:*",
-    "ws": "^8.18.3"
+    "@scomp/transport-websocket-shared": "workspace:*",
+    "@scomp/types": "workspace:*"
   },
-  "devDependencies": {
-    "@types/ws": "^8.18.1"
-  }
+  "devDependencies": {}
 }

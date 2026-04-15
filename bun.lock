@@ -121,11 +121,8 @@
       "dependencies": {
         "@scomp/core": "workspace:*",
         "@scomp/transport-shared": "workspace:*",
+        "@scomp/transport-websocket-shared": "workspace:*",
         "@scomp/types": "workspace:*",
-        "ws": "^8.18.3",
-      },
-      "devDependencies": {
-        "@types/ws": "^8.18.1",
       },
     },
     "packages/transport-websocket-server": {
@@ -136,6 +133,7 @@
         "@scomp/transport-shared": "workspace:*",
         "@scomp/transport-websocket-client": "workspace:*",
         "@scomp/transport-websocket-server-runtime": "workspace:*",
+        "@scomp/transport-websocket-shared": "workspace:*",
         "@scomp/types": "workspace:*",
         "ws": "^8.18.3",
       },
@@ -150,6 +148,16 @@
         "@scomp/core": "workspace:*",
         "@scomp/transport-shared": "workspace:*",
         "@scomp/types": "workspace:*",
+      },
+    },
+    "packages/transport-websocket-shared": {
+      "name": "@scomp/transport-websocket-shared",
+      "version": "0.0.1",
+      "dependencies": {
+        "ws": "^8.18.3",
+      },
+      "devDependencies": {
+        "@types/ws": "^8.18.1",
       },
     },
     "packages/types": {
@@ -543,6 +551,8 @@
     "@scomp/transport-websocket-server": ["@scomp/transport-websocket-server@workspace:packages/transport-websocket-server"],
 
     "@scomp/transport-websocket-server-runtime": ["@scomp/transport-websocket-server-runtime@workspace:packages/transport-websocket-server-runtime"],
+
+    "@scomp/transport-websocket-shared": ["@scomp/transport-websocket-shared@workspace:packages/transport-websocket-shared"],
 
     "@scomp/types": ["@scomp/types@workspace:packages/types"],
 

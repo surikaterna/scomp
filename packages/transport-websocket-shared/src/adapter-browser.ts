@@ -20,7 +20,7 @@ async function toText(data: unknown): Promise<string> {
  * `onMessage` converts Blob / ArrayBuffer data to text before
  * invoking the handler so the transport layer sees only strings.
  */
-class BrowserSocketAdapter implements ISocketAdapter {
+export class BrowserSocketAdapter implements ISocketAdapter {
   private readonly socket: WebSocket;
   private readonly listeners: Array<{
     type: string;

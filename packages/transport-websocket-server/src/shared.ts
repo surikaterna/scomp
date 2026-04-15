@@ -1,7 +1,7 @@
+import { type SocketAdapterFactory } from "@scomp/transport-websocket-shared";
 import {
   WebSocketClientTransport,
   type WebSocketClientTransportConfig,
-  type SocketAdapterFactory,
 } from "@scomp/transport-websocket-client";
 import type { ITransport } from "@scomp/core";
 import type { ScompTransportSecurityPolicy } from "@scomp/types";

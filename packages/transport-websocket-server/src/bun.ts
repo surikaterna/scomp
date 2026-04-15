@@ -12,7 +12,7 @@ import {
   parseTransportMessage,
   WebSocketServerRuntime,
 } from "@scomp/transport-websocket-server-runtime";
-import { createBrowserSocketAdapterFactory } from "@scomp/transport-websocket-client";
+import { createBrowserSocketAdapterFactory } from "@scomp/transport-websocket-shared";
 import {
   type BunWebSocketServerTransportConfig,
   resolveOutboundTransport,

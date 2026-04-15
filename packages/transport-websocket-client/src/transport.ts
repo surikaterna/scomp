@@ -21,7 +21,7 @@ import {
   checkSecurity,
   type TransportMessage,
 } from "@scomp/transport-shared";
-import { type ISocketAdapter, SOCKET_OPEN } from "./socket-adapter";
+import { type ISocketAdapter, SOCKET_OPEN } from "@scomp/transport-websocket-shared";
 import {
   SocketDisconnectedError,
   RequestTimeoutError,

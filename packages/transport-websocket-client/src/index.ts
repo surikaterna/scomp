@@ -1,10 +1,5 @@
 export { WebSocketClientTransport } from "./transport";
 export {
-  createBrowserSocketAdapterFactory,
-  type BrowserWebSocketCtor,
-} from "./adapter-browser";
-export { createNodeSocketAdapterFactory } from "./adapter-node";
-export {
   SocketDisconnectedError,
   RequestTimeoutError,
   InFlightLimitError,
@@ -15,12 +10,17 @@ export {
   type WebSocketTransportEvent,
   type FeedState,
 } from "./client-types";
+export { reconnectWithBackoff, type ReconnectOptions } from "./reconnect";
 export {
+  createBrowserSocketAdapterFactory,
+  type BrowserWebSocketCtor,
+  createNodeSocketAdapterFactory,
+  NodeSocketAdapter,
+  BrowserSocketAdapter,
   type ISocketAdapter,
   type SocketAdapterFactory,
   SOCKET_OPEN,
-} from "./socket-adapter";
-export { reconnectWithBackoff, type ReconnectOptions } from "./reconnect";
+} from "@scomp/transport-websocket-shared";
 
 import { WebSocketClientTransport } from "./transport";
 import type { WebSocketClientTransportConfig } from "./client-types";

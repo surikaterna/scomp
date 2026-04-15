@@ -16,7 +16,7 @@ import {
   parseTransportMessage,
   WebSocketServerRuntime,
 } from "@scomp/transport-websocket-server-runtime";
-import { createNodeSocketAdapterFactory } from "@scomp/transport-websocket-client";
+import { createNodeSocketAdapterFactory } from "@scomp/transport-websocket-shared";
 import WebSocket, { type RawData, WebSocketServer } from "ws";
 import {
   type NodeWebSocketServerTransportConfig,
