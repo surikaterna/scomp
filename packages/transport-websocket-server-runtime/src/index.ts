@@ -2,10 +2,10 @@ import {
   SCOMP_FRAMEWORK_PREFIX,
   SCOMP_SCOPE,
   ScompFrameworkMethods,
+  createFeedHash,
   type CompiledRoute,
 } from "@scomp/core";
 import {
-  createFeedHash,
   type ScompErrorCode,
   type ScompFeedChunkEnvelope,
   type ScompTransportMessageMeta,

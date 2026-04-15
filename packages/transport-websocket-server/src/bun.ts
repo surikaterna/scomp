@@ -12,7 +12,7 @@ import {
   parseTransportMessage,
   WebSocketServerRuntime,
 } from "@scomp/transport-websocket-server-runtime";
-import { createBrowserSocketAdapterFactory } from "@scomp/transport-websocket-client";
+import { createBrowserSocketAdapterFactory } from "@scomp/transport-websocket-shared";
 import {
   type BunWebSocketServerTransportConfig,
   resolveOutboundTransport,
@@ -200,15 +200,15 @@ export class BunWebSocketServerTransport implements ITransport {
 
   async request(
     route: string,
-    payload: any,
+    payload: unknown,
     options?: ScompClientInvokeOptions,
-  ): Promise<any> {
+  ): Promise<unknown> {
     return this.getOutboundTransport().request(route, payload, options);
   }
 
   async signal(
     route: string,
-    payload: any,
+    payload: unknown,
     options?: ScompClientInvokeOptions,
   ): Promise<void> {
     await this.getOutboundTransport().signal(route, payload, options);
@@ -216,9 +216,9 @@ export class BunWebSocketServerTransport implements ITransport {
 
   feed(
     route: string,
-    payload: any,
+    payload: unknown,
     options?: ScompClientInvokeOptions,
-  ): AsyncIterable<any> {
+  ): AsyncIterable<unknown> {
     return this.getOutboundTransport().feed(route, payload, options);
   }
 

@@ -21,22 +21,28 @@ import {
   checkSecurity,
   type TransportMessage,
 } from "@scomp/transport-shared";
-import { type ISocketAdapter, SOCKET_OPEN } from "./socket-adapter";
+import { type ISocketAdapter, SOCKET_OPEN } from "@scomp/transport-websocket-shared";
 import {
   SocketDisconnectedError,
+  RequestTimeoutError,
+  InFlightLimitError,
   enqueueFeedChunk,
   drainPendingFeedChunks,
   handleDisconnect,
+  createSocketConnection,
   type WebSocketClientTransportConfig,
+  type WebSocketTransportEvent,
   type PendingRequest,
   type FeedState,
 } from "./client-types";
+import { runReconnectLoop } from "./reconnect";
 
 export class WebSocketClientTransport implements ITransport {
   private readonly config: WebSocketClientTransportConfig;
   private socket?: ISocketAdapter;
   private openingPromise?: Promise<ISocketAdapter>;
   private lastDisconnectError?: Error;
+  private reconnectAbort?: AbortController;
   private readonly pendingRequests = new Map<string, PendingRequest>();
   private readonly feeds = new Map<string, FeedState>();
   private readonly pendingFeedChunks = new Map<
@@ -53,6 +59,7 @@ export class WebSocketClientTransport implements ITransport {
   }
 
   async close(): Promise<void> {
+    this.reconnectAbort?.abort();
     const socket = this.socket;
     this.onDisconnect(
       new SocketDisconnectedError("WebSocket transport closed."),
@@ -69,29 +76,26 @@ export class WebSocketClientTransport implements ITransport {
 
   async request(
     route: string,
-    payload: any,
+    payload: unknown,
     options?: ScompClientInvokeOptions,
-  ): Promise<any> {
+  ): Promise<unknown> {
     return this.sendRpc(route, "request", payload, options);
   }
 
   async signal(
     route: string,
-    payload: any,
+    payload: unknown,
     options?: ScompClientInvokeOptions,
   ): Promise<void> {
     const socket = await this.getSocket();
-    const operation: ScompTransportOperation = "signal";
-    const priorityMeta = toPriorityMeta(options);
-    const baseMeta = mergeMeta(await this.resolveMeta(), options?.meta);
-    const effectiveMeta = mergeMeta(baseMeta, priorityMeta);
+    const meta = await this.composeOutboundMeta(options, undefined);
     const { allowed, principal } = await checkSecurity(this.config.security, {
       direction: "outbound",
       transport: "websocket",
       route,
-      operation,
+      operation: "signal",
       payload,
-      meta: effectiveMeta,
+      meta,
     });
     if (!allowed) throw new Error(`signal not authorized for route: ${route}`);
 
@@ -99,7 +103,7 @@ export class WebSocketClientTransport implements ITransport {
       route,
       op: "signal",
       payload,
-      meta: mergeMeta(effectiveMeta, toPrincipalMeta(principal)),
+      meta: mergeMeta(meta, toPrincipalMeta(principal)),
     };
     if (options?.feed) envelope.feed = options.feed;
     if (options?.method) envelope.method = options.method;
@@ -109,15 +113,17 @@ export class WebSocketClientTransport implements ITransport {
 
   feed(
     route: string,
-    payload: any,
+    payload: unknown,
     options?: ScompClientInvokeOptions,
-  ): AsyncIterable<any> {
+  ): AsyncIterable<unknown> {
     const self = this;
 
     return {
       async *[Symbol.asyncIterator]() {
         const handshake = await self.sendRpc(route, "feed", payload, options);
-        const feedHash = String(handshake?.feed ?? "");
+        const feedHash = String(
+          (handshake as Record<string, unknown> | null | undefined)?.feed ?? "",
+        );
         if (!feedHash) {
           throw new Error(
             "Feed start response did not include a feed identifier.",
@@ -187,44 +193,33 @@ export class WebSocketClientTransport implements ITransport {
     };
   }
 
-  // -----------------------------------------------------------------------
   // Private — socket lifecycle
-  // -----------------------------------------------------------------------
 
-  private isOpen(socket: ISocketAdapter): boolean {
-    return socket.readyState === SOCKET_OPEN;
-  }
+  private isOpen(s: ISocketAdapter): boolean { return s.readyState === SOCKET_OPEN; }
 
   private async getSocket(): Promise<ISocketAdapter> {
     if (this.socket && this.isOpen(this.socket)) return this.socket;
     if (this.openingPromise) return this.openingPromise;
 
-    this.openingPromise = new Promise<ISocketAdapter>((resolve, reject) => {
-      const adapter = this.config.socketAdapter(
-        this.config.url,
-        this.config.protocols,
-      );
+    this.openingPromise = this.connectSocket().then((adapter) => {
+      this.socket = adapter;
+      this.lastDisconnectError = undefined;
+      this.openingPromise = undefined;
+      this.emitEvent({ type: "connection_opened" });
+      return adapter;
+    });
 
-      const onOpen = () => {
-        adapter.removeAllHandlers();
-        this.socket = adapter;
-        this.lastDisconnectError = undefined;
-        this.attachSocketHandlers(adapter);
-        this.openingPromise = undefined;
-        resolve(adapter);
-      };
-
-      const onError = (error: unknown) => {
-        adapter.removeAllHandlers();
-        this.openingPromise = undefined;
-        reject(error);
-      };
-
-      adapter.onOpen(onOpen);
-      adapter.onError(onError);
+    this.openingPromise.catch(() => {
+      this.openingPromise = undefined;
     });
 
     return this.openingPromise;
+  }
+
+  private connectSocket(): Promise<ISocketAdapter> {
+    return createSocketConnection(this.config, (adapter) => {
+      this.attachSocketHandlers(adapter);
+    });
   }
 
   private attachSocketHandlers(adapter: ISocketAdapter): void {
@@ -239,9 +234,7 @@ export class WebSocketClientTransport implements ITransport {
     adapter.onError((error) => this.onDisconnect(error));
   }
 
-  // -----------------------------------------------------------------------
   // Private — message handling
-  // -----------------------------------------------------------------------
 
   private handleIncoming(message: TransportMessage): void {
     if (isFeedChunkEnvelope(message)) {
@@ -253,7 +246,11 @@ export class WebSocketClientTransport implements ITransport {
         this.pendingFeedChunks.set(feedId, pending);
         return;
       }
-      enqueueFeedChunk(feed, message);
+      enqueueFeedChunk(
+        feed,
+        message,
+        this.config.feedBufferHighWaterMark ?? 1_024,
+      );
       return;
     }
 
@@ -287,18 +284,54 @@ export class WebSocketClientTransport implements ITransport {
       error,
     );
     this.lastDisconnectError = disconnectError;
+    this.emitEvent({
+      type: "connection_closed",
+      reason: disconnectError.message,
+    });
+    if (
+      this.config.reconnect?.enabled &&
+      !this.reconnectAbort?.signal.aborted &&
+      !this.openingPromise
+    ) {
+      this.reconnectAbort = new AbortController();
+      const loop = runReconnectLoop({
+        cfg: this.config.reconnect,
+        connect: () => this.connectSocket(),
+        onConnected: (s) => {
+          this.socket = s;
+          this.emitEvent({ type: "connection_opened" });
+        },
+        emitEvent: (e) => this.emitEvent(e),
+        signal: this.reconnectAbort.signal,
+      });
+      this.openingPromise = loop.then((s) => {
+        if (!s) throw new Error("Reconnect failed");
+        return s;
+      });
+      void this.openingPromise.catch(() => {}).finally(() => {
+        this.openingPromise = undefined;
+      });
+    }
   }
 
-  // -----------------------------------------------------------------------
+  private emitEvent(event: WebSocketTransportEvent): void {
+    this.config.onEvent?.(event);
+  }
+
   // Private — RPC helpers
-  // -----------------------------------------------------------------------
 
   private async sendRpc(
     route: string,
     op: ScompTransportOperation,
     payload: unknown,
     options?: ScompClientInvokeOptions,
-  ): Promise<any> {
+  ): Promise<unknown> {
+    const maxInFlight = this.config.maxInFlightRequests ?? 10_000;
+    if (this.pendingRequests.size >= maxInFlight) {
+      this.emitEvent({ type: "in_flight_limit", route, limit: maxInFlight });
+      throw new InFlightLimitError(maxInFlight);
+    }
+
     const socket = await this.getSocket();
     const { allowed, principal } = await checkSecurity(this.config.security, {
       direction: "outbound",
@@ -311,7 +344,7 @@ export class WebSocketClientTransport implements ITransport {
     if (!allowed) throw new Error(`${op} not authorized for route: ${route}`);
 
     const id = randomUUID();
-    const response = new Promise<unknown>((resolve, reject) => {
+    const replyPromise = new Promise<unknown>((resolve, reject) => {
       this.pendingRequests.set(id, { resolve, reject });
     });
 
@@ -327,13 +360,28 @@ export class WebSocketClientTransport implements ITransport {
     if (options?.method) envelope.method = options.method;
 
     socket.send(JSON.stringify(envelope));
-    return response;
+
+    const timeoutMs = this.config.requestTimeoutMs ?? 30_000;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingRequests.delete(id);
+        this.emitEvent({
+          type: "request_timeout",
+          route,
+          requestId: id,
+          timeoutMs,
+        });
+        reject(new RequestTimeoutError(route, timeoutMs));
+      }, timeoutMs);
+      // Clear timer when reply arrives or disconnect rejects.
+      // The .catch prevents an unhandled rejection from the finally chain.
+      void replyPromise.finally(() => clearTimeout(timer)).catch(() => {});
+    });
+
+    return Promise.race([replyPromise, timeoutPromise]);
   }
 
-  /**
-   * Deterministic outbound meta precedence:
-   * config.meta → options.meta → priority hints → principal auth context.
-   */
+  /** Deterministic outbound meta: config.meta → options.meta → priority → principal. */
   private async composeOutboundMeta(
     options: ScompClientInvokeOptions | undefined,
     principal: ScompTransportPrincipal | undefined,

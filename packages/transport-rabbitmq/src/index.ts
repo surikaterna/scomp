@@ -171,7 +171,11 @@ export class RabbitMQTransport implements ITransport {
     options?: ScompClientInvokeOptions,
   ): Promise<void> {
     const priorityMeta = toPriorityMeta(options);
-    const baseMeta = mergeMeta(options?.meta, priorityMeta);
+    const resolvedConfigMeta = await this.resolveConfigMeta();
+    const baseMeta = mergeMeta(
+      mergeMeta(resolvedConfigMeta, options?.meta),
+      priorityMeta,
+    );
     this.emitPriorityDecision("outbound", route, "signal", baseMeta);
     const { allowed, principal } = await checkTransportSecurity(
       this.config.security,
@@ -247,6 +251,7 @@ export class RabbitMQTransport implements ITransport {
       security: this.config.security,
       serializer: this.serializer,
       contentType: this.contentType,
+      configMeta: this.config.meta,
       getChannel: () => this.getChannel(),
       emitEvent: (e) => this.emitEvent(e),
       emitPriorityDecision: (d, r, o, m) =>
@@ -350,6 +355,15 @@ export class RabbitMQTransport implements ITransport {
     this.emitEvent(
       buildPriorityDecisionEvent(direction, route, operation, meta),
     );
+  }
+
+  private async resolveConfigMeta(): Promise<
+    ScompTransportMessageMeta | undefined
+  > {
+    const metaConfig = this.config.meta;
+    if (!metaConfig) return undefined;
+    if (typeof metaConfig === "function") return metaConfig();
+    return metaConfig;
   }
 
   private now(): number {

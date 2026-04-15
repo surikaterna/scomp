@@ -1,6 +1,13 @@
 export { createContractToken, type ContractToken } from "./contract-token";
 
 export {
+  createFeedHash,
+  createRuntimeNeutralFeedHasher,
+  type FeedHashOptions,
+  type ScompFeedHashFunction,
+} from "./feed-hash";
+
+export {
   SCOMP_FRAMEWORK_PREFIX,
   ScompFrameworkMethods,
   type ScompFrameworkMethod,

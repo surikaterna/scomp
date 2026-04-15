@@ -12,7 +12,7 @@ function toText(data: RawData): string {
  * Wraps the Node.js `ws` WebSocket in the platform-agnostic
  * `ISocketAdapter` contract.
  */
-class NodeSocketAdapter implements ISocketAdapter {
+export class NodeSocketAdapter implements ISocketAdapter {
   private readonly socket: WebSocket;
 
   constructor(url: string, protocols?: string | string[]) {

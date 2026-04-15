@@ -104,6 +104,9 @@ export interface RabbitMQTransportConfig {
   prefetch?: number;
   serviceName?: string;
   serializer?: import("@scomp/types").ScompSerializer;
+  meta?:
+    | ScompTransportMessageMeta
+    | (() => ScompTransportMessageMeta | Promise<ScompTransportMessageMeta>);
   retry?: RabbitMQTransportRetryConfig;
   security?: RabbitMQTransportSecurityConfig;
   performance?: RabbitMQTransportPerformanceConfig;

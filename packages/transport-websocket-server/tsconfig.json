@@ -11,6 +11,7 @@
     { "path": "../transport-shared" },
     { "path": "../types" },
     { "path": "../transport-websocket-client" },
+    { "path": "../transport-websocket-shared" },
     { "path": "../transport-websocket-server-runtime" }
   ],
   "include": ["src/**/*"]

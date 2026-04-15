@@ -21,6 +21,19 @@ type PendingPull<ResponseType> = {
 };
 
 /**
+ * Safely coerce an unknown thrown value to the expected error type.
+ * Returns the value as-is when it's already an Error (the common case).
+ * Wraps non-Error values in a standard Error so callers always get a
+ * well-formed error object.
+ */
+function toErrorType<ErrorType>(value: unknown): ErrorType {
+  if (value instanceof Error) {
+    return value as ErrorType;
+  }
+  return new Error(String(value)) as ErrorType;
+}
+
+/**
  * Compatibility shape for adapting legacy observable implementations.
  */
 export interface LegacyObservableLike<ResponseType = unknown, ErrorType = Error> {
@@ -123,10 +136,11 @@ implements ScompFeedLike<ResponseType, ErrorType> {
     const pendingPulls = this._pendingPulls.splice(0);
     if (pendingPulls.length > 0) {
       pendingPulls.forEach((pendingPull) => pendingPull.reject(errorResponse));
-      return this;
+    } else {
+      this._eventQueue.push({ type: 'error', value: errorResponse });
     }
 
-    this._eventQueue.push({ type: 'error', value: errorResponse });
+    this._clearListeners();
     return this;
   }
 
@@ -144,10 +158,11 @@ implements ScompFeedLike<ResponseType, ErrorType> {
     const pendingPulls = this._pendingPulls.splice(0);
     if (pendingPulls.length > 0) {
       pendingPulls.forEach((pendingPull) => pendingPull.resolve({ value: undefined, done: true }));
-      return this;
+    } else {
+      this._eventQueue.push({ type: 'complete' });
     }
 
-    this._eventQueue.push({ type: 'complete' });
+    this._clearListeners();
     return this;
   }
 
@@ -202,17 +217,24 @@ implements ScompFeedLike<ResponseType, ErrorType> {
     return Promise.resolve({ value: undefined, done: true });
   }
 
+  private _clearListeners(): void {
+    this._onNextListeners.length = 0;
+    this._onErrorListeners.length = 0;
+    this._onCompleteListeners.length = 0;
+    this._onUnsubscribeListeners.length = 0;
+  }
+
   private async _consumeSource(iterable: AsyncIterable<ResponseType>): Promise<void> {
     try {
       for await (const value of iterable) {
         if (this._isUnsubscribed) {
-          return;
+          break;
         }
         this.next(value);
       }
       this.complete();
     } catch (error) {
-      this.error(error as ErrorType);
+      this.error(toErrorType<ErrorType>(error));
     }
   }
 }
@@ -236,13 +258,13 @@ export function fromAsyncIterable<ResponseType>(
     try {
       for await (const nextResponse of iterable) {
         if (feed.isUnsubscribed()) {
-          return;
+          break;
         }
         feed.next(nextResponse);
       }
       feed.complete();
     } catch (error) {
-      feed.error(error);
+      feed.error(toErrorType(error));
     }
   })();
 

@@ -1,6 +1,5 @@
-import type { CompiledRoute } from "@scomp/core";
+import { type CompiledRoute, createFeedHash } from "@scomp/core";
 import {
-  createFeedHash,
   type ScompErrorCode,
   type ScompTransportRequestEnvelope,
   type ScompTransportResponseEnvelope,

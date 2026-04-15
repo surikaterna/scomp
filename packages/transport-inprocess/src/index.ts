@@ -1,107 +1,95 @@
-import {
-  fromAsyncIterable,
-  type ScompFeed,
-  type ScompServiceDefinition,
-  type ScompTransport
+import type {
+  CompiledRoute,
+  CompiledRouter,
+  ITransport,
+  ScompClientInvokeOptions,
 } from '@scomp/core';
-
-type AnyServiceDefinition = ScompServiceDefinition<
-  Record<string, (...args: Array<unknown>) => Promise<unknown>>,
-  Record<string, (...args: Array<unknown>) => AsyncIterable<unknown> | Iterable<unknown>>,
-  Record<string, (...args: Array<unknown>) => void | Promise<void>>
->;
 
 /**
  * Configuration for {@link createInprocessTransport}.
  */
-export interface InprocessTransportOptions {
+export interface InprocessTransportConfig {
   /**
-   * Optional error sink for command failures.
-   * If omitted, asynchronous command failures are re-thrown in a microtask.
+   * Optional error sink for signal (fire-and-forget) failures.
+   * If omitted, asynchronous signal failures are re-thrown in a microtask.
    */
-  onFireAndForgetError?: (error: unknown, methodName: string, args: ReadonlyArray<unknown>) => void;
+  onSignalError?: (error: unknown, route: string) => void;
 }
 
-function isScompFeed(value: unknown): value is ScompFeed<unknown, unknown> {
-  if (!value || typeof value !== 'object') {
-    return false;
+function resolveRoute(router: CompiledRouter | undefined, route: string): CompiledRoute {
+  if (!router) {
+    throw new Error('No routes registered. Call registerRoutes() before invoking methods.');
   }
 
-  const maybeFeed = value as {
-    onNext?: unknown;
-    onError?: unknown;
-    onComplete?: unknown;
-    next?: unknown;
-    error?: unknown;
-    complete?: unknown;
-    [Symbol.asyncIterator]?: unknown;
-  };
+  const compiledRoute = router[route];
+  if (!compiledRoute) {
+    throw new Error(`Route "${route}" not found in registered routes.`);
+  }
 
-  return typeof maybeFeed.onNext === 'function'
-    && typeof maybeFeed.onError === 'function'
-    && typeof maybeFeed.onComplete === 'function'
-    && typeof maybeFeed.next === 'function'
-    && typeof maybeFeed.error === 'function'
-    && typeof maybeFeed.complete === 'function'
-    && typeof maybeFeed[Symbol.asyncIterator] === 'function';
+  return compiledRoute;
 }
 
-function isIterableLike(value: unknown): value is AsyncIterable<unknown> | Iterable<unknown> {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
+function invokeHandler(compiledRoute: CompiledRoute, payload: unknown): unknown {
+  const parsed = compiledRoute.parser ? compiledRoute.parser(payload) : payload;
+  return compiledRoute.handler(parsed);
+}
 
-  const maybeIterable = value as {
-    [Symbol.iterator]?: unknown;
-    [Symbol.asyncIterator]?: unknown;
-  };
-
-  return typeof maybeIterable[Symbol.iterator] === 'function'
-    || typeof maybeIterable[Symbol.asyncIterator] === 'function';
+function isAsyncIterable(value: unknown): value is AsyncIterable<unknown> {
+  return (
+    value !== null
+    && value !== undefined
+    && typeof value === 'object'
+    && typeof (value as Record<symbol, unknown>)[Symbol.asyncIterator] === 'function'
+  );
 }
 
 /**
- * Creates an in-process transport that directly invokes service handlers.
+ * Creates an in-process transport that directly invokes service handlers
+ * within the same process, implementing the {@link ITransport} interface.
  */
 export function createInprocessTransport(
-  service: AnyServiceDefinition,
-  options: InprocessTransportOptions = {}
-): ScompTransport {
+  config: InprocessTransportConfig = {},
+): ITransport {
+  let router: CompiledRouter | undefined;
+
   return {
-    async request<ResponseType>(methodName: string, args: ReadonlyArray<unknown>) {
-      const result = service.invoke(methodName, args);
-
-      if (isScompFeed(result) || isIterableLike(result)) {
-        throw new Error(`Method ${methodName} is configured as a feed and cannot be used as request/response.`);
-      }
-
-      return Promise.resolve(result as ResponseType);
+    registerRoutes(incoming: Record<string, unknown>): void {
+      router = incoming as CompiledRouter;
     },
 
-    observe<ResponseType = unknown, ErrorType = Error>(
-      methodName: string,
-      args: ReadonlyArray<unknown>
-    ) {
-      const result = service.invoke(methodName, args);
-
-      if (isScompFeed(result)) {
-        return result as ScompFeed<ResponseType, ErrorType>;
-      }
-
-      if (isIterableLike(result)) {
-        return fromAsyncIterable(result) as ScompFeed<ResponseType, ErrorType>;
-      }
-
-      throw new Error(`Method ${methodName} did not return a feed-compatible value.`);
+    close(): void {
+      router = undefined;
     },
 
-    fireAndForget(methodName: string, args: ReadonlyArray<unknown>) {
+    async request(
+      route: string,
+      payload: unknown,
+      _options?: ScompClientInvokeOptions,
+    ): Promise<unknown> {
+      const compiledRoute = resolveRoute(router, route);
+
+      if (compiledRoute.kind === 'feed') {
+        throw new Error(
+          `Route "${route}" is a feed and cannot be used as request/response.`,
+        );
+      }
+
+      return Promise.resolve(invokeHandler(compiledRoute, payload));
+    },
+
+    async signal(
+      route: string,
+      payload: unknown,
+      _options?: ScompClientInvokeOptions,
+    ): Promise<void> {
+      const compiledRoute = resolveRoute(router, route);
+
       try {
-        const result = service.invoke(methodName, args);
+        const result = invokeHandler(compiledRoute, payload);
 
         void Promise.resolve(result).catch((error) => {
-          if (options.onFireAndForgetError) {
-            options.onFireAndForgetError(error, methodName, args);
+          if (config.onSignalError) {
+            config.onSignalError(error, route);
             return;
           }
 
@@ -110,13 +98,37 @@ export function createInprocessTransport(
           });
         });
       } catch (error) {
-        if (options.onFireAndForgetError) {
-          options.onFireAndForgetError(error, methodName, args);
+        if (config.onSignalError) {
+          config.onSignalError(error, route);
           return;
         }
 
         throw error;
       }
-    }
+    },
+
+    feed(
+      route: string,
+      payload: unknown,
+      _options?: ScompClientInvokeOptions,
+    ): AsyncIterable<unknown> {
+      const compiledRoute = resolveRoute(router, route);
+
+      if (compiledRoute.kind !== 'feed') {
+        throw new Error(
+          `Route "${route}" is not a feed route (kind: "${compiledRoute.kind}").`,
+        );
+      }
+
+      const result = invokeHandler(compiledRoute, payload);
+
+      if (isAsyncIterable(result)) {
+        return result;
+      }
+
+      throw new Error(
+        `Feed handler for route "${route}" did not return an AsyncIterable.`,
+      );
+    },
   };
 }

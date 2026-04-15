@@ -16,7 +16,7 @@ import {
   parseTransportMessage,
   WebSocketServerRuntime,
 } from "@scomp/transport-websocket-server-runtime";
-import { createNodeSocketAdapterFactory } from "@scomp/transport-websocket-client";
+import { createNodeSocketAdapterFactory } from "@scomp/transport-websocket-shared";
 import WebSocket, { type RawData, WebSocketServer } from "ws";
 import {
   type NodeWebSocketServerTransportConfig,
@@ -157,15 +157,15 @@ export class NodeWebSocketServerTransport implements ITransport {
 
   async request(
     route: string,
-    payload: any,
+    payload: unknown,
     options?: ScompClientInvokeOptions,
-  ): Promise<any> {
+  ): Promise<unknown> {
     return this.getOutboundTransport().request(route, payload, options);
   }
 
   async signal(
     route: string,
-    payload: any,
+    payload: unknown,
     options?: ScompClientInvokeOptions,
   ): Promise<void> {
     await this.getOutboundTransport().signal(route, payload, options);
@@ -173,9 +173,9 @@ export class NodeWebSocketServerTransport implements ITransport {
 
   feed(
     route: string,
-    payload: any,
+    payload: unknown,
     options?: ScompClientInvokeOptions,
-  ): AsyncIterable<any> {
+  ): AsyncIterable<unknown> {
     return this.getOutboundTransport().feed(route, payload, options);
   }
 

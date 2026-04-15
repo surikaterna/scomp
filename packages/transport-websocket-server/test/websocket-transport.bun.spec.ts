@@ -4,7 +4,7 @@ import { createServer } from "node:net";
 import {
   WebSocketClientTransport,
   createNodeSocketAdapterFactory,
-} from "../../transport-websocket-client/src";
+} from "@scomp/transport-websocket-client";
 import { BunWebSocketServerTransport } from "../src/bun";
 
 const nodeSocketAdapter = createNodeSocketAdapterFactory();

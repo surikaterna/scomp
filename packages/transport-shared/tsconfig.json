@@ -6,6 +6,6 @@
     "outDir": "dist",
     "tsBuildInfoFile": "dist/.tsbuildinfo"
   },
-  "references": [{ "path": "../core" }, { "path": "../types" }],
+  "references": [{ "path": "../types" }],
   "include": ["src/**/*"]
 }
