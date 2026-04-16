@@ -268,6 +268,120 @@ describe("createAuthMiddleware", () => {
     expect(capturedCtx?.principal).toEqual(principal);
   });
 
+  it("denies unauthorized signal operations", async () => {
+    const mw = createAuthMiddleware({ authorize: () => false });
+    const fns = getMiddlewareFns([mw], "inbound");
+    const ctx: ScompMiddlewareContext = {
+      route: "Test.notify",
+      operation: "signal",
+      direction: "inbound",
+      payload: "data",
+    };
+    await expect(
+      runMiddlewareChain(fns, ctx, async (c) => c.payload),
+    ).rejects.toThrow(ScompAuthError);
+  });
+
+  it("denies unauthorized feed operations", async () => {
+    const mw = createAuthMiddleware({ authorize: () => false });
+    const fns = getMiddlewareFns([mw], "inbound");
+    const ctx: ScompMiddlewareContext = {
+      route: "Test.stream",
+      operation: "feed",
+      direction: "inbound",
+      payload: "data",
+    };
+    await expect(
+      runMiddlewareChain(fns, ctx, async (c) => c.payload),
+    ).rejects.toThrow(ScompAuthError);
+  });
+
+  it("allows authorized signal operations", async () => {
+    const mw = createAuthMiddleware({ authorize: () => true });
+    const fns = getMiddlewareFns([mw], "inbound");
+    const ctx: ScompMiddlewareContext = {
+      route: "Test.notify",
+      operation: "signal",
+      direction: "inbound",
+      payload: "data",
+    };
+    const result = await runMiddlewareChain(fns, ctx, async (c) => c.payload);
+    expect(result).toBe("data");
+  });
+
+  it("allows authorized feed operations", async () => {
+    const mw = createAuthMiddleware({ authorize: () => true });
+    const fns = getMiddlewareFns([mw], "inbound");
+    const ctx: ScompMiddlewareContext = {
+      route: "Test.stream",
+      operation: "feed",
+      direction: "inbound",
+      payload: "data",
+    };
+    const result = await runMiddlewareChain(fns, ctx, async (c) => c.payload);
+    expect(result).toBe("data");
+  });
+
+  it("outbound: injects principal into meta", async () => {
+    const principal = {
+      subject: "user-1",
+      tenantId: "tenant-a",
+      scopes: ["read"],
+      claims: {},
+      authType: "jwt",
+    };
+    const mw = createAuthMiddleware({
+      authenticate: () => principal,
+    });
+    const fns = getMiddlewareFns([mw], "outbound");
+    expect(fns).toHaveLength(1);
+
+    const ctx: ScompMiddlewareContext = {
+      route: "Test.echo",
+      operation: "request",
+      direction: "outbound",
+      payload: "data",
+    };
+
+    let capturedCtx: ScompMiddlewareContext | undefined;
+    await runMiddlewareChain(fns, ctx, async (c) => {
+      capturedCtx = c;
+      return c.payload;
+    });
+
+    expect(capturedCtx?.meta).toBeDefined();
+    expect((capturedCtx?.meta as Record<string, unknown>)?.auth).toEqual({
+      subject: "user-1",
+      tenantId: "tenant-a",
+      scopes: ["read"],
+      claims: {},
+      issuedAt: undefined,
+      expiresAt: undefined,
+      authType: "jwt",
+    });
+    expect(capturedCtx?.principal).toEqual(principal);
+  });
+
+  it("outbound: denies unauthorized outbound calls", async () => {
+    const mw = createAuthMiddleware({ authorize: () => false });
+    const fns = getMiddlewareFns([mw], "outbound");
+    const ctx: ScompMiddlewareContext = {
+      route: "Test.echo",
+      operation: "request",
+      direction: "outbound",
+      payload: "data",
+    };
+    await expect(
+      runMiddlewareChain(fns, ctx, async (c) => c.payload),
+    ).rejects.toThrow(ScompAuthError);
+  });
+
+  it("outbound: passes through when no auth hooks configured", () => {
+    const mw = createAuthMiddleware({});
+    const fns = getMiddlewareFns([mw], "outbound");
+    expect(fns).toHaveLength(0);
+  });
+
   it("works with async authenticate/authorize", async () => {
     const mw = createAuthMiddleware({
       authenticate: async () => {
