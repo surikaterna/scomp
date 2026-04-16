@@ -1,11 +1,10 @@
-import type { CompiledRoute, ControlledAsyncIterable } from "@scomp/core";
+import type { CompiledRoute, ControlledAsyncIterable, ScompHandlerContext } from "@scomp/core";
 import type {
   ScompFeedChunkEnvelope,
   ScompTransportMessageMeta,
   ScompTransportPrincipal,
   ScompTransportRequestEnvelope,
   ScompTransportResponseEnvelope,
-  ScompTransportSecurityPolicy,
 } from "@scomp/types";
 import { safeJsonParse } from "@scomp/transport-shared";
 
@@ -31,33 +30,20 @@ export interface RunningFeed<Socket extends RuntimeSocket> {
 
 export type TransportMessage = ScompTransportRequestEnvelope;
 
-export type CheckSecurityResult = {
-  allowed: boolean;
-  principal?: ScompTransportPrincipal;
-};
-
 export type RuntimeHandlers<Socket extends RuntimeSocket> = {
   invokeRoute: (
     route: CompiledRoute,
     message: TransportMessage,
+    ctx?: ScompHandlerContext,
   ) => Promise<unknown>;
   isSocketOpen: (socket: Socket) => boolean;
   onReply: (socket: Socket, response: ScompTransportResponseEnvelope) => void;
   onFeedChunk: (socket: Socket, chunk: ScompFeedChunkEnvelope) => void;
   onFeedExchange: (hash: string) => string;
-  toPrincipalMeta?: (
-    principal: ScompTransportPrincipal | undefined,
-  ) => ScompTransportMessageMeta | undefined;
 };
 
-export type WebSocketServerRuntimeConfig<Socket extends RuntimeSocket> = {
-  security?: ScompTransportSecurityPolicy;
-  getSocketPrincipal: (socket: Socket) => ScompTransportPrincipal | undefined;
-  setSocketPrincipal: (
-    socket: Socket,
-    principal: ScompTransportPrincipal,
-  ) => void;
-} & RuntimeHandlers<Socket>;
+export type WebSocketServerRuntimeConfig<Socket extends RuntimeSocket> =
+  RuntimeHandlers<Socket>;
 
 export function parseTransportMessage(
   text: string,

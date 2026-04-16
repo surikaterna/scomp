@@ -4,10 +4,8 @@ import type {
   ScompClientInvokeOptions,
 } from "@scomp/core";
 import type {
-  ScompTransportPrincipal,
   ScompTransportResponseEnvelope,
 } from "@scomp/types";
-import { toPrincipalMeta } from "@scomp/transport-shared";
 import {
   parseTransportMessage,
   WebSocketServerRuntime,
@@ -63,9 +61,7 @@ declare const Bun: {
   serve(options: BunLikeServeOptions): BunLikeServer;
 };
 
-type BunServerData = {
-  principal?: ScompTransportPrincipal;
-};
+type BunServerData = {};
 
 type BunSocketWithState = BunLikeServerWebSocket & { data: BunServerData };
 
@@ -105,18 +101,10 @@ export class BunWebSocketServerTransport implements ITransport {
   constructor(config: BunWebSocketServerTransportConfig) {
     this.config = config;
     this.runtime = new WebSocketServerRuntime<BunSocketWithState>({
-      security: this.config.security,
-      getSocketPrincipal: (socket) => socket.data?.principal,
-      setSocketPrincipal: (socket, principal) => {
-        socket.data = {
-          ...(socket.data ?? {}),
-          principal,
-        };
-      },
-      invokeRoute: async (route, message) => {
+      invokeRoute: async (route, message, ctx) => {
         const rawPayload = message.payload;
         const payload = route.parser ? route.parser(rawPayload) : rawPayload;
-        return route.handler(payload);
+        return route.handler(payload, ctx);
       },
       isSocketOpen: (socket) => socket.readyState === (1 as BunReadyStateOpen),
       onReply: (socket, response: ScompTransportResponseEnvelope) => {
@@ -126,7 +114,6 @@ export class BunWebSocketServerTransport implements ITransport {
         socket.send(JSON.stringify(chunk));
       },
       onFeedExchange: toFeedExchange,
-      toPrincipalMeta,
     });
   }
 

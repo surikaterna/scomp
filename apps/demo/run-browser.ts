@@ -6,10 +6,6 @@ import {
 } from "@scomp/transport-websocket-client";
 import { createNodeWebSocketServerTransport } from "@scomp/transport-websocket-server";
 import type {
-  ScompTransportSecurityContext,
-  ScompTransportSecurityPolicy,
-} from "@scomp/types";
-import type {
   DemoApiContract,
   LiveTickerInput,
   LiveTickerTick,
@@ -77,22 +73,9 @@ async function runBrowserDemo() {
   const port = Number(process.env.SCOMP_BROWSER_DEMO_PORT ?? 3399);
   const url = `ws://127.0.0.1:${port}`;
 
-  const securityPolicy: ScompTransportSecurityPolicy = {
-    authenticate: ({
-      operation,
-    }: Omit<ScompTransportSecurityContext, "principal">) => ({
-      subject: `browser-demo:${operation}`,
-      tenantId: "tenant-browser-demo",
-      claims: { source: "run-browser" },
-    }),
-    authorize: ({ route }: ScompTransportSecurityContext) =>
-      route.startsWith("users."),
-  };
-
   const server = createNodeWebSocketServerTransport({
     port,
     host: "127.0.0.1",
-    security: securityPolicy,
   });
   await server.registerRoutes(usersService.router);
 
@@ -102,17 +85,6 @@ async function runBrowserDemo() {
     meta: {
       traceId: "demo-browser-trace",
       tags: { source: "demo-browser" },
-    },
-    security: {
-      authenticate: ({
-        operation,
-      }: Omit<ScompTransportSecurityContext, "principal">) => ({
-        subject: `client:${operation}`,
-        tenantId: "tenant-client",
-        claims: { source: "browser-client-hook" },
-      }),
-      authorize: ({ route }: ScompTransportSecurityContext) =>
-        route.startsWith("users."),
     },
   });
 

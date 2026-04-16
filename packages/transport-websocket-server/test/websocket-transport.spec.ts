@@ -9,7 +9,6 @@ import {
   type CompiledRoute,
   type CompiledRouter,
 } from "@scomp/core";
-import type { ScompTransportSecurityContext } from "@scomp/types";
 import {
   WebSocketClientTransport,
   createNodeSocketAdapterFactory,
@@ -316,102 +315,6 @@ describe("WebSocket transports (Node)", () => {
       assert.deepEqual(values, [1, 2]);
     } finally {
       await closeHarness(harness);
-    }
-  });
-
-  it("enforces shared security policy for inbound websocket operations", async () => {
-    const deniedSignals: Array<unknown> = [];
-
-    const router: Record<string, CompiledRoute> = {
-      "secure.echo": {
-        route: "secure.echo",
-        kind: "request",
-        handler: async (payload: unknown) => ({ payload }),
-      },
-      "secure.signal": {
-        route: "secure.signal",
-        kind: "signal",
-        handler: async (payload: unknown) => {
-          deniedSignals.push(payload);
-        },
-      },
-    };
-
-    const seen: Array<{ route: string; operation: string; subject?: string }> =
-      [];
-    const httpServer = createServer();
-    await new Promise<void>((resolve) =>
-      httpServer.listen(0, "127.0.0.1", () => resolve()),
-    );
-    const address = httpServer.address() as AddressInfo;
-    const url = `ws://127.0.0.1:${address.port}`;
-
-    const transport = new NodeWebSocketServerTransport({
-      server: httpServer,
-      security: {
-        authenticate: ({
-          meta,
-        }: Omit<ScompTransportSecurityContext, "principal">) => {
-          const auth = meta?.auth as { token?: string } | undefined;
-          if (auth?.token === "allow") {
-            return { subject: "user:allow" };
-          }
-          return null;
-        },
-        authorize: (ctx: ScompTransportSecurityContext) => {
-          seen.push({
-            route: ctx.route,
-            operation: ctx.operation,
-            subject: ctx.principal?.subject,
-          });
-          return ctx.principal?.subject === "user:allow";
-        },
-      },
-    });
-
-    await transport.registerRoutes(router);
-
-    const deniedClient = new WebSocketClientTransport({
-      url,
-      meta: { auth: { token: "deny" } },
-      socketAdapter: nodeSocketAdapter,
-    });
-    const allowedClient = new WebSocketClientTransport({
-      url,
-      meta: { auth: { token: "allow" } },
-      socketAdapter: nodeSocketAdapter,
-    });
-
-    try {
-      await assert.rejects(
-        () => deniedClient.request("secure.echo", { id: 1 }),
-        /not authorized/i,
-      );
-      const ok = await allowedClient.request("secure.echo", { id: 2 });
-      assert.deepEqual(ok, { payload: { id: 2 } });
-
-      await deniedClient.signal("secure.signal", { denied: true });
-      await wait(15);
-      assert.deepEqual(deniedSignals, []);
-
-      assert.equal(
-        seen.some(
-          (entry) =>
-            entry.route === "secure.echo" && entry.subject === "user:allow",
-        ),
-        true,
-      );
-      assert.equal(
-        seen.some(
-          (entry) =>
-            entry.route === "secure.echo" && entry.subject === undefined,
-        ),
-        true,
-      );
-    } finally {
-      await closeClientTransport(deniedClient);
-      await closeClientTransport(allowedClient);
-      await closeHarness({ httpServer, url, serverTransport: transport });
     }
   });
 });

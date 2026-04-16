@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import type {
-  ScompTransportSecurityPolicy,
   ScompTransportRequestEnvelope,
   ScompTransportResponseEnvelope,
 } from "@scomp/types";
@@ -103,7 +102,6 @@ function createHarness(options?: {
   meta?:
     | Record<string, unknown>
     | (() => Record<string, unknown> | Promise<Record<string, unknown>>);
-  security?: ScompTransportSecurityPolicy;
   requestTimeoutMs?: number;
   connectionTimeoutMs?: number;
   maxInFlightRequests?: number;
@@ -127,7 +125,6 @@ function createHarness(options?: {
   const transport = new WebSocketClientTransport({
     url: "ws://example.test",
     meta: options?.meta,
-    security: options?.security,
     socketAdapter: options?.socketFactory ?? defaultFactory,
     requestTimeoutMs: options?.requestTimeoutMs,
     connectionTimeoutMs: options?.connectionTimeoutMs,
@@ -294,120 +291,6 @@ describe("WebSocketClientTransport (unified)", () => {
 
     const stopResult = await pendingReturn;
     assert.equal(stopResult.done, true);
-  });
-
-  it("executes authenticate and authorize hooks", async () => {
-    const observedOps: Array<string> = [];
-    const observedSubjects: Array<string | undefined> = [];
-
-    const harness = createHarness({
-      meta: { traceId: "trace-security" },
-      security: {
-        authenticate: ({ operation }) => ({
-          subject: `subject:${operation}`,
-          tenantId: "tenant-principal",
-          claims: { via: "authn" },
-        }),
-        authorize: (ctx) => {
-          observedOps.push(ctx.operation);
-          observedSubjects.push(ctx.principal?.subject);
-          return true;
-        },
-      },
-    });
-
-    const requestPending = harness.transport.request(
-      "users.get",
-      { id: 1 },
-      {
-        meta: {
-          tenantId: "tenant-invoke",
-          auth: { source: "invoke" },
-        },
-      },
-    );
-
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    const requestEnvelope = parseEnvelope(harness.sent[0]);
-    harness.getSocket().emitMessage(
-      JSON.stringify({
-        id: requestEnvelope.id,
-        payload: { ok: true },
-      } satisfies ScompTransportResponseEnvelope),
-    );
-    await requestPending;
-
-    await harness.transport.signal(
-      "users.notify",
-      { id: 2 },
-      { meta: { tenantId: "tenant-signal" } },
-    );
-
-    const iterator = harness.transport
-      .feed(
-        "users.live",
-        { room: "alpha" },
-        { meta: { tenantId: "tenant-feed" } },
-      )
-      [Symbol.asyncIterator]();
-    const pendingNext = iterator.next();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    const feedStartEnvelope = parseEnvelope(harness.sent[2]);
-    harness.getSocket().emitMessage(
-      JSON.stringify({
-        id: feedStartEnvelope.id,
-        payload: {
-          feed: "feed-security",
-          exchange: "scomp.live.feed-security",
-        },
-      } satisfies ScompTransportResponseEnvelope),
-    );
-    harness.getSocket().emitMessage(
-      JSON.stringify({
-        channel: "feed",
-        feed: "feed-security",
-        type: "next",
-        payload: { seq: 1 },
-      }),
-    );
-    await pendingNext;
-
-    const pendingReturn = iterator.return?.(undefined);
-    if (!pendingReturn) throw new Error("Expected feed iterator return()");
-
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    await pendingReturn;
-
-    assert.deepEqual(observedOps, ["request", "signal", "feed"]);
-    assert.deepEqual(observedSubjects, [
-      "subject:request",
-      "subject:signal",
-      "subject:feed",
-    ]);
-
-    assert.equal(requestEnvelope.meta?.tenantId, "tenant-principal");
-    assert.equal(
-      (requestEnvelope.meta?.auth as { subject?: string } | undefined)
-        ?.subject,
-      "subject:request",
-    );
-  });
-
-  it("fails denied operations before sending envelopes", async () => {
-    const harness = createHarness({
-      security: {
-        authorize: ({ operation }) => operation !== "signal",
-      },
-    });
-
-    await assert.rejects(
-      () => harness.transport.signal("users.notify", { id: 9 }),
-      /not authorized/i,
-    );
-
-    assert.equal(harness.sent.length, 0);
   });
 
   it("delivers queued feed chunks that arrive before feed start response", async () => {

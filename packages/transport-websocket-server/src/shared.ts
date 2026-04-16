@@ -4,7 +4,6 @@ import {
   type WebSocketClientTransportConfig,
 } from "@scomp/transport-websocket-client";
 import type { ITransport } from "@scomp/core";
-import type { ScompTransportSecurityPolicy } from "@scomp/types";
 
 /**
  * Outbound client config with an optional socketAdapter.
@@ -21,7 +20,6 @@ export interface WebSocketServerTransportBaseConfig {
   host?: string;
   path?: string;
   outbound?: OutboundClientConfig | WebSocketClientTransport;
-  security?: ScompTransportSecurityPolicy;
 }
 
 export interface BunWebSocketServerTransportConfig

@@ -3,6 +3,7 @@ import type {
   CompiledRouter,
   ITransport,
   ScompClientInvokeOptions,
+  ScompHandlerContext,
 } from '@scomp/core';
 
 /**
@@ -29,9 +30,9 @@ function resolveRoute(router: CompiledRouter | undefined, route: string): Compil
   return compiledRoute;
 }
 
-function invokeHandler(compiledRoute: CompiledRoute, payload: unknown): unknown {
+function invokeHandler(compiledRoute: CompiledRoute, payload: unknown, ctx?: ScompHandlerContext): unknown {
   const parsed = compiledRoute.parser ? compiledRoute.parser(payload) : payload;
-  return compiledRoute.handler(parsed);
+  return compiledRoute.handler(parsed, ctx);
 }
 
 function isAsyncIterable(value: unknown): value is AsyncIterable<unknown> {
@@ -64,7 +65,7 @@ export function createInprocessTransport(
     async request(
       route: string,
       payload: unknown,
-      _options?: ScompClientInvokeOptions,
+      options?: ScompClientInvokeOptions,
     ): Promise<unknown> {
       const compiledRoute = resolveRoute(router, route);
 
@@ -74,18 +75,20 @@ export function createInprocessTransport(
         );
       }
 
-      return Promise.resolve(invokeHandler(compiledRoute, payload));
+      const ctx: ScompHandlerContext = { route, operation: compiledRoute.kind, meta: options?.meta };
+      return Promise.resolve(invokeHandler(compiledRoute, payload, ctx));
     },
 
     async signal(
       route: string,
       payload: unknown,
-      _options?: ScompClientInvokeOptions,
+      options?: ScompClientInvokeOptions,
     ): Promise<void> {
       const compiledRoute = resolveRoute(router, route);
 
       try {
-        const result = invokeHandler(compiledRoute, payload);
+        const ctx: ScompHandlerContext = { route, operation: compiledRoute.kind, meta: options?.meta };
+        const result = invokeHandler(compiledRoute, payload, ctx);
 
         void Promise.resolve(result).catch((error) => {
           if (config.onSignalError) {
@@ -110,7 +113,7 @@ export function createInprocessTransport(
     feed(
       route: string,
       payload: unknown,
-      _options?: ScompClientInvokeOptions,
+      options?: ScompClientInvokeOptions,
     ): AsyncIterable<unknown> {
       const compiledRoute = resolveRoute(router, route);
 
@@ -120,7 +123,8 @@ export function createInprocessTransport(
         );
       }
 
-      const result = invokeHandler(compiledRoute, payload);
+      const ctx: ScompHandlerContext = { route, operation: compiledRoute.kind, meta: options?.meta };
+      const result = invokeHandler(compiledRoute, payload, ctx);
 
       if (isAsyncIterable(result)) {
         return result;

@@ -8,17 +8,14 @@ import type {
   ScompFeedChunkEnvelope,
   ScompTransportMessageMeta,
   ScompTransportOperation,
-  ScompTransportPrincipal,
   ScompTransportRequestEnvelope,
   ScompTransportResponseEnvelope,
 } from "@scomp/types";
 import {
   toPriorityMeta,
-  toPrincipalMeta,
   mergeMeta,
   safeJsonParse,
   isFeedChunkEnvelope,
-  checkSecurity,
   type TransportMessage,
 } from "@scomp/transport-shared";
 import { type ISocketAdapter, SOCKET_OPEN } from "@scomp/transport-websocket-shared";
@@ -88,22 +85,13 @@ export class WebSocketClientTransport implements ITransport {
     options?: ScompClientInvokeOptions,
   ): Promise<void> {
     const socket = await this.getSocket();
-    const meta = await this.composeOutboundMeta(options, undefined);
-    const { allowed, principal } = await checkSecurity(this.config.security, {
-      direction: "outbound",
-      transport: "websocket",
-      route,
-      operation: "signal",
-      payload,
-      meta,
-    });
-    if (!allowed) throw new Error(`signal not authorized for route: ${route}`);
+    const meta = await this.composeOutboundMeta(options);
 
     const envelope: Record<string, unknown> = {
       route,
       op: "signal",
       payload,
-      meta: mergeMeta(meta, toPrincipalMeta(principal)),
+      meta,
     };
     if (options?.feed) envelope.feed = options.feed;
     if (options?.method) envelope.method = options.method;
@@ -333,22 +321,13 @@ export class WebSocketClientTransport implements ITransport {
     }
 
     const socket = await this.getSocket();
-    const { allowed, principal } = await checkSecurity(this.config.security, {
-      direction: "outbound",
-      transport: "websocket",
-      route,
-      operation: op,
-      payload,
-      meta: await this.composeOutboundMeta(options, undefined),
-    });
-    if (!allowed) throw new Error(`${op} not authorized for route: ${route}`);
 
     const id = randomUUID();
     const replyPromise = new Promise<unknown>((resolve, reject) => {
       this.pendingRequests.set(id, { resolve, reject });
     });
 
-    const outboundMeta = await this.composeOutboundMeta(options, principal);
+    const outboundMeta = await this.composeOutboundMeta(options);
     const envelope: ScompTransportRequestEnvelope = {
       id,
       route,
@@ -381,15 +360,13 @@ export class WebSocketClientTransport implements ITransport {
     return Promise.race([replyPromise, timeoutPromise]);
   }
 
-  /** Deterministic outbound meta: config.meta → options.meta → priority → principal. */
+  /** Deterministic outbound meta: config.meta → options.meta → priority. */
   private async composeOutboundMeta(
     options: ScompClientInvokeOptions | undefined,
-    principal: ScompTransportPrincipal | undefined,
   ): Promise<ScompTransportMessageMeta | undefined> {
     const priorityMeta = toPriorityMeta(options);
     const baseMeta = mergeMeta(await this.resolveMeta(), options?.meta);
-    const effectiveMeta = mergeMeta(baseMeta, priorityMeta);
-    return mergeMeta(effectiveMeta, toPrincipalMeta(principal));
+    return mergeMeta(baseMeta, priorityMeta);
   }
 
   private async resolveMeta(): Promise<ScompTransportMessageMeta | undefined> {
