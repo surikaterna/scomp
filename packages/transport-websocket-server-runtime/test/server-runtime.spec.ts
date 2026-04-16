@@ -5,7 +5,6 @@ import {
 import type {
   ScompFeedChunkEnvelope,
   ScompTransportResponseEnvelope,
-  ScompTransportSecurityPolicy,
 } from "@scomp/types";
 import {
   WebSocketServerRuntime,
@@ -41,7 +40,6 @@ function createConfig(
   overrides: Partial<WebSocketServerRuntimeConfig<FakeSocket>> = {},
   collector: Collector = createCollector(),
 ): WebSocketServerRuntimeConfig<FakeSocket> & { collector: Collector } {
-  const principals = new WeakMap<FakeSocket, unknown>();
   return {
     invokeRoute: async (route, message) => route.handler(message.payload),
     isSocketOpen: (socket) => socket.readyState === 1,
@@ -52,10 +50,6 @@ function createConfig(
       collector.feedChunks.push({ socket, chunk });
     },
     onFeedExchange: (hash) => `exchange:${hash}`,
-    getSocketPrincipal: (socket) => principals.get(socket) as any,
-    setSocketPrincipal: (socket, principal) => {
-      principals.set(socket, principal);
-    },
     collector,
     ...overrides,
   };
@@ -320,19 +314,20 @@ describe("WebSocketServerRuntime", () => {
     });
   });
 
-  // ---- Security: unauthorized request -------------------------------------
-  describe("security", () => {
-    it("rejects unauthorized requests with UNAUTHORIZED error", async () => {
-      const security: ScompTransportSecurityPolicy = {
-        authorize: () => false,
-      };
-      const cfg = createConfig({ security });
+  // ---- Auth error handling -------------------------------------------------
+  describe("auth error handling", () => {
+    it("returns UNAUTHORIZED code when handler throws with code UNAUTHORIZED", async () => {
+      const cfg = createConfig();
       const runtime = new WebSocketServerRuntime(cfg);
       runtime.setRouter({
         "admin.reset": {
           route: "admin.reset",
           kind: "request",
-          handler: () => "should not reach",
+          handler: () => {
+            const err = new Error("Not authorized") as Error & { code: string };
+            err.code = "UNAUTHORIZED";
+            throw err;
+          },
         },
       });
 
@@ -344,15 +339,17 @@ describe("WebSocketServerRuntime", () => {
       const responses = repliesFor(cfg.collector, msg.id!);
       expect(responses).toHaveLength(1);
       expect((responses[0] as any).code).toBe("UNAUTHORIZED");
-      expect((responses[0] as any).error).toContain("not authorized");
+      expect((responses[0] as any).error).toContain("Not authorized");
     });
 
-    it("allows requests when authorize returns true", async () => {
-      const security: ScompTransportSecurityPolicy = {
-        authenticate: () => ({ subject: "admin" }),
-        authorize: (ctx) => ctx.principal?.subject === "admin",
-      };
-      const cfg = createConfig({ security });
+    it("passes handler context to invokeRoute", async () => {
+      let receivedCtx: unknown;
+      const cfg = createConfig({
+        invokeRoute: async (_route, _message, ctx) => {
+          receivedCtx = ctx;
+          return "ok";
+        },
+      });
       const runtime = new WebSocketServerRuntime(cfg);
       runtime.setRouter({
         "admin.reset": {
@@ -367,9 +364,11 @@ describe("WebSocketServerRuntime", () => {
 
       await runtime.handleIncoming(socket, msg);
 
-      const responses = repliesFor(cfg.collector, msg.id!);
-      expect(responses).toHaveLength(1);
-      expect((responses[0] as any).payload).toBe("ok");
+      expect(receivedCtx).toEqual({
+        route: "admin.reset",
+        operation: "request",
+        meta: undefined,
+      });
     });
   });
 

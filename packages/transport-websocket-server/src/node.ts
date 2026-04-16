@@ -6,12 +6,10 @@ import type {
   ScompClientInvokeOptions,
 } from "@scomp/core";
 import type {
-  ScompTransportPrincipal,
   ScompTransportRequestEnvelope,
   ScompTransportResponseEnvelope,
   ScompFeedChunkEnvelope,
 } from "@scomp/types";
-import { toPrincipalMeta } from "@scomp/transport-shared";
 import {
   parseTransportMessage,
   WebSocketServerRuntime,
@@ -26,10 +24,6 @@ import {
 const nodeSocketAdapter = createNodeSocketAdapterFactory();
 
 export type { NodeWebSocketServerTransportConfig };
-
-interface SocketWithPrincipal extends WebSocket {
-  scompPrincipal?: ScompTransportPrincipal;
-}
 
 function toFeedExchange(hash: string): string {
   return `scomp.live.${hash}`;
@@ -54,46 +48,37 @@ function toText(data: RawData): string {
 export class NodeWebSocketServerTransport implements ITransport {
   private readonly config: NodeWebSocketServerTransportConfig;
   private server?: WebSocketServer;
-  private readonly sockets = new Set<SocketWithPrincipal>();
+  private readonly sockets = new Set<WebSocket>();
   private outboundTransport?: ITransport;
-  private readonly runtime: WebSocketServerRuntime<SocketWithPrincipal>;
+  private readonly runtime: WebSocketServerRuntime<WebSocket>;
 
   constructor(config: NodeWebSocketServerTransportConfig) {
     this.config = config;
-    this.runtime = new WebSocketServerRuntime<SocketWithPrincipal>({
-      security: this.config.security,
-      getSocketPrincipal: (socket: SocketWithPrincipal) =>
-        socket.scompPrincipal,
-      setSocketPrincipal: (
-        socket: SocketWithPrincipal,
-        principal: ScompTransportPrincipal,
-      ) => {
-        socket.scompPrincipal = principal;
-      },
+    this.runtime = new WebSocketServerRuntime<WebSocket>({
       invokeRoute: async (
         route: CompiledRoute,
         message: ScompTransportRequestEnvelope,
+        ctx,
       ) => {
         const rawPayload = message.payload;
         const payload = route.parser ? route.parser(rawPayload) : rawPayload;
-        return route.handler(payload);
+        return route.handler(payload, ctx);
       },
-      isSocketOpen: (socket: SocketWithPrincipal) =>
+      isSocketOpen: (socket: WebSocket) =>
         socket.readyState === WebSocket.OPEN,
       onReply: (
-        socket: SocketWithPrincipal,
+        socket: WebSocket,
         response: ScompTransportResponseEnvelope,
       ) => {
         socket.send(JSON.stringify(response));
       },
       onFeedChunk: (
-        socket: SocketWithPrincipal,
+        socket: WebSocket,
         chunk: ScompFeedChunkEnvelope,
       ) => {
         socket.send(JSON.stringify(chunk));
       },
       onFeedExchange: toFeedExchange,
-      toPrincipalMeta,
     });
   }
 
@@ -108,25 +93,24 @@ export class NodeWebSocketServerTransport implements ITransport {
     }
 
     server.on("connection", (socket: WebSocket) => {
-      const socketWithPrincipal = socket as SocketWithPrincipal;
-      this.sockets.add(socketWithPrincipal);
+      this.sockets.add(socket);
 
       socket.on("message", async (data: RawData) => {
         const body = parseTransportMessage(toText(data));
         if (!body) {
           return;
         }
-        await this.runtime.handleIncoming(socketWithPrincipal, body);
+        await this.runtime.handleIncoming(socket, body);
       });
 
       socket.on("close", () => {
-        this.runtime.detachSocketFromFeeds(socketWithPrincipal);
-        this.sockets.delete(socketWithPrincipal);
+        this.runtime.detachSocketFromFeeds(socket);
+        this.sockets.delete(socket);
       });
 
       socket.on("error", () => {
-        this.runtime.detachSocketFromFeeds(socketWithPrincipal);
-        this.sockets.delete(socketWithPrincipal);
+        this.runtime.detachSocketFromFeeds(socket);
+        this.sockets.delete(socket);
       });
     });
   }

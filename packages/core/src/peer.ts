@@ -2,6 +2,9 @@ import type { ContractToken } from "./contract-token";
 import type { CompiledRouter, ServiceDefinition } from "./builder";
 import { createScompService } from "./builder";
 import type { ITransport } from "./transport";
+import type { ScompMiddleware, ScompHandlerContext, ScompMiddlewareContext } from "./middleware";
+import { createMiddlewareTransport, } from "./middleware-transport";
+import { getMiddlewareFns, runMiddlewareChain } from "./middleware";
 import { ScompControlPlane } from "./control-plane-contract";
 import {
   createNodeLocalDiscoverHandler,
@@ -37,6 +40,8 @@ export interface CreateScompPeerConfig {
    * - `false`: disables the control plane entirely.
    */
   controlPlane?: boolean | { nodeId?: string };
+  /** Middleware applied to outbound (client) transport calls. */
+  middleware?: ScompMiddleware[];
 }
 
 function generateNodeId(): string {
@@ -54,7 +59,7 @@ function generateNodeId(): string {
  * - When `controlPlane` is not `false`, auto-provides the control-plane service.
  */
 export function createScompPeer(config: CreateScompPeerConfig): IScompPeer {
-  const { transports, clientFactory, controlPlane = true } = config;
+  const { transports, clientFactory, controlPlane = true, middleware = [] } = config;
 
   if (transports.length === 0) {
     throw new Error("createScompPeer requires at least one transport.");
@@ -63,6 +68,15 @@ export function createScompPeer(config: CreateScompPeerConfig): IScompPeer {
   let closed = false;
   const combinedRouter: CompiledRouter = {};
   const clientCache = new Map<string, unknown>();
+
+  // Pre-compute inbound middleware fns once
+  const inboundFns = getMiddlewareFns(middleware, "inbound");
+
+  // Wrap transports with middleware for outbound (client) use
+  const wrappedTransports =
+    middleware.length > 0
+      ? transports.map((t) => createMiddlewareTransport(t, middleware))
+      : transports;
 
   function assertOpen(): void {
     if (closed) {
@@ -85,6 +99,33 @@ export function createScompPeer(config: CreateScompPeerConfig): IScompPeer {
       }
     }
 
+    // Wrap handlers with inbound middleware when present.
+    if (inboundFns.length > 0) {
+      for (const service of services) {
+        for (const routeName of Object.keys(service.router)) {
+          const route = combinedRouter[routeName];
+          const originalHandler = route.handler;
+
+          combinedRouter[routeName] = {
+            ...route,
+            handler: (payload: unknown, ctx?: ScompHandlerContext) => {
+              const mwCtx: ScompMiddlewareContext = {
+                route: routeName,
+                operation: route.kind,
+                direction: "inbound" as const,
+                payload,
+                meta: ctx?.meta,
+              };
+
+              return runMiddlewareChain(inboundFns, mwCtx, async (finalCtx) => {
+                return originalHandler(finalCtx.payload, ctx);
+              });
+            },
+          };
+        }
+      }
+    }
+
     // Register the combined router on all transports.
     for (const transport of transports) {
       transport.registerRoutes(combinedRouter);
@@ -99,7 +140,7 @@ export function createScompPeer(config: CreateScompPeerConfig): IScompPeer {
       return cached as C;
     }
 
-    const proxy = clientFactory(transports[0], token);
+    const proxy = clientFactory(wrappedTransports[0], token);
     clientCache.set(token.name, proxy);
     return proxy;
   }

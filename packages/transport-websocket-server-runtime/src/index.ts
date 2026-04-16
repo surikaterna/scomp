@@ -4,19 +4,17 @@ import {
   ScompFrameworkMethods,
   createFeedHash,
   type CompiledRoute,
+  type ScompHandlerContext,
 } from "@scomp/core";
 import {
   type ScompErrorCode,
   type ScompFeedChunkEnvelope,
   type ScompTransportMessageMeta,
-  type ScompTransportSecurityContext,
 } from "@scomp/types";
-import { toPrincipalMeta } from "@scomp/transport-shared";
 import {
   StreamClosedError,
   ensureFeedIterable,
   isControlledAsyncIterable,
-  type CheckSecurityResult,
   type RunningFeed,
   type RuntimeSocket,
   type TransportMessage,
@@ -57,38 +55,22 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
     const routeEntry = this.router?.[routeName];
     const op = body.op ?? "request";
 
-    const { allowed, principal } = await this.checkSecurity(socket, {
-      direction: "inbound",
-      transport: "websocket",
-      route: routeName,
-      operation: op,
-      payload: body.payload,
-      meta: body.meta,
-    });
-
-    const meta = (this.config.toPrincipalMeta ?? toPrincipalMeta)(principal);
-
-    if (!allowed) {
-      this.replyWithError(
-        socket,
-        body.id,
-        `Inbound operation not authorized for route: ${routeName}`,
-        meta,
-        "UNAUTHORIZED",
-      );
-      return;
-    }
-
     if (!routeEntry) {
       this.replyWithError(
         socket,
         body.id,
         `Route not found: ${routeName}`,
-        meta,
+        undefined,
         "ROUTE_NOT_FOUND",
       );
       return;
     }
+
+    const handlerCtx: ScompHandlerContext = {
+      route: routeName,
+      operation: op,
+      meta: body.meta,
+    };
 
     if (
       op === "signal" &&
@@ -100,18 +82,18 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
     }
 
     if (body.feed && body.method) {
-      await this.handleControllerCall(socket, body, meta);
+      await this.handleControllerCall(socket, body);
       return;
     }
 
     if (routeEntry.kind === "feed") {
-      await this.handleFeedRpc(socket, routeEntry, body);
+      await this.handleFeedRpc(socket, routeEntry, body, handlerCtx);
       return;
     }
 
     if (op === "signal" || routeEntry.kind === "signal") {
       try {
-        await this.config.invokeRoute(routeEntry, body);
+        await this.config.invokeRoute(routeEntry, body, handlerCtx);
       } catch {
         /* fire-and-forget */
       }
@@ -119,10 +101,11 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
     }
 
     try {
-      const result = await this.config.invokeRoute(routeEntry, body);
-      this.replyWithPayload(socket, body.id, result, meta);
+      const result = await this.config.invokeRoute(routeEntry, body, handlerCtx);
+      this.replyWithPayload(socket, body.id, result);
     } catch (error) {
-      this.replyWithError(socket, body.id, error, meta);
+      const code = (error as any)?.code === "UNAUTHORIZED" ? "UNAUTHORIZED" as ScompErrorCode : undefined;
+      this.replyWithError(socket, body.id, error, undefined, code);
     }
   }
 
@@ -159,7 +142,6 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
   private async handleControllerCall(
     socket: Socket,
     body: TransportMessage,
-    meta?: ScompTransportMessageMeta,
   ): Promise<void> {
     const feedId = String(body.feed ?? "");
     const method = String(body.method ?? "");
@@ -170,7 +152,7 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
         socket,
         body.id,
         `Feed not found: ${feedId}`,
-        meta,
+        undefined,
         "FEED_NOT_FOUND",
       );
       return;
@@ -181,7 +163,7 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
         socket,
         body.id,
         `Framework method not implemented: ${method}`,
-        meta,
+        undefined,
         "CONTROLLER_NOT_FOUND",
       );
       return;
@@ -193,7 +175,7 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
         socket,
         body.id,
         `Controller method not found: ${method}`,
-        meta,
+        undefined,
         "CONTROLLER_NOT_FOUND",
       );
       return;
@@ -210,9 +192,9 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
 
     try {
       const result = await controller[method](body.payload);
-      this.replyWithPayload(socket, body.id, result, meta);
+      this.replyWithPayload(socket, body.id, result);
     } catch (error) {
-      this.replyWithError(socket, body.id, error, meta);
+      this.replyWithError(socket, body.id, error);
     }
   }
 
@@ -220,6 +202,7 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
     socket: Socket,
     route: CompiledRoute,
     body: TransportMessage,
+    ctx?: ScompHandlerContext,
   ): Promise<void> {
     const rawPayload = body.payload;
     const parsedPayload = route.parser ? route.parser(rawPayload) : rawPayload;
@@ -251,7 +234,7 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
       feed: hash,
     });
 
-    const result = await this.config.invokeRoute(route, body);
+    const result = await this.config.invokeRoute(route, body, ctx);
     const iterable = ensureFeedIterable(result);
 
     if (isControlledAsyncIterable(result)) {
@@ -347,31 +330,4 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
     } satisfies import("@scomp/types").ScompTransportResponseEnvelope);
   }
 
-  private async checkSecurity(
-    socket: Socket,
-    ctx: Omit<ScompTransportSecurityContext, "principal">,
-  ): Promise<CheckSecurityResult> {
-    const policy = this.config.security;
-    if (!policy) {
-      return {
-        allowed: true,
-        principal: this.config.getSocketPrincipal(socket),
-      };
-    }
-
-    const rememberedPrincipal = this.config.getSocketPrincipal(socket);
-    const principal = policy.authenticate
-      ? await policy.authenticate(ctx)
-      : rememberedPrincipal;
-    if (principal) this.config.setSocketPrincipal(socket, principal);
-
-    if (!policy.authorize) {
-      return { allowed: true, principal: principal ?? undefined };
-    }
-
-    const allowed = Boolean(
-      await policy.authorize({ ...ctx, principal: principal ?? undefined }),
-    );
-    return { allowed, principal: principal ?? undefined };
-  }
 }

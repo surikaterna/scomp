@@ -327,7 +327,7 @@ export interface CompiledRoute {
   backpressure?: {
     highWaterMark?: number;
   };
-  handler: (payload: unknown) => unknown;
+  handler: (payload: unknown, ctx?: import("./middleware").ScompHandlerContext) => unknown;
 }
 
 export type CompiledRouter = Record<string, CompiledRoute>;

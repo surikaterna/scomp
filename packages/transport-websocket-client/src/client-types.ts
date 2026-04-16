@@ -1,7 +1,6 @@
 import type {
   ScompFeedChunkEnvelope,
   ScompTransportMessageMeta,
-  ScompTransportSecurityPolicy,
 } from "@scomp/types";
 import type { ISocketAdapter, SocketAdapterFactory } from "@scomp/transport-websocket-shared";
 
@@ -92,7 +91,6 @@ export interface WebSocketClientTransportConfig {
   meta?:
     | ScompTransportMessageMeta
     | (() => ScompTransportMessageMeta | Promise<ScompTransportMessageMeta>);
-  security?: ScompTransportSecurityPolicy;
   socketAdapter: SocketAdapterFactory;
   requestTimeoutMs?: number;
   connectionTimeoutMs?: number;

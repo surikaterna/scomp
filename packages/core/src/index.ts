@@ -75,6 +75,23 @@ export {
 export { type ITransport, type ScompClientInvokeOptions } from "./transport";
 
 export {
+  runMiddlewareChain,
+  getMiddlewareFns,
+  type ScompHandlerContext,
+  type ScompMiddleware,
+  type ScompMiddlewareContext,
+  type ScompMiddlewareFn,
+} from "./middleware";
+
+export { createMiddlewareTransport } from "./middleware-transport";
+
+export {
+  createAuthMiddleware,
+  ScompAuthError,
+  type AuthMiddlewareConfig,
+} from "./auth-middleware";
+
+export {
   createScompPeer,
   type ClientFactory,
   type CreateScompPeerConfig,
