@@ -41,7 +41,7 @@ export class ScompAuthError extends Error {
 
 /**
  * Creates an inbound middleware that authenticates and authorizes requests.
- * Replaces the per-transport ScompTransportSecurityPolicy.
+ * Creates middleware that authenticates and authorizes requests.
  */
 export function createAuthMiddleware(config: AuthMiddlewareConfig): ScompMiddleware {
   const hasAuthHooks = config.authenticate !== undefined || config.authorize !== undefined;

@@ -1,4 +1,3 @@
-export { toPriorityMeta, toPrincipalMeta, mergeMeta } from "./meta";
-export { checkSecurity, type CheckSecurityResult } from "./security";
+export { toPriorityMeta, mergeMeta } from "./meta";
 export { safeJsonParse, type JsonParseResult } from "./parsing";
 export { isFeedChunkEnvelope, type TransportMessage } from "./feed";

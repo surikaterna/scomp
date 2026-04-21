@@ -136,25 +136,6 @@ export interface ScompTransportPrincipal {
   authType?: string;
 }
 
-export interface ScompTransportSecurityContext {
-  direction: "inbound" | "outbound";
-  transport: string;
-  route: string;
-  operation: ScompTransportOperation;
-  payload: unknown;
-  meta?: ScompTransportMessageMeta;
-  principal?: ScompTransportPrincipal;
-}
-
-export interface ScompTransportSecurityPolicy {
-  authenticate?: (
-    context: Omit<ScompTransportSecurityContext, "principal">,
-  ) => ScompTransportPrincipal | null | Promise<ScompTransportPrincipal | null>;
-  authorize?: (
-    context: ScompTransportSecurityContext,
-  ) => boolean | Promise<boolean>;
-}
-
 export interface ScompTransportRequestEnvelope {
   id?: string;
   route: string;
