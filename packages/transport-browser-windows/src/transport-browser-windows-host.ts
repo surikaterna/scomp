@@ -1,3 +1,5 @@
+import type { ScompHandlerContext } from "@scomp/core";
+import type { ScompTransportMessageMeta } from "@scomp/types";
 import type {
   BrowserWindowsHostFeedStartMessage,
   BrowserWindowsHostFeedStopMessage,
@@ -16,12 +18,6 @@ interface HostContext {
   readonly router: Record<string, RuntimeRoute>;
   readonly hostedFeeds: Map<string, HostedFeedState>;
   postMessage(message: unknown): void;
-  assertInboundAllowed(
-    route: string,
-    operation: "request" | "signal" | "feed",
-    payload: unknown,
-    meta: unknown,
-  ): Promise<void>;
 }
 
 export async function handleHostRequest(
@@ -58,17 +54,15 @@ export async function handleHostRequest(
   }
 
   try {
-    await context.assertInboundAllowed(
-      message.route,
-      "request",
-      message.payload,
-      message.meta,
-    );
-
     const parsedPayload = route.parser
       ? route.parser(message.payload)
       : message.payload;
-    const response = await route.handler(parsedPayload);
+    const handlerCtx: ScompHandlerContext = {
+      route: message.route,
+      operation: "request",
+      meta: message.meta as ScompTransportMessageMeta | undefined,
+    };
+    const response = await route.handler(parsedPayload, handlerCtx);
     context.postMessage({
       type: "host_response",
       sourceId: context.participantId,
@@ -80,6 +74,7 @@ export async function handleHostRequest(
       meta: message.meta,
     });
   } catch (error) {
+    const errorCode = (error as Record<string, unknown>)?.code;
     context.postMessage({
       type: "host_response",
       sourceId: context.participantId,
@@ -88,6 +83,7 @@ export async function handleHostRequest(
       invokeId: message.invokeId,
       hostId: context.participantId,
       error: toError(error, "Request failed.").message,
+      code: errorCode === "UNAUTHORIZED" ? "UNAUTHORIZED" : undefined,
       meta: message.meta,
     });
   }
@@ -103,17 +99,15 @@ export async function handleHostSignal(
   }
 
   try {
-    await context.assertInboundAllowed(
-      message.route,
-      "signal",
-      message.payload,
-      message.meta,
-    );
-
     const parsedPayload = route.parser
       ? route.parser(message.payload)
       : message.payload;
-    await route.handler(parsedPayload);
+    const handlerCtx: ScompHandlerContext = {
+      route: message.route,
+      operation: "signal",
+      meta: message.meta as ScompTransportMessageMeta | undefined,
+    };
+    await route.handler(parsedPayload, handlerCtx);
   } catch {
     // signal has no response path
   }
@@ -159,17 +153,15 @@ export async function handleHostFeedStart(
   }
 
   try {
-    await context.assertInboundAllowed(
-      message.route,
-      "feed",
-      message.payload,
-      message.meta,
-    );
-
     const parsedPayload = route.parser
       ? route.parser(message.payload)
       : message.payload;
-    const produced = route.handler(parsedPayload);
+    const handlerCtx: ScompHandlerContext = {
+      route: message.route,
+      operation: "feed",
+      meta: message.meta as ScompTransportMessageMeta | undefined,
+    };
+    const produced = route.handler(parsedPayload, handlerCtx);
     const asyncIterable = toAsyncIterable(produced);
     const hostedState: HostedFeedState = { stopped: false };
 
@@ -256,17 +248,6 @@ export async function handleHostFeedStop(
 ): Promise<void> {
   const hosted = context.hostedFeeds.get(message.requestId);
   if (!hosted) {
-    return;
-  }
-
-  try {
-    await context.assertInboundAllowed(
-      message.route,
-      "signal",
-      { payloadKey: message.payloadKey, payloadHash: message.payloadHash },
-      message.meta,
-    );
-  } catch {
     return;
   }
 

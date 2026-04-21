@@ -1,9 +1,5 @@
 import type { ITransport, ScompClientInvokeOptions } from "@scomp/core";
 import type {
-  ScompTransportOperation,
-  ScompTransportMessageMeta,
-} from "@scomp/types";
-import type {
   BrowserWindowsHostFeedStopMessage,
   BrowserWindowsInvokeFeedChunkMessage,
   BrowserWindowsInvokeResponseMessage,
@@ -31,7 +27,6 @@ import {
   handleHostRequest,
   handleHostSignal,
 } from "./transport-browser-windows-host";
-import { BrowserWindowsTransportSecurity } from "./transport-browser-windows-security";
 import {
   feedWithContext,
   requestWithContext,
@@ -50,13 +45,14 @@ import {
   processInvokeResponse,
 } from "./transport-browser-windows-invoke";
 import { publishMessageWithHealth } from "./transport-browser-windows-publish";
-import { composeMetaWithHealth } from "./transport-browser-windows-meta";
+import { composeOutboundMeta } from "./transport-browser-windows-meta";
 import {
   sendHello,
   shutdownTransport,
   syncRoutes,
 } from "./transport-browser-windows-lifecycle";
 import { assertStrictRouteIntentAllowed } from "./transport-browser-windows-route-intents";
+
 export class BrowserWindowsTransport implements ITransport {
   private static readonly DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
   private static readonly DEFAULT_MAX_PENDING_REQUESTS = 1_000;
@@ -81,7 +77,6 @@ export class BrowserWindowsTransport implements ITransport {
     BrowserWindowsRequestId,
     HostedFeedState
   >();
-  private readonly security: BrowserWindowsTransportSecurity;
   private readonly health: ReturnType<typeof createTransportHealthStore>;
   private activeRuntimeMode!: BrowserWindowsTransportMode;
   private readonly hostContext: ReturnType<
@@ -125,7 +120,6 @@ export class BrowserWindowsTransport implements ITransport {
         BrowserWindowsTransport.DEFAULT_MAX_BUFFERED_FEED_CHUNKS_PER_SUBSCRIBER,
     );
     this.participantId = createParticipantId(this.config);
-    this.security = new BrowserWindowsTransportSecurity(config);
     this.health = createTransportHealthStore(this.config.health?.onSnapshot);
     try {
       this.connector = createRuntimeConnector(this.config, this.participantId);
@@ -168,26 +162,13 @@ export class BrowserWindowsTransport implements ITransport {
       ) => {
         this.assertOutboundAllowed(route, operation);
       },
-      assertInboundAllowed: (
-        route: string,
-        operation: "request" | "signal" | "feed",
-        payload: unknown,
-        meta: unknown,
-      ) => {
-        return this.security.assertInboundAllowed(
-          route,
-          operation,
-          payload,
-          meta as ScompTransportMessageMeta | undefined,
-        );
-      },
       composeMetaForOperation: (
-        route: string,
-        operation: "request" | "signal" | "feed",
-        payload: unknown,
+        _route: string,
+        _operation: "request" | "signal" | "feed",
+        _payload: unknown,
         options?: ScompClientInvokeOptions,
       ) => {
-        return this.composeMetaForOperation(route, operation, payload, options);
+        return composeOutboundMeta(this.config.meta, options);
       },
     });
     this.hostContext = hostContext;
@@ -328,25 +309,9 @@ export class BrowserWindowsTransport implements ITransport {
     void handleHostFeedStop(this.hostContext, message);
   }
 
-  private async composeMetaForOperation(
-    route: string,
-    operation: ScompTransportOperation,
-    payload: unknown,
-    options?: ScompClientInvokeOptions,
-  ) {
-    return composeMetaWithHealth(
-      this.security,
-      route,
-      operation,
-      payload,
-      options,
-      (code, detail, status) => this.health.report(code, detail, status),
-    );
-  }
-
   private assertOutboundAllowed(
     route: string,
-    operation: ScompTransportOperation,
+    operation: "request" | "signal" | "feed",
   ): void {
     assertStrictRouteIntentAllowed(
       this.config.strictRouteIntents === true,
