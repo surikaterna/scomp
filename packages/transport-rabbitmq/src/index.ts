@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { type ITransport, type ScompClientInvokeOptions } from "@scomp/core";
+import {
+  type ITransport,
+  type ScompClientInvokeOptions,
+  type ScompHandlerContext,
+} from "@scomp/core";
 import type {
   ScompTransportMessageMeta,
   ScompSerializer,
@@ -8,14 +12,12 @@ import type {
 import type { Channel, ChannelModel } from "amqplib";
 import {
   toPriorityMeta,
-  toPrincipalMeta,
   mergeMeta,
 } from "@scomp/transport-shared";
 import { defaultJsonSerializer } from "./serialization";
 import {
   SIGNAL_EXCHANGE,
   StreamClosedError,
-  checkTransportSecurity,
   buildPriorityDecisionEvent,
   type RunningFeed,
   type RabbitMQTransportConfig,
@@ -126,24 +128,6 @@ export class RabbitMQTransport implements ITransport {
           "signal",
           body.meta,
         );
-        const { allowed } = await checkTransportSecurity(this.config.security, {
-          direction: "inbound",
-          transport: "rabbitmq",
-          route: signalRoute.route,
-          operation: "signal",
-          payload: body.payload,
-          meta: body.meta,
-        });
-        if (!allowed) {
-          channel.ack(message);
-          this.emitEvent({
-            type: "security_denied",
-            route: signalRoute.route,
-            operation: "signal",
-            direction: "inbound",
-          });
-          return;
-        }
 
         channel.ack(message);
         const routeEntry = this.router?.[signalRoute.route];
@@ -151,7 +135,12 @@ export class RabbitMQTransport implements ITransport {
           const payload = routeEntry.parser
             ? routeEntry.parser(body.payload)
             : body.payload;
-          await routeEntry.handler(payload);
+          const handlerCtx: ScompHandlerContext = {
+            route: signalRoute.route,
+            operation: "signal",
+            meta: body.meta,
+          };
+          await routeEntry.handler(payload, handlerCtx);
         }
       });
     }
@@ -177,26 +166,6 @@ export class RabbitMQTransport implements ITransport {
       priorityMeta,
     );
     this.emitPriorityDecision("outbound", route, "signal", baseMeta);
-    const { allowed, principal } = await checkTransportSecurity(
-      this.config.security,
-      {
-        direction: "outbound",
-        transport: "rabbitmq",
-        route,
-        operation: "signal",
-        payload,
-        meta: baseMeta,
-      },
-    );
-    if (!allowed) {
-      this.emitEvent({
-        type: "security_denied",
-        route,
-        operation: "signal",
-        direction: "outbound",
-      });
-      throw new Error(`Signal not authorized for route: ${route}`);
-    }
 
     const channel = await this.getChannel();
     await channel.assertExchange(SIGNAL_EXCHANGE, "topic", { durable: true });
@@ -205,7 +174,7 @@ export class RabbitMQTransport implements ITransport {
       route,
       payload,
       op: "signal",
-      meta: mergeMeta(baseMeta, toPrincipalMeta(principal)),
+      meta: baseMeta,
     } satisfies ScompTransportRequestEnvelope);
     this.assertPayloadSize(content);
     channel.publish(SIGNAL_EXCHANGE, route, content, {
@@ -248,7 +217,6 @@ export class RabbitMQTransport implements ITransport {
 
   private clientContext(): ClientContext {
     return {
-      security: this.config.security,
       serializer: this.serializer,
       contentType: this.contentType,
       configMeta: this.config.meta,
@@ -273,7 +241,6 @@ export class RabbitMQTransport implements ITransport {
   private rpcContext() {
     return {
       router: this.router,
-      security: this.config.security,
       getChannel: () => this.getChannel(),
       serializeToBuffer: (v: unknown) => this.serializeToBuffer(v),
       deserializeFromBuffer: <T>(v: Buffer) => this.deserializeFromBuffer<T>(v),

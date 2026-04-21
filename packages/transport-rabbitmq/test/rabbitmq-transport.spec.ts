@@ -382,106 +382,20 @@ describe("RabbitMQTransport NFR behavior", () => {
     assert.equal(resolved.id, 9n);
   });
 
-  it("enforces security policy and max payload limits", async () => {
+  it("enforces max payload limits", async () => {
     const fake = createFakeChannel();
     mockConnect.mockResolvedValue(fake.connection);
 
-    const events: Array<string> = [];
     const transport = new RabbitMQTransport({
       url: "amqp://test",
       security: {
         maxPayloadBytes: 40,
-        authorize: ({ route }) => route !== "blocked.route",
-      },
-      observability: {
-        onEvent: (event) => {
-          events.push(event.type);
-        },
       },
     });
 
-    await assert.rejects(
-      () => transport.request("blocked.route", { ok: true }),
-      /not authorized/i,
-    );
     await assert.rejects(
       () => transport.request("users.getUser", { huge: "x".repeat(100) }),
       /Payload exceeds maxPayloadBytes/i,
-    );
-
-    assert.equal(events.includes("security_denied"), true);
-  });
-
-  it("uses shared security policy context with optional message meta", async () => {
-    const fake = createFakeChannel();
-    mockConnect.mockResolvedValue(fake.connection);
-
-    const seen: Array<{
-      route: string;
-      operation: string;
-      direction: string;
-      hasMeta: boolean;
-    }> = [];
-    const transport = new RabbitMQTransport({
-      url: "amqp://test",
-      security: {
-        policy: {
-          authenticate: ({ route }) => ({
-            subject: `subject:${route}`,
-            scopes: ["rpc:invoke"],
-          }),
-          authorize: (ctx) => {
-            seen.push({
-              route: ctx.route,
-              operation: ctx.operation,
-              direction: ctx.direction,
-              hasMeta: Boolean(ctx.meta),
-            });
-            return ctx.route !== "blocked.route";
-          },
-        },
-      },
-    });
-
-    await assert.rejects(
-      () => transport.request("blocked.route", { ok: true }),
-      /not authorized/i,
-    );
-
-    const pending = transport.request("users.getUser", { id: 3 });
-    await waitFor(() => fake.channel.sendToQueue.mock.calls.length > 0);
-
-    const [, body, options] = fake.channel.sendToQueue.mock.calls[0];
-    const parsedBody = JSON.parse(Buffer.from(body).toString("utf8"));
-    assert.equal(typeof parsedBody.meta, "object");
-    assert.equal(parsedBody.meta.auth.subject, "subject:users.getUser");
-
-    const replyConsumer = fake.queueConsumers.get("generated-1");
-    await replyConsumer?.(
-      createMessage(
-        { payload: { ok: true } },
-        {
-          properties: {
-            correlationId: options.correlationId,
-            replyTo: options.replyTo,
-          },
-        },
-      ),
-    );
-    await pending;
-
-    assert.equal(
-      seen.some(
-        (entry) =>
-          entry.route === "blocked.route" && entry.direction === "outbound",
-      ),
-      true,
-    );
-    assert.equal(
-      seen.some(
-        (entry) => entry.route === "users.getUser" && entry.hasMeta === false,
-      ),
-      true,
     );
   });
 
@@ -669,93 +583,6 @@ describe("RabbitMQTransport NFR behavior", () => {
     assert.equal(inboundSignalDecision?.source, "metadata_hint");
     assert.equal(inboundSignalDecision?.requested, "P3");
     assert.equal(inboundSignalDecision?.effective, "P3");
-  });
-
-  it("propagates inbound priority metadata to security policy", async () => {
-    const fake = createFakeChannel();
-    mockConnect.mockResolvedValue(fake.connection);
-
-    const seenMeta: Array<unknown> = [];
-    const transport = new RabbitMQTransport({
-      url: "amqp://test",
-      security: {
-        policy: {
-          authorize: (ctx) => {
-            seenMeta.push(ctx.meta);
-            return true;
-          },
-        },
-      },
-    });
-
-    await transport.registerRoutes({
-      "users.getUser": {
-        route: "users.getUser",
-        kind: "request",
-        handler: async (payload: unknown) => payload,
-      },
-    } as unknown as Record<string, unknown>);
-
-    const rpcConsumer = fake.queueConsumers.get("scomp.rpc.users");
-    await rpcConsumer?.(
-      createMessage(
-        {
-          route: "users.getUser",
-          op: "request",
-          payload: { id: 1 },
-          meta: {
-            priority: "P1",
-            priorityClass: "P2",
-            tags: {
-              priority: "P3",
-            },
-          },
-        },
-        {
-          properties: {
-            correlationId: "corr-priority-1",
-            replyTo: "reply-priority",
-          },
-        },
-      ),
-    );
-
-    await rpcConsumer?.(
-      createMessage(
-        {
-          route: "users.getUser",
-          op: "request",
-          payload: { id: 2 },
-        },
-        {
-          properties: {
-            correlationId: "corr-priority-2",
-            replyTo: "reply-priority",
-          },
-        },
-      ),
-    );
-
-    const explicitMeta = seenMeta.find(
-      (entry) =>
-        entry &&
-        typeof entry === "object" &&
-        (entry as { priority?: string }).priority === "P1",
-    ) as
-      | {
-          priority?: string;
-          priorityClass?: string;
-          tags?: { priority?: string };
-        }
-      | undefined;
-
-    assert.equal(explicitMeta?.priority, "P1");
-    assert.equal(explicitMeta?.priorityClass, "P2");
-    assert.equal(explicitMeta?.tags?.priority, "P3");
-    assert.equal(
-      seenMeta.some((entry) => entry === undefined),
-      true,
-    );
   });
 
   it("enforces max in-flight requests and request timeout", async () => {

@@ -259,13 +259,8 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
 
     const rabbit = new RabbitMQTransport({
       url: "amqp://test",
-      security: {
-        policy: {
-          authenticate: () => ({
-            subject: "user-1",
-            tenantId: "tenant-a",
-          }),
-        },
+      meta: {
+        traceId: "trace-1",
       },
     });
     const websocket = new WebSocketClientTransport({
@@ -273,12 +268,6 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
       socketAdapter: nodeSocketAdapter,
       meta: {
         traceId: "trace-1",
-      },
-      security: {
-        authenticate: () => ({
-          subject: "user-1",
-          tenantId: "tenant-a",
-        }),
       },
     });
 
@@ -311,11 +300,7 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
     );
     const websocketEnvelope = JSON.parse(sentPayloads[0]);
 
-    assert.equal(typeof rabbitEnvelope.meta.auth.subject, "string");
-    assert.equal(
-      rabbitEnvelope.meta.auth.subject,
-      websocketEnvelope.meta.auth.subject,
-    );
+    assert.equal(rabbitEnvelope.meta.traceId, "trace-1");
     assert.equal(websocketEnvelope.meta.traceId, "trace-1");
   });
 
@@ -444,13 +429,6 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
 
     const rabbit = new RabbitMQTransport({
       url: "amqp://test",
-      security: {
-        policy: {
-          authenticate: () => ({
-            subject: "principal-rabbit",
-          }),
-        },
-      },
     });
 
     const websocketClient = new WebSocketClientTransport({
@@ -510,7 +488,6 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
       };
     };
 
-    assert.equal(rabbitRequest.meta?.auth?.subject, "principal-rabbit");
     assert.equal(websocketRequest.meta?.traceId, "trace-priority");
     assert.equal(websocketRequest.meta?.priority, "P1");
     assert.equal(websocketRequest.meta?.priorityClass, "P2");

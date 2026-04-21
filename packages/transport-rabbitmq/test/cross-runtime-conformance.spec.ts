@@ -140,13 +140,6 @@ function createPatchedWebSocketClient() {
   const client = new WebSocketClientTransport({
     url: "ws://placeholder",
     socketAdapter: nodeSocketAdapter,
-    security: {
-      authenticate: () => ({
-        subject: "subject:runtime",
-        tenantId: "tenant-runtime",
-        claims: { role: "tester" },
-      }),
-    },
   });
   const sentPayloads: Array<string> = [];
 
@@ -187,13 +180,6 @@ function createPatchedBrowserClient() {
 
   const client = new WebSocketClientTransport({
     url: "ws://placeholder",
-    security: {
-      authenticate: () => ({
-        subject: "subject:runtime",
-        tenantId: "tenant-runtime",
-        claims: { role: "tester" },
-      }),
-    },
     socketAdapter: createBrowserSocketAdapterFactory(webSocketCtor),
   });
 
@@ -243,15 +229,6 @@ describe("Cross-runtime conformance: browser websocket, node websocket, rabbitmq
 
     const rabbit = new RabbitMQTransport({
       url: "amqp://test",
-      security: {
-        policy: {
-          authenticate: () => ({
-            subject: "subject:runtime",
-            tenantId: "tenant-runtime",
-            claims: { role: "tester" },
-          }),
-        },
-      },
     });
     const node = createPatchedWebSocketClient();
     const browser = createPatchedBrowserClient();
@@ -369,15 +346,6 @@ describe("Cross-runtime conformance: browser websocket, node websocket, rabbitmq
 
     const rabbit = new RabbitMQTransport({
       url: "amqp://test",
-      security: {
-        policy: {
-          authenticate: () => ({
-            subject: "subject:runtime",
-            tenantId: "tenant-runtime",
-            claims: { role: "tester" },
-          }),
-        },
-      },
     });
     const node = createPatchedWebSocketClient();
     const browser = createPatchedBrowserClient();
