@@ -110,6 +110,93 @@ export async function signalWithContext(
   });
 }
 
+function initFeedState(route: string, payloadKey: string, payloadHash: string): FeedQueueState {
+  return {
+    queue: [],
+    waiters: [],
+    closed: false,
+    stopSent: false,
+    terminalError: undefined,
+    route,
+    payloadKey,
+    payloadHash,
+    meta: undefined,
+  };
+}
+
+async function startFeed(
+  context: BrowserWindowsTransportClientContext,
+  state: FeedQueueState,
+  requestId: string,
+  route: string,
+  payload: unknown,
+  options?: ScompClientInvokeOptions,
+): Promise<void> {
+  context.assertOutboundAllowed(route, "feed");
+  const feedStartMeta = await context.composeMetaForOperation(route, "feed", payload, options);
+  state.meta = feedStartMeta;
+
+  context.postMessage({
+    meta: feedStartMeta,
+    type: "invoke_feed_start",
+    sourceId: context.participantId,
+    sentAtMs: Date.now(),
+    requestId,
+    route,
+    operation: "feed",
+    payload,
+    payloadKey: state.payloadKey,
+    payloadHash: state.payloadHash,
+  });
+}
+
+function checkFeedDone(state: FeedQueueState): Error | "done" | null {
+  if (!state.closed || state.queue.length > 0) {
+    return null;
+  }
+  return state.terminalError ?? "done";
+}
+
+async function cleanupFeed(
+  context: BrowserWindowsTransportClientContext,
+  state: FeedQueueState,
+  requestId: string,
+  route: string,
+  feedStarted: boolean,
+  options?: ScompClientInvokeOptions,
+): Promise<void> {
+  context.feedStates.delete(requestId);
+  if (feedStarted && !state.stopSent) {
+    await sendFeedStop(context, state, requestId, route, options);
+  }
+}
+
+function throwIfTerminalError(state: FeedQueueState): void {
+  if (state.terminalError) throw state.terminalError;
+}
+
+async function* iterateFeedState(state: FeedQueueState): AsyncGenerator<unknown> {
+  while (true) {
+    if (state.queue.length > 0) {
+      const nextValue = state.queue.shift();
+      if (nextValue !== undefined) yield nextValue;
+      const done = checkFeedDone(state);
+      if (done === "done") return;
+      if (done) throw done;
+      continue;
+    }
+
+    if (state.closed) {
+      throwIfTerminalError(state);
+      return;
+    }
+
+    await new Promise<void>((resolve) => {
+      state.waiters.push(resolve);
+    });
+  }
+}
+
 export function feedWithContext(
   context: BrowserWindowsTransportClientContext,
   route: string,
@@ -122,94 +209,16 @@ export function feedWithContext(
 
   return {
     [Symbol.asyncIterator]: async function* () {
-      const state: FeedQueueState = {
-        queue: [],
-        waiters: [],
-        closed: false,
-        stopSent: false,
-        terminalError: undefined,
-        route,
-        payloadKey,
-        payloadHash,
-        meta: undefined,
-      };
+      const state = initFeedState(route, payloadKey, payloadHash);
       context.feedStates.set(requestId, state);
-
       let feedStarted = false;
 
       try {
-        context.assertOutboundAllowed(route, "feed");
-        const feedStartMeta = await context.composeMetaForOperation(route, "feed", payload, options);
-        state.meta = feedStartMeta;
-
-        context.postMessage({
-          meta: feedStartMeta,
-          type: "invoke_feed_start",
-          sourceId: context.participantId,
-          sentAtMs: Date.now(),
-          requestId,
-          route,
-          operation: "feed",
-          payload,
-          payloadKey,
-          payloadHash,
-        });
+        await startFeed(context, state, requestId, route, payload, options);
         feedStarted = true;
-
-        while (true) {
-          if (state.queue.length > 0) {
-            const nextValue = state.queue.shift();
-            if (nextValue !== undefined) {
-              yield nextValue;
-            }
-
-            if (state.closed && state.queue.length === 0) {
-              if (state.terminalError) {
-                throw state.terminalError;
-              }
-              return;
-            }
-
-            continue;
-          }
-
-          if (state.closed) {
-            if (state.terminalError) {
-              throw state.terminalError;
-            }
-            return;
-          }
-
-          await new Promise<void>((resolve) => {
-            state.waiters.push(resolve);
-          });
-        }
+        yield* iterateFeedState(state);
       } finally {
-        context.feedStates.delete(requestId);
-        if (feedStarted && !state.stopSent) {
-          context.assertOutboundAllowed(route, "signal");
-          const feedStopMeta = await context.composeMetaForOperation(
-            route,
-            "signal",
-            { payloadKey: state.payloadKey, payloadHash: state.payloadHash },
-            options,
-          );
-          state.meta = feedStopMeta;
-
-          context.postMessage({
-            meta: feedStopMeta,
-            type: "invoke_feed_stop",
-            sourceId: context.participantId,
-            sentAtMs: Date.now(),
-            requestId,
-            route,
-            operation: "signal",
-            method: "__scomp.unsubscribe",
-            payloadKey: state.payloadKey,
-            payloadHash: state.payloadHash,
-          });
-          state.stopSent = true;
-        }
+        await cleanupFeed(context, state, requestId, route, feedStarted, options);
       }
     },
   };

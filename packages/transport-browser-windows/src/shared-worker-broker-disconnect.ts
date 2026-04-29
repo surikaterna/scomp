@@ -4,12 +4,7 @@ import { unregisterAllRoutes } from "./shared-worker-broker-routes";
 import type { BrowserWindowsParticipantId } from "./types";
 import type { BrokerContext } from "./shared-worker-broker-context";
 
-export function cleanupDisconnectedParticipant(
-  context: BrokerContext,
-  participantId: BrowserWindowsParticipantId,
-): void {
-  unregisterAllRoutes(context, participantId);
-
+function cleanupSubscriberEntries(context: BrokerContext, participantId: BrowserWindowsParticipantId): void {
   for (const [key, subscription] of context.state.feedSubscriptions.entries()) {
     const activeUpstream = context.state.activeUpstreamFeeds.get(key);
     const sourceRequestMeta = activeUpstream
@@ -21,7 +16,6 @@ export function cleanupDisconnectedParticipant(
       if (invokeId !== participantId) {
         continue;
       }
-
       subscription.subscribersByRequestId.delete(requestId);
       subscription.metaByRequestId.delete(requestId);
       context.state.pendingRequests.delete(requestId);
@@ -54,7 +48,9 @@ export function cleanupDisconnectedParticipant(
     context.state.activeUpstreamFeeds.delete(key);
     context.state.pendingRequests.delete(activeUpstream.sourceRequestId);
   }
+}
 
+function cleanupDisconnectedHosts(context: BrokerContext, participantId: BrowserWindowsParticipantId): void {
   for (const [key, activeUpstream] of context.state.activeUpstreamFeeds.entries()) {
     if (activeUpstream.ownerHostId !== participantId) {
       continue;
@@ -69,7 +65,9 @@ export function cleanupDisconnectedParticipant(
     context.state.activeUpstreamFeeds.delete(key);
     context.state.pendingRequests.delete(activeUpstream.sourceRequestId);
   }
+}
 
+function cleanupOrphanedRequests(context: BrokerContext, participantId: BrowserWindowsParticipantId): void {
   for (const [requestId, pending] of context.state.pendingRequests.entries()) {
     if (pending.invokeId === participantId) {
       context.state.pendingRequests.delete(requestId);
@@ -90,4 +88,14 @@ export function cleanupDisconnectedParticipant(
       context.state.pendingRequests.delete(requestId);
     }
   }
+}
+
+export function cleanupDisconnectedParticipant(
+  context: BrokerContext,
+  participantId: BrowserWindowsParticipantId,
+): void {
+  unregisterAllRoutes(context, participantId);
+  cleanupSubscriberEntries(context, participantId);
+  cleanupDisconnectedHosts(context, participantId);
+  cleanupOrphanedRequests(context, participantId);
 }
