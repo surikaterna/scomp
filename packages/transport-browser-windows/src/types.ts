@@ -1,17 +1,10 @@
-import type {
-  ScompTransportMessageMeta,
-} from "@scomp/types";
+import type { ScompTransportMessageMeta } from "@scomp/types";
 
 export type BrowserWindowsTransportMode = "shared-worker" | "broadcast-channel";
 
-export type BrowserWindowsTransportModePreference =
-  | BrowserWindowsTransportMode
-  | "auto";
+export type BrowserWindowsTransportModePreference = BrowserWindowsTransportMode | "auto";
 
-export type BrowserWindowsTransportHealthStatus =
-  | "healthy"
-  | "degraded"
-  | "unavailable";
+export type BrowserWindowsTransportHealthStatus = "healthy" | "degraded" | "unavailable";
 
 export type BrowserWindowsTransportHealthReasonCode =
   | "shared-worker-unavailable"
@@ -35,9 +28,7 @@ export interface BrowserWindowsTransportHealthSnapshot {
   updatedAtMs: number;
 }
 
-export type BrowserWindowsTransportHealthListener = (
-  snapshot: BrowserWindowsTransportHealthSnapshot,
-) => void;
+export type BrowserWindowsTransportHealthListener = (snapshot: BrowserWindowsTransportHealthSnapshot) => void;
 
 export interface BrowserWindowsTransportHealthConfig {
   onSnapshot?: BrowserWindowsTransportHealthListener;
@@ -60,9 +51,7 @@ export interface BrowserWindowsRouteIntent {
   kind: BrowserWindowsRouteIntentKind;
 }
 
-export type BrowserWindowsRouteIntentMap = Readonly<
-  Record<string, BrowserWindowsRouteIntentKind>
->;
+export type BrowserWindowsRouteIntentMap = Readonly<Record<string, BrowserWindowsRouteIntentKind>>;
 
 export interface BrowserWindowsTransportConfig {
   mode?: BrowserWindowsTransportModePreference;
@@ -80,39 +69,23 @@ export interface BrowserWindowsTransportConfig {
   nodeId?: BrowserWindowsParticipantId;
   sharedWorkerCtor?: BrowserWindowsSharedWorkerCtor;
   broadcastChannelCtor?: BrowserWindowsBroadcastChannelCtor;
-  meta?:
-    | ScompTransportMessageMeta
-    | (() => ScompTransportMessageMeta | Promise<ScompTransportMessageMeta>);
+  meta?: ScompTransportMessageMeta | (() => ScompTransportMessageMeta | Promise<ScompTransportMessageMeta>);
   health?: BrowserWindowsTransportHealthConfig;
 }
 
 export interface BrowserWindowsBroadcastChannelLike {
   postMessage(message: unknown): void;
-  addEventListener(
-    type: "message",
-    listener: (event: { data: unknown }) => void,
-  ): void;
-  removeEventListener(
-    type: "message",
-    listener: (event: { data: unknown }) => void,
-  ): void;
+  addEventListener(type: "message", listener: (event: { data: unknown }) => void): void;
+  removeEventListener(type: "message", listener: (event: { data: unknown }) => void): void;
   close(): void;
 }
 
-export type BrowserWindowsBroadcastChannelCtor = new (
-  name: string,
-) => BrowserWindowsBroadcastChannelLike;
+export type BrowserWindowsBroadcastChannelCtor = new (name: string) => BrowserWindowsBroadcastChannelLike;
 
 export interface BrowserWindowsSharedWorkerPortLike {
   postMessage(message: unknown): void;
-  addEventListener(
-    type: "message",
-    listener: (event: { data: unknown }) => void,
-  ): void;
-  removeEventListener(
-    type: "message",
-    listener: (event: { data: unknown }) => void,
-  ): void;
+  addEventListener(type: "message", listener: (event: { data: unknown }) => void): void;
+  removeEventListener(type: "message", listener: (event: { data: unknown }) => void): void;
   start?(): void;
   close?(): void;
 }

@@ -118,10 +118,7 @@ describe("createScompClient proxy", () => {
         },
       });
 
-      await client.update(
-        { data: "value" },
-        { priority: "P0", meta: { callKey: "call-site" } },
-      );
+      await client.update({ data: "value" }, { priority: "P0", meta: { callKey: "call-site" } });
 
       const opts = transport.lastRequest.options;
       expect(opts.priority).toBe("P0");
@@ -278,7 +275,7 @@ describe("createScompClient proxy", () => {
 
   describe("controlled feed controller proxy", () => {
     it("returns an object with async-iterable and controller proxy", async () => {
-      const { transport, client } = createTestClient({
+      const { client } = createTestClient({
         routeHints: { chat: "feed" },
       });
 

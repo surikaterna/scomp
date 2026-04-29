@@ -1,8 +1,5 @@
 import assert from "node:assert/strict";
-import type {
-  ScompTransportRequestEnvelope,
-  ScompTransportResponseEnvelope,
-} from "@scomp/types";
+import type { ScompTransportRequestEnvelope, ScompTransportResponseEnvelope } from "@scomp/types";
 import {
   SocketDisconnectedError,
   RequestTimeoutError,
@@ -28,7 +25,6 @@ class FakeSocketAdapter implements ISocketAdapter {
   private closeHandlers: Array<() => void> = [];
   private errorHandlers: Array<(error: unknown) => void> = [];
   private readonly sent: Array<string>;
-  private readonly autoOpen: boolean;
 
   constructor(sent: Array<string>, autoOpen = true) {
     this.sent = sent;
@@ -99,9 +95,7 @@ interface Harness {
 }
 
 function createHarness(options?: {
-  meta?:
-    | Record<string, unknown>
-    | (() => Record<string, unknown> | Promise<Record<string, unknown>>);
+  meta?: Record<string, unknown> | (() => Record<string, unknown> | Promise<Record<string, unknown>>);
   requestTimeoutMs?: number;
   connectionTimeoutMs?: number;
   maxInFlightRequests?: number;
@@ -296,9 +290,7 @@ describe("WebSocketClientTransport (unified)", () => {
   it("delivers queued feed chunks that arrive before feed start response", async () => {
     const harness = createHarness();
 
-    const iterator = harness.transport
-      .feed("users.live", { room: "alpha" })
-      [Symbol.asyncIterator]();
+    const iterator = harness.transport.feed("users.live", { room: "alpha" })[Symbol.asyncIterator]();
 
     const pendingFirst = iterator.next();
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -344,9 +336,7 @@ describe("WebSocketClientTransport (unified)", () => {
     const harness = createHarness();
 
     const pendingRequest = harness.transport.request("users.get", { id: 1 });
-    const iterator = harness.transport
-      .feed("users.live", { room: "alpha" })
-      [Symbol.asyncIterator]();
+    const iterator = harness.transport.feed("users.live", { room: "alpha" })[Symbol.asyncIterator]();
 
     const pendingFeedNext = iterator.next();
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -394,9 +384,7 @@ describe("WebSocketClientTransport — hardening", () => {
     await tick();
 
     const env = parseEnvelope(harness.sent[0]);
-    harness.getSocket().emitMessage(
-      JSON.stringify({ id: env.id, payload: { ok: true } }),
-    );
+    harness.getSocket().emitMessage(JSON.stringify({ id: env.id, payload: { ok: true } }));
 
     const result = await pending;
     assert.deepEqual(result, { ok: true });
@@ -409,10 +397,7 @@ describe("WebSocketClientTransport — hardening", () => {
       connectionTimeoutMs: 50,
       manualOpen: true,
     });
-    await assert.rejects(
-      harness.transport.request("any.route", {}),
-      ConnectionTimeoutError,
-    );
+    await assert.rejects(harness.transport.request("any.route", {}), ConnectionTimeoutError);
   });
 
   // --- In-flight limit ---
@@ -426,10 +411,7 @@ describe("WebSocketClientTransport — hardening", () => {
     await tick();
 
     // Third request should be rejected immediately
-    await assert.rejects(
-      harness.transport.request("r3", {}),
-      InFlightLimitError,
-    );
+    await assert.rejects(harness.transport.request("r3", {}), InFlightLimitError);
 
     // Close to clean up pending requests
     await harness.transport.close();
@@ -443,9 +425,7 @@ describe("WebSocketClientTransport — hardening", () => {
 
     // Resolve the first request
     const env1 = parseEnvelope(harness.sent[0]);
-    harness.getSocket().emitMessage(
-      JSON.stringify({ id: env1.id, payload: { n: 1 } }),
-    );
+    harness.getSocket().emitMessage(JSON.stringify({ id: env1.id, payload: { n: 1 } }));
     await p1;
 
     // Now a second request should succeed
@@ -453,9 +433,7 @@ describe("WebSocketClientTransport — hardening", () => {
     await tick();
 
     const env2 = parseEnvelope(harness.sent[1]);
-    harness.getSocket().emitMessage(
-      JSON.stringify({ id: env2.id, payload: { n: 2 } }),
-    );
+    harness.getSocket().emitMessage(JSON.stringify({ id: env2.id, payload: { n: 2 } }));
     assert.deepEqual(await p2, { n: 2 });
   });
 
@@ -464,9 +442,7 @@ describe("WebSocketClientTransport — hardening", () => {
   it("closes feed when buffer exceeds high-water mark", async () => {
     const harness = createHarness({ feedBufferHighWaterMark: 3 });
 
-    const iterator = harness.transport
-      .feed("live.data", {})
-      [Symbol.asyncIterator]();
+    const iterator = harness.transport.feed("live.data", {})[Symbol.asyncIterator]();
 
     const pendingNext = iterator.next();
     await tick();
@@ -660,9 +636,7 @@ describe("WebSocketClientTransport — hardening", () => {
     // Close should abort the reconnect
     await transport.close();
 
-    const reconnectAttempts = events.filter(
-      (e) => e.type === "connection_reconnect",
-    ).length;
+    const reconnectAttempts = events.filter((e) => e.type === "connection_reconnect").length;
     // Should have started but not completed all 10 attempts
     assert.ok(reconnectAttempts < 10, `Expected < 10 reconnect attempts, got ${reconnectAttempts}`);
   });

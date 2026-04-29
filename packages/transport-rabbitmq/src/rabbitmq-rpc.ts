@@ -1,20 +1,7 @@
-import {
-  type CompiledRoute,
-  createFeedHash,
-  type ScompHandlerContext,
-} from "@scomp/core";
-import {
-  type ScompErrorCode,
-  type ScompTransportRequestEnvelope,
-  type ScompTransportResponseEnvelope,
-} from "@scomp/types";
+import { type CompiledRoute, createFeedHash, type ScompHandlerContext } from "@scomp/core";
+import type { ScompErrorCode, ScompTransportRequestEnvelope, ScompTransportResponseEnvelope } from "@scomp/types";
 import type { Channel, ConsumeMessage } from "amqplib";
-import {
-  type RabbitMQTransportEvent,
-  type RunningFeed,
-  type RouterTable,
-  toFeedExchange,
-} from "./types";
+import { type RabbitMQTransportEvent, type RunningFeed, type RouterTable, toFeedExchange } from "./types";
 import { publishFeed } from "./rabbitmq-feed";
 
 export interface RpcContext {
@@ -36,14 +23,9 @@ export interface RpcContext {
   getCurrentChannel: () => Channel | undefined;
 }
 
-export async function handleRpcMessage(
-  ctx: RpcContext,
-  message: ConsumeMessage,
-): Promise<void> {
+export async function handleRpcMessage(ctx: RpcContext, message: ConsumeMessage): Promise<void> {
   const channel = await ctx.getChannel();
-  const body = ctx.deserializeFromBuffer<ScompTransportRequestEnvelope>(
-    message.content,
-  );
+  const body = ctx.deserializeFromBuffer<ScompTransportRequestEnvelope>(message.content);
   const route = String(body.route ?? "");
   ctx.emitPriorityDecision("inbound", route, body.op, body.meta);
 
@@ -51,12 +33,7 @@ export async function handleRpcMessage(
 
   if (!routeEntry) {
     channel.ack(message);
-    replyWithError(
-      ctx,
-      message,
-      `Route not found: ${route}`,
-      "ROUTE_NOT_FOUND",
-    );
+    replyWithError(ctx, message, `Route not found: ${route}`, "ROUTE_NOT_FOUND");
     return;
   }
 
@@ -81,9 +58,7 @@ export async function handleRpcMessage(
     replyWithPayload(ctx, message, output);
   } catch (error) {
     const code =
-      (error as any)?.code === "UNAUTHORIZED"
-        ? ("UNAUTHORIZED" as ScompErrorCode)
-        : undefined;
+      (error as unknown as { code?: string })?.code === "UNAUTHORIZED" ? ("UNAUTHORIZED" as ScompErrorCode) : undefined;
     replyWithError(ctx, message, error, code);
   } finally {
     channel.ack(message);
@@ -99,10 +74,7 @@ async function handleFeedRpc(
 ): Promise<void> {
   const rawPayload = body.payload;
   const parsedPayload = route.parser ? route.parser(rawPayload) : rawPayload;
-  const hash = String(
-    body.feed ??
-      createFeedHash(route.route, parsedPayload, { hashKey: route.hashKey }),
-  );
+  const hash = String(body.feed ?? createFeedHash(route.route, parsedPayload, { hashKey: route.hashKey }));
 
   const existing = ctx.runningFeeds.get(hash);
   if (existing) {
@@ -133,17 +105,10 @@ async function handleFeedRpc(
   ctx.emitEvent({ type: "feed_started", route: route.route, hash });
 
   const iterable = route.handler(parsedPayload, handlerCtx) as AsyncIterable<unknown>;
-  void publishFeed(
-    channel,
-    runningFeed,
-    iterable,
-    ctx.serializer,
-    ctx.contentType,
-    (feed) => {
-      ctx.runningFeeds.delete(feed.key);
-      ctx.exchangeToFeedKey.delete(feed.exchange);
-    },
-  );
+  void publishFeed(channel, runningFeed, iterable, ctx.serializer, ctx.contentType, (feed) => {
+    ctx.runningFeeds.delete(feed.key);
+    ctx.exchangeToFeedKey.delete(feed.exchange);
+  });
 
   replyWithPayload(ctx, message, { exchange, feed: hash });
 }
@@ -157,11 +122,7 @@ function invokeRoute(
   return route.handler(payload, ctx) as Promise<unknown>;
 }
 
-export function replyWithPayload(
-  ctx: RpcContext,
-  message: ConsumeMessage,
-  payload: unknown,
-): void {
+export function replyWithPayload(ctx: RpcContext, message: ConsumeMessage, payload: unknown): void {
   const replyTo = message.properties.replyTo;
   if (!replyTo) {
     return;
@@ -179,12 +140,7 @@ export function replyWithPayload(
   );
 }
 
-export function replyWithError(
-  ctx: RpcContext,
-  message: ConsumeMessage,
-  error: unknown,
-  code?: ScompErrorCode,
-): void {
+export function replyWithError(ctx: RpcContext, message: ConsumeMessage, error: unknown, code?: ScompErrorCode): void {
   const replyTo = message.properties.replyTo;
   if (!replyTo) {
     return;

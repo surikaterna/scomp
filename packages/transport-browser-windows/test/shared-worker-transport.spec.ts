@@ -3,10 +3,7 @@ import { BrowserWindowsSharedWorkerBroker } from "../src/shared-worker-broker";
 import { BrowserWindowsTransport } from "../src/transport-browser-windows";
 import { createRouteIntentsFromCompiledRouter } from "../src";
 import { FakeBroadcastChannel } from "./test-doubles/fake-broadcast-channel";
-import {
-  createFakeSharedWorkerCtor,
-  FakeSilentSharedWorker,
-} from "./test-doubles/fake-shared-worker";
+import { createFakeSharedWorkerCtor, FakeSilentSharedWorker } from "./test-doubles/fake-shared-worker";
 
 let mockWorkerBroker: BrowserWindowsSharedWorkerBroker;
 
@@ -30,21 +27,14 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function latestReasonCode(
-  transport: BrowserWindowsTransport,
-): string | undefined {
+function latestReasonCode(transport: BrowserWindowsTransport): string | undefined {
   const snapshot = transport.healthSnapshot();
   const last = snapshot.reasons[snapshot.reasons.length - 1];
   return last?.code;
 }
 
-function hasReasonCode(
-  transport: BrowserWindowsTransport,
-  code: string,
-): boolean {
-  return transport
-    .healthSnapshot()
-    .reasons.some((reason) => reason.code === code);
+function hasReasonCode(transport: BrowserWindowsTransport, code: string): boolean {
+  return transport.healthSnapshot().reasons.some((reason) => reason.code === code);
 }
 
 describe("BrowserWindowsTransport shared worker", () => {
@@ -85,14 +75,10 @@ describe("BrowserWindowsTransport shared worker", () => {
       maxPendingRequests: 1,
     });
 
-    await expect(invoke.request("svc.never", { id: 1 })).rejects.toThrow(
-      /request timed out/i,
-    );
+    await expect(invoke.request("svc.never", { id: 1 })).rejects.toThrow(/request timed out/i);
     expect(latestReasonCode(invoke)).toBe("request-timeout");
 
-    await expect(invoke.request("svc.never", { id: 2 })).rejects.toThrow(
-      /request timed out/i,
-    );
+    await expect(invoke.request("svc.never", { id: 2 })).rejects.toThrow(/request timed out/i);
 
     invoke.close();
   });
@@ -105,9 +91,7 @@ describe("BrowserWindowsTransport shared worker", () => {
     });
 
     const first = invoke.request("svc.never", { id: 1 });
-    await expect(invoke.request("svc.never", { id: 2 })).rejects.toThrow(
-      /max pending requests exceeded/i,
-    );
+    await expect(invoke.request("svc.never", { id: 2 })).rejects.toThrow(/max pending requests exceeded/i);
 
     await expect(first).rejects.toThrow(/request timed out/i);
     invoke.close();
@@ -270,18 +254,14 @@ describe("BrowserWindowsTransport shared worker", () => {
     });
 
     const pendingRequest = invoke.request("svc.hang", { id: 1 });
-    const feedIterator = invoke
-      .feed("svc.live", { id: 1 })
-      [Symbol.asyncIterator]();
+    const feedIterator = invoke.feed("svc.live", { id: 1 })[Symbol.asyncIterator]();
     await feedIterator.next();
 
     host.close();
 
     await expect(pendingRequest).rejects.toThrow(/host disconnected/i);
     expect(latestReasonCode(invoke)).toBe("host-disconnected");
-    await expect(feedIterator.next()).rejects.toThrow(
-      /feed host disconnected/i,
-    );
+    await expect(feedIterator.next()).rejects.toThrow(/feed host disconnected/i);
 
     invoke.close();
   });
@@ -327,17 +307,10 @@ describe("BrowserWindowsTransport shared worker", () => {
       sharedWorkerCtor: MockSharedWorker as any,
     });
 
-    const iteratorA = invokeA
-      .feed("svc.mux", { key: "same" })
-      [Symbol.asyncIterator]();
-    const iteratorB = invokeB
-      .feed("svc.mux", { key: "same" })
-      [Symbol.asyncIterator]();
+    const iteratorA = invokeA.feed("svc.mux", { key: "same" })[Symbol.asyncIterator]();
+    const iteratorB = invokeB.feed("svc.mux", { key: "same" })[Symbol.asyncIterator]();
 
-    const [firstA, firstB] = await Promise.all([
-      iteratorA.next(),
-      iteratorB.next(),
-    ]);
+    const [firstA, firstB] = await Promise.all([iteratorA.next(), iteratorB.next()]);
     expect(firstA.value).toBe(0);
     expect(firstB.value).toBe(0);
     expect(feedStarts).toBe(1);
@@ -568,17 +541,10 @@ describe("BrowserWindowsTransport shared worker", () => {
 
     await sleep(50);
 
-    const iteratorA = invokeA
-      .feed("svc.mux", { key: "same" })
-      [Symbol.asyncIterator]();
-    const iteratorB = invokeB
-      .feed("svc.mux", { key: "same" })
-      [Symbol.asyncIterator]();
+    const iteratorA = invokeA.feed("svc.mux", { key: "same" })[Symbol.asyncIterator]();
+    const iteratorB = invokeB.feed("svc.mux", { key: "same" })[Symbol.asyncIterator]();
 
-    const [firstA, firstB] = await Promise.all([
-      iteratorA.next(),
-      iteratorB.next(),
-    ]);
+    const [firstA, firstB] = await Promise.all([iteratorA.next(), iteratorB.next()]);
     expect(firstA.value).toBe(0);
     expect(firstB.value).toBe(0);
     expect(feedStarts).toBe(1);
@@ -645,9 +611,7 @@ describe("BrowserWindowsTransport shared worker", () => {
       },
     });
 
-    await expect(invoke.request("svc.unknown", { ok: true })).rejects.toThrow(
-      /unknown route/i,
-    );
+    await expect(invoke.request("svc.unknown", { ok: true })).rejects.toThrow(/unknown route/i);
 
     invoke.close();
     host.close();
@@ -675,9 +639,7 @@ describe("BrowserWindowsTransport shared worker", () => {
       },
     });
 
-    await expect(invoke.signal("svc.kind", { ok: true })).rejects.toThrow(
-      /allows "request" but attempted "signal"/i,
-    );
+    await expect(invoke.signal("svc.kind", { ok: true })).rejects.toThrow(/allows "request" but attempted "signal"/i);
 
     invoke.close();
     host.close();
@@ -726,9 +688,7 @@ describe("BrowserWindowsTransport shared worker", () => {
     const response = await invoke.request("svc.strict.get", { id: 4 });
     expect(response).toEqual({ id: 4 });
 
-    await expect(
-      invoke.signal("svc.strict.notify", { message: "ok" }),
-    ).resolves.toBeUndefined();
+    await expect(invoke.signal("svc.strict.notify", { message: "ok" })).resolves.toBeUndefined();
     await sleep(0);
     expect(handlerInvocations).toEqual(["ok"]);
 

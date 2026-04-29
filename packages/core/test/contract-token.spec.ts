@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createContractToken, type ContractToken } from "../src";
+import { createContractToken } from "../src";
 
 describe("createContractToken", () => {
   it("returns an object with the correct name", () => {

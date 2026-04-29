@@ -72,7 +72,7 @@ export {
   type ScompControlPlaneContract,
 } from "./control-plane-contract";
 
-export { type ITransport, type ScompClientInvokeOptions } from "./transport";
+export type { ITransport, ScompClientInvokeOptions } from "./transport";
 
 export {
   runMiddlewareChain,

@@ -1,11 +1,5 @@
-import {
-  createFeedKey,
-  type BrokerContext,
-} from "./shared-worker-broker-context";
-import {
-  findUpstreamKeyBySourceRequestId,
-  removeFeedSubscription,
-} from "./shared-worker-broker-feed";
+import { createFeedKey, type BrokerContext } from "./shared-worker-broker-context";
+import { findUpstreamKeyBySourceRequestId, removeFeedSubscription } from "./shared-worker-broker-feed";
 import { pickHost } from "./shared-worker-broker-routes";
 import type {
   BrowserWindowsHostFeedChunkMessage,
@@ -17,10 +11,7 @@ import type {
   BrowserWindowsInvokeSignalMessage,
 } from "./protocol";
 
-export function handleInvokeRequest(
-  context: BrokerContext,
-  message: BrowserWindowsInvokeRequestMessage,
-): void {
+export function handleInvokeRequest(context: BrokerContext, message: BrowserWindowsInvokeRequestMessage): void {
   const hostId = pickHost(context, message.route);
   if (!hostId) {
     context.sendToParticipant(message.sourceId, {
@@ -59,10 +50,7 @@ export function handleInvokeRequest(
   });
 }
 
-export function handleInvokeSignal(
-  context: BrokerContext,
-  message: BrowserWindowsInvokeSignalMessage,
-): void {
+export function handleInvokeSignal(context: BrokerContext, message: BrowserWindowsInvokeSignalMessage): void {
   const hosts = context.state.routeHosts.get(message.route);
   if (!hosts || hosts.size === 0) {
     return;
@@ -84,10 +72,7 @@ export function handleInvokeSignal(
   }
 }
 
-export function handleInvokeFeedStart(
-  context: BrokerContext,
-  message: BrowserWindowsInvokeFeedStartMessage,
-): void {
+export function handleInvokeFeedStart(context: BrokerContext, message: BrowserWindowsInvokeFeedStartMessage): void {
   const hostId = pickHost(context, message.route);
   if (!hostId) {
     context.sendToParticipant(message.sourceId, {
@@ -106,11 +91,7 @@ export function handleInvokeFeedStart(
     return;
   }
 
-  const key = createFeedKey(
-    message.route,
-    message.payloadKey,
-    message.payloadHash,
-  );
+  const key = createFeedKey(message.route, message.payloadKey, message.payloadHash);
 
   const subscription = context.state.feedSubscriptions.get(key) ?? {
     route: message.route,
@@ -163,10 +144,7 @@ export function handleInvokeFeedStart(
   });
 }
 
-export function handleInvokeFeedStop(
-  context: BrokerContext,
-  message: BrowserWindowsInvokeFeedStopMessage,
-): void {
+export function handleInvokeFeedStop(context: BrokerContext, message: BrowserWindowsInvokeFeedStopMessage): void {
   const pending = context.state.pendingRequests.get(message.requestId);
   if (!pending?.hostId) {
     return;
@@ -209,10 +187,7 @@ export function handleInvokeFeedStop(
   context.state.activeUpstreamFeeds.delete(key);
 }
 
-export function handleHostResponse(
-  context: BrokerContext,
-  message: BrowserWindowsHostResponseMessage,
-): void {
+export function handleHostResponse(context: BrokerContext, message: BrowserWindowsHostResponseMessage): void {
   const pending = context.state.pendingRequests.get(message.requestId);
   if (!pending) {
     return;
@@ -233,20 +208,13 @@ export function handleHostResponse(
   context.state.pendingRequests.delete(message.requestId);
 }
 
-export function handleHostFeedStarted(
-  context: BrokerContext,
-  message: BrowserWindowsHostFeedStartedMessage,
-): void {
+export function handleHostFeedStarted(context: BrokerContext, message: BrowserWindowsHostFeedStartedMessage): void {
   const pending = context.state.pendingRequests.get(message.requestId);
   if (!pending) {
     return;
   }
 
-  const key = createFeedKey(
-    pending.route,
-    message.payloadKey,
-    message.payloadHash,
-  );
+  const key = createFeedKey(pending.route, message.payloadKey, message.payloadHash);
   const existing = context.state.activeUpstreamFeeds.get(key);
   if (!existing) {
     return;
@@ -259,10 +227,7 @@ export function handleHostFeedStarted(
   });
 }
 
-export function handleHostFeedChunk(
-  context: BrokerContext,
-  message: BrowserWindowsHostFeedChunkMessage,
-): void {
+export function handleHostFeedChunk(context: BrokerContext, message: BrowserWindowsHostFeedChunkMessage): void {
   const key = findUpstreamKeyBySourceRequestId(context, message.requestId);
   if (!key) {
     return;
@@ -273,12 +238,8 @@ export function handleHostFeedChunk(
     return;
   }
 
-  for (const [
-    subscriberRequestId,
-    subscriberInvokeId,
-  ] of subscription.subscribersByRequestId) {
-    const subscriberMeta =
-      subscription.metaByRequestId.get(subscriberRequestId);
+  for (const [subscriberRequestId, subscriberInvokeId] of subscription.subscribersByRequestId) {
+    const subscriberMeta = subscription.metaByRequestId.get(subscriberRequestId);
     context.sendToParticipant(subscriberInvokeId, {
       type: "invoke_feed_chunk",
       sourceId: "broker",

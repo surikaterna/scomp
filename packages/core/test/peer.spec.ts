@@ -5,9 +5,7 @@ import { createContractToken } from "../src";
 
 /* ---------- helpers ---------- */
 
-function createFakeTransport(
-  overrides: Partial<ITransport> = {},
-): ITransport & {
+function createFakeTransport(overrides: Partial<ITransport> = {}): ITransport & {
   registeredRouter: CompiledRouter | undefined;
   closeCalled: boolean;
 } {
@@ -29,10 +27,7 @@ function createFakeTransport(
   return fake;
 }
 
-function fakeService(
-  name: string,
-  routes: Record<string, string>,
-): ServiceDefinition<object> {
+function fakeService(name: string, routes: Record<string, string>): ServiceDefinition<object> {
   const router: CompiledRouter = {};
   for (const [method, kind] of Object.entries(routes)) {
     router[`${name}.${method}`] = {
@@ -47,10 +42,7 @@ function fakeService(
 function stubClientFactory() {
   const calls: Array<{ transport: ITransport; tokenName: string }> = [];
 
-  function factory<C extends object>(
-    transport: ITransport,
-    token: { name: string },
-  ): C {
+  function factory<C extends object>(transport: ITransport, token: { name: string }): C {
     const proxy = { __stub: token.name } as unknown as C;
     calls.push({ transport, tokenName: token.name });
     return proxy;
@@ -64,10 +56,9 @@ function stubClientFactory() {
 describe("createScompPeer", () => {
   it("throws when created with zero transports", () => {
     const { factory } = stubClientFactory();
-    assert.throws(
-      () => createScompPeer({ transports: [], clientFactory: factory }),
-      { message: "createScompPeer requires at least one transport." },
-    );
+    assert.throws(() => createScompPeer({ transports: [], clientFactory: factory }), {
+      message: "createScompPeer requires at least one transport.",
+    });
   });
 });
 
@@ -137,9 +128,7 @@ describe("IScompPeer.consumes()", () => {
     const { factory, calls } = stubClientFactory();
     const peer = createScompPeer({ transports: [t1], clientFactory: factory });
 
-    const token = createContractToken<{ greet(name: string): Promise<string> }>(
-      "greeter",
-    );
+    const token = createContractToken<{ greet(name: string): Promise<string> }>("greeter");
     const proxy = peer.consumes(token);
 
     assert.equal(calls.length, 1);

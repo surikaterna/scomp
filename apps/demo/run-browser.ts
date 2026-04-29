@@ -1,15 +1,8 @@
 import { createScompClient, type ClientRouteHints } from "@scomp/client";
 import { createContractToken, createScompService } from "@scomp/core";
-import {
-  createWebSocketClientTransport,
-  createNodeSocketAdapterFactory,
-} from "@scomp/transport-websocket-client";
+import { createWebSocketClientTransport, createNodeSocketAdapterFactory } from "@scomp/transport-websocket-client";
 import { createNodeWebSocketServerTransport } from "@scomp/transport-websocket-server";
-import type {
-  DemoApiContract,
-  LiveTickerInput,
-  LiveTickerTick,
-} from "./shared/api.contract";
+import type { DemoApiContract, LiveTickerInput, LiveTickerTick } from "./shared/api.contract";
 
 const routeHints: ClientRouteHints = {
   "users.getUser": "request",
@@ -48,9 +41,7 @@ const usersService = createScompService(usersToken).implement({
     kind: "feed",
     strategy: "fanout",
     hashKey: (input: LiveTickerInput) => input.channel,
-    handler: async function* (
-      input: LiveTickerInput,
-    ): AsyncIterable<LiveTickerTick> {
+    handler: async function* (input: LiveTickerInput): AsyncIterable<LiveTickerTick> {
       let sequence = 0;
       try {
         while (true) {

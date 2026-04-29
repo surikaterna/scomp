@@ -1,10 +1,5 @@
 import assert from "node:assert/strict";
-import {
-  createContractToken,
-  createScompService,
-  createScompFeed,
-  type CompiledRouter,
-} from "@scomp/core";
+import { createContractToken, createScompService, createScompFeed, type CompiledRouter } from "@scomp/core";
 import { createInprocessTransport } from "../src";
 
 /* ---------- contract definitions ---------- */
@@ -28,9 +23,7 @@ interface FailingContract {
 
 /* ---------- helpers ---------- */
 
-function buildRouter(
-  ...services: Array<{ router: CompiledRouter }>
-): CompiledRouter {
+function buildRouter(...services: Array<{ router: CompiledRouter }>): CompiledRouter {
   const combined: CompiledRouter = {};
   for (const service of services) {
     Object.assign(combined, service.router);
@@ -157,10 +150,7 @@ describe("createInprocessTransport", () => {
     const transport = createInprocessTransport();
     transport.registerRoutes(service.router);
 
-    assert.throws(
-      () => transport.feed("math.multiply", { left: 3, right: 4 }),
-      /is not a feed route/,
-    );
+    assert.throws(() => transport.feed("math.multiply", { left: 3, right: 4 }), /is not a feed route/);
   });
 
   it("routes sync and async signal failures to onSignalError", async () => {
@@ -194,24 +184,15 @@ describe("createInprocessTransport", () => {
 
     assert.equal(observedErrors.length, 2);
     assert.equal(observedErrors[0]?.route, "fail.failSync");
-    assert.equal(
-      (observedErrors[0]?.error as Error).message,
-      "sync failure",
-    );
+    assert.equal((observedErrors[0]?.error as Error).message, "sync failure");
     assert.equal(observedErrors[1]?.route, "fail.failAsync");
-    assert.equal(
-      (observedErrors[1]?.error as Error).message,
-      "async failure: payload",
-    );
+    assert.equal((observedErrors[1]?.error as Error).message, "async failure: payload");
   });
 
   it("throws when calling methods before registerRoutes", async () => {
     const transport = createInprocessTransport();
 
-    await assert.rejects(
-      () => transport.request("math.multiply", { left: 1, right: 2 }),
-      /No routes registered/,
-    );
+    await assert.rejects(() => transport.request("math.multiply", { left: 1, right: 2 }), /No routes registered/);
   });
 
   it("throws for unknown routes", async () => {
@@ -223,10 +204,7 @@ describe("createInprocessTransport", () => {
     const transport = createInprocessTransport();
     transport.registerRoutes(service.router);
 
-    await assert.rejects(
-      () => transport.request("math.nonexistent", {}),
-      /Route "math.nonexistent" not found/,
-    );
+    await assert.rejects(() => transport.request("math.nonexistent", {}), /Route "math.nonexistent" not found/);
   });
 
   it("supports multiple services via combined router", async () => {
@@ -273,10 +251,7 @@ describe("createInprocessTransport", () => {
 
     await transport.close();
 
-    await assert.rejects(
-      () => transport.request("math.multiply", { left: 1, right: 2 }),
-      /No routes registered/,
-    );
+    await assert.rejects(() => transport.request("math.multiply", { left: 1, right: 2 }), /No routes registered/);
   });
 
   it("applies parser when present on a route", async () => {

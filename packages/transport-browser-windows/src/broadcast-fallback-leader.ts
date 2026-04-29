@@ -11,10 +11,7 @@ export interface LeaderState {
   leaderLeaseUntilMs: number;
 }
 
-export function createLeaderAnnounceFrame(
-  participantId: string,
-  leaseUntilMs: number,
-): BroadcastLeaderAnnounceFrame {
+export function createLeaderAnnounceFrame(participantId: string, leaseUntilMs: number): BroadcastLeaderAnnounceFrame {
   return {
     frameType: "leader_announce",
     sourceId: participantId,
@@ -24,10 +21,7 @@ export function createLeaderAnnounceFrame(
   };
 }
 
-export function createLeaderHeartbeatFrame(
-  participantId: string,
-  leaseUntilMs: number,
-): BroadcastLeaderHeartbeatFrame {
+export function createLeaderHeartbeatFrame(participantId: string, leaseUntilMs: number): BroadcastLeaderHeartbeatFrame {
   return {
     frameType: "leader_heartbeat",
     sourceId: participantId,
@@ -37,9 +31,7 @@ export function createLeaderHeartbeatFrame(
   };
 }
 
-export function createLeaderRetireFrame(
-  participantId: string,
-): BroadcastLeaderRetireFrame {
+export function createLeaderRetireFrame(participantId: string): BroadcastLeaderRetireFrame {
   return {
     frameType: "leader_retire",
     sourceId: participantId,
@@ -63,11 +55,7 @@ export function electLeaderId(
   return pickLeader(alive);
 }
 
-export function shouldAdoptLeader(
-  current: LeaderState,
-  frameLeaderId: string,
-  now: number,
-): boolean {
+export function shouldAdoptLeader(current: LeaderState, frameLeaderId: string, now: number): boolean {
   return (
     !current.leaderId ||
     current.leaderId === frameLeaderId ||
@@ -76,8 +64,6 @@ export function shouldAdoptLeader(
   );
 }
 
-export function isRetireFrame(
-  frame: BroadcastControlFrame,
-): frame is BroadcastLeaderRetireFrame {
+export function isRetireFrame(frame: BroadcastControlFrame): frame is BroadcastLeaderRetireFrame {
   return frame.frameType === "leader_retire";
 }

@@ -1,12 +1,5 @@
-import type {
-  BrowserWindowsParticipantId,
-  BrowserWindowsRequestId,
-} from "./types";
-import type {
-  FeedQueueState,
-  HostedFeedState,
-  PendingRequestState,
-} from "./transport-browser-windows-state";
+import type { BrowserWindowsParticipantId, BrowserWindowsRequestId } from "./types";
+import type { FeedQueueState, HostedFeedState, PendingRequestState } from "./transport-browser-windows-state";
 import { rejectPendingRequest } from "./transport-browser-windows-state";
 
 export function sendHello(
@@ -75,11 +68,7 @@ export function shutdownTransport(options: {
   options.removeRuntimeEventListener();
 
   for (const [requestId, pending] of options.pendingRequests.entries()) {
-    rejectPendingRequest(
-      requestId,
-      pending,
-      new Error("BrowserWindowsTransport closed."),
-    );
+    rejectPendingRequest(requestId, pending, new Error("BrowserWindowsTransport closed."));
   }
   options.pendingRequests.clear();
 

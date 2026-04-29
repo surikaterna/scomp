@@ -1,8 +1,6 @@
 import type { CompiledRoute, ControlledAsyncIterable, ScompHandlerContext } from "@scomp/core";
 import type {
   ScompFeedChunkEnvelope,
-  ScompTransportMessageMeta,
-  ScompTransportPrincipal,
   ScompTransportRequestEnvelope,
   ScompTransportResponseEnvelope,
 } from "@scomp/types";
@@ -31,23 +29,16 @@ export interface RunningFeed<Socket extends RuntimeSocket> {
 export type TransportMessage = ScompTransportRequestEnvelope;
 
 export type RuntimeHandlers<Socket extends RuntimeSocket> = {
-  invokeRoute: (
-    route: CompiledRoute,
-    message: TransportMessage,
-    ctx?: ScompHandlerContext,
-  ) => Promise<unknown>;
+  invokeRoute: (route: CompiledRoute, message: TransportMessage, ctx?: ScompHandlerContext) => Promise<unknown>;
   isSocketOpen: (socket: Socket) => boolean;
   onReply: (socket: Socket, response: ScompTransportResponseEnvelope) => void;
   onFeedChunk: (socket: Socket, chunk: ScompFeedChunkEnvelope) => void;
   onFeedExchange: (hash: string) => string;
 };
 
-export type WebSocketServerRuntimeConfig<Socket extends RuntimeSocket> =
-  RuntimeHandlers<Socket>;
+export type WebSocketServerRuntimeConfig<Socket extends RuntimeSocket> = RuntimeHandlers<Socket>;
 
-export function parseTransportMessage(
-  text: string,
-): TransportMessage | undefined {
+export function parseTransportMessage(text: string): TransportMessage | undefined {
   const parsed = safeJsonParse(text);
   if (!parsed.ok) {
     return undefined;
@@ -56,11 +47,7 @@ export function parseTransportMessage(
 }
 
 export function ensureFeedIterable(value: unknown): AsyncIterable<unknown> {
-  if (
-    value &&
-    typeof (value as AsyncIterable<unknown>)[Symbol.asyncIterator] ===
-      "function"
-  ) {
+  if (value && typeof (value as AsyncIterable<unknown>)[Symbol.asyncIterator] === "function") {
     return value as AsyncIterable<unknown>;
   }
 
@@ -72,8 +59,7 @@ export function isControlledAsyncIterable(
 ): value is ControlledAsyncIterable<unknown, Record<string, Function>> {
   return (
     value != null &&
-    typeof (value as ControlledAsyncIterable<unknown>).controller ===
-      "object" &&
+    typeof (value as ControlledAsyncIterable<unknown>).controller === "object" &&
     (value as ControlledAsyncIterable<unknown>).controller !== null
   );
 }

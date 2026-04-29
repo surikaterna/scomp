@@ -1,19 +1,8 @@
 import { randomUUID } from "node:crypto";
-import {
-  type ITransport,
-  type ScompClientInvokeOptions,
-  type ScompHandlerContext,
-} from "@scomp/core";
-import type {
-  ScompTransportMessageMeta,
-  ScompSerializer,
-  ScompTransportRequestEnvelope,
-} from "@scomp/types";
+import type { ITransport, ScompClientInvokeOptions, ScompHandlerContext } from "@scomp/core";
+import type { ScompTransportMessageMeta, ScompSerializer, ScompTransportRequestEnvelope } from "@scomp/types";
 import type { Channel, ChannelModel } from "amqplib";
-import {
-  toPriorityMeta,
-  mergeMeta,
-} from "@scomp/transport-shared";
+import { toPriorityMeta, mergeMeta } from "@scomp/transport-shared";
 import { defaultJsonSerializer } from "./serialization";
 import {
   SIGNAL_EXCHANGE,
@@ -28,11 +17,7 @@ import {
 } from "./types";
 import { connectWithRetry } from "./rabbitmq-connection";
 import { handleRpcMessage } from "./rabbitmq-rpc";
-import {
-  sendRpc,
-  createFeedConsumer,
-  type ClientContext,
-} from "./rabbitmq-client";
+import { sendRpc, createFeedConsumer, type ClientContext } from "./rabbitmq-client";
 
 export class RabbitMQTransport implements ITransport {
   private readonly config: RabbitMQTransportConfig;
@@ -43,14 +28,8 @@ export class RabbitMQTransport implements ITransport {
   private router?: RouterTable;
   private replyQueue = "";
   private readonly requestStartTime = new Map<string, number>();
-  private readonly requestResolvers = new Map<
-    string,
-    (value: unknown) => void
-  >();
-  private readonly requestRejecters = new Map<
-    string,
-    (error: unknown) => void
-  >();
+  private readonly requestResolvers = new Map<string, (value: unknown) => void>();
+  private readonly requestRejecters = new Map<string, (error: unknown) => void>();
   private readonly runningFeeds = new Map<string, RunningFeed>();
   private readonly exchangeToFeedKey = new Map<string, string>();
   private readonly feedConsumer: (
@@ -94,9 +73,7 @@ export class RabbitMQTransport implements ITransport {
     });
 
     const allRoutes = Object.values(router);
-    const serviceNames = Array.from(
-      new Set(allRoutes.map((route) => toServiceName(route.route))),
-    );
+    const serviceNames = Array.from(new Set(allRoutes.map((route) => toServiceName(route.route))));
 
     for (const serviceName of serviceNames) {
       const rpcQueue = toRpcQueue(serviceName);
@@ -119,22 +96,13 @@ export class RabbitMQTransport implements ITransport {
       await channel.consume(signalQueue, async (message) => {
         if (!message) return;
 
-        const body = this.deserializeFromBuffer<ScompTransportRequestEnvelope>(
-          message.content,
-        );
-        this.emitPriorityDecision(
-          "inbound",
-          signalRoute.route,
-          "signal",
-          body.meta,
-        );
+        const body = this.deserializeFromBuffer<ScompTransportRequestEnvelope>(message.content);
+        this.emitPriorityDecision("inbound", signalRoute.route, "signal", body.meta);
 
         channel.ack(message);
         const routeEntry = this.router?.[signalRoute.route];
         if (routeEntry) {
-          const payload = routeEntry.parser
-            ? routeEntry.parser(body.payload)
-            : body.payload;
+          const payload = routeEntry.parser ? routeEntry.parser(body.payload) : body.payload;
           const handlerCtx: ScompHandlerContext = {
             route: signalRoute.route,
             operation: "signal",
@@ -146,25 +114,14 @@ export class RabbitMQTransport implements ITransport {
     }
   }
 
-  async request(
-    route: string,
-    payload: unknown,
-    options?: ScompClientInvokeOptions,
-  ): Promise<unknown> {
+  async request(route: string, payload: unknown, options?: ScompClientInvokeOptions): Promise<unknown> {
     return sendRpc(this.clientContext(), route, "request", payload, options);
   }
 
-  async signal(
-    route: string,
-    payload: unknown,
-    options?: ScompClientInvokeOptions,
-  ): Promise<void> {
+  async signal(route: string, payload: unknown, options?: ScompClientInvokeOptions): Promise<void> {
     const priorityMeta = toPriorityMeta(options);
     const resolvedConfigMeta = await this.resolveConfigMeta();
-    const baseMeta = mergeMeta(
-      mergeMeta(resolvedConfigMeta, options?.meta),
-      priorityMeta,
-    );
+    const baseMeta = mergeMeta(mergeMeta(resolvedConfigMeta, options?.meta), priorityMeta);
     this.emitPriorityDecision("outbound", route, "signal", baseMeta);
 
     const channel = await this.getChannel();
@@ -207,11 +164,7 @@ export class RabbitMQTransport implements ITransport {
     if (connection?.close) await connection.close();
   }
 
-  feed(
-    route: string,
-    payload: unknown,
-    options?: ScompClientInvokeOptions,
-  ): AsyncIterable<unknown> {
+  feed(route: string, payload: unknown, options?: ScompClientInvokeOptions): AsyncIterable<unknown> {
     return this.feedConsumer(route, payload, options);
   }
 
@@ -222,8 +175,7 @@ export class RabbitMQTransport implements ITransport {
       configMeta: this.config.meta,
       getChannel: () => this.getChannel(),
       emitEvent: (e) => this.emitEvent(e),
-      emitPriorityDecision: (d, r, o, m) =>
-        this.emitPriorityDecision(d, r, o, m),
+      emitPriorityDecision: (d, r, o, m) => this.emitPriorityDecision(d, r, o, m),
       assertPayloadSize: (p) => this.assertPayloadSize(p),
       requestStartTime: this.requestStartTime,
       requestResolvers: this.requestResolvers,
@@ -261,9 +213,8 @@ export class RabbitMQTransport implements ITransport {
 
   private async getConnection(): Promise<ChannelModel> {
     if (!this.connection) {
-      this.connection = await connectWithRetry(
-        { ...this.config.retry, url: this.config.url },
-        (event) => this.emitEvent(event),
+      this.connection = await connectWithRetry({ ...this.config.retry, url: this.config.url }, (event) =>
+        this.emitEvent(event),
       );
       this.emitEvent({ type: "connection_opened" });
       this.connection.on("close", () => {
@@ -319,14 +270,10 @@ export class RabbitMQTransport implements ITransport {
     operation: ScompTransportRequestEnvelope["op"],
     meta?: ScompTransportMessageMeta,
   ): void {
-    this.emitEvent(
-      buildPriorityDecisionEvent(direction, route, operation, meta),
-    );
+    this.emitEvent(buildPriorityDecisionEvent(direction, route, operation, meta));
   }
 
-  private async resolveConfigMeta(): Promise<
-    ScompTransportMessageMeta | undefined
-  > {
+  private async resolveConfigMeta(): Promise<ScompTransportMessageMeta | undefined> {
     const metaConfig = this.config.meta;
     if (!metaConfig) return undefined;
     if (typeof metaConfig === "function") return metaConfig();
@@ -350,9 +297,7 @@ export class RabbitMQTransport implements ITransport {
   }
 }
 
-export function createRabbitMqTransport(
-  config: RabbitMQTransportConfig,
-): RabbitMQTransport {
+export function createRabbitMqTransport(config: RabbitMQTransportConfig): RabbitMQTransport {
   return new RabbitMQTransport(config);
 }
 

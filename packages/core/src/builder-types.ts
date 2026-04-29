@@ -1,8 +1,4 @@
-import type {
-  AnyContractMethod,
-  ContractNetworkIntent,
-  ContractMethodInput,
-} from "@scomp/types";
+import type { AnyContractMethod, ContractNetworkIntent, ContractMethodInput } from "@scomp/types";
 
 // ---------------------------------------------------------------------------
 // Contract validation types (compile-time only, zero runtime cost)
@@ -16,8 +12,9 @@ import type {
  * This avoids `Record<string, ...>` which interfaces cannot satisfy due to
  * missing implicit index signatures.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// biome-ignore lint/suspicious/noExplicitAny: required for type-level variance matching
 export type ValidContract<C> = {
+  // biome-ignore lint/suspicious/noExplicitAny: required for type-level variance matching
   [K in keyof C]: C[K] extends (...args: any[]) => unknown ? C[K] : never;
 };
 
@@ -25,12 +22,12 @@ export type ValidContract<C> = {
  * Per-method diagnostic: produces a string-literal error when a method's
  * return type is not one of the supported kinds (Promise, AsyncIterable, void).
  */
-export type DiagnoseMethod<K extends string, M> =
-  M extends (...args: any[]) => infer R
-    ? R extends Promise<unknown> | AsyncIterable<unknown> | void | Promise<void>
-      ? M
-      : `⚠ "${K}" must return Promise<T>, AsyncIterable<T>, or void`
-    : `⚠ "${K}" is not a method`;
+// biome-ignore lint/suspicious/noExplicitAny: required for type-level variance matching
+export type DiagnoseMethod<K extends string, M> = M extends (...args: any[]) => infer R
+  ? R extends Promise<unknown> | AsyncIterable<unknown> | void | Promise<void>
+    ? M
+    : `⚠ "${K}" must return Promise<T>, AsyncIterable<T>, or void`
+  : `⚠ "${K}" is not a method`;
 
 /**
  * Maps every method in a contract to either itself (valid) or a
@@ -45,11 +42,7 @@ export type DiagnoseContract<C> = {
  * return type and all properties are functions, `false` otherwise.
  */
 export type IsValidContract<C extends object> =
-  C extends ValidContract<C>
-    ? DiagnoseContract<C> extends C
-      ? true
-      : false
-    : false;
+  C extends ValidContract<C> ? (DiagnoseContract<C> extends C ? true : false) : false;
 
 type RouteKind = "request" | "signal" | "feed";
 
@@ -77,26 +70,18 @@ export interface FeedImplementationConfig<Input, Output> {
 }
 
 type ContractMethodKeys<Contract extends object> = {
-  [MethodName in keyof Contract]: Contract[MethodName] extends AnyContractMethod
-    ? MethodName
-    : never;
+  [MethodName in keyof Contract]: Contract[MethodName] extends AnyContractMethod ? MethodName : never;
 }[keyof Contract];
 
-type RequestRawHandler<Method> = Method extends (
-  input: infer Input,
-) => Promise<infer Output>
+type RequestRawHandler<Method> = Method extends (input: infer Input) => Promise<infer Output>
   ? (input: Input) => Promise<Output>
   : never;
 
-type SignalRawHandler<Method> = Method extends (
-  input: infer Input,
-) => void | Promise<void>
+type SignalRawHandler<Method> = Method extends (input: infer Input) => void | Promise<void>
   ? (input: Input) => void | Promise<void>
   : never;
 
-type FeedRawHandler<Method> = Method extends (
-  input: infer Input,
-) => AsyncIterable<infer Output>
+type FeedRawHandler<Method> = Method extends (input: infer Input) => AsyncIterable<infer Output>
   ? (input: Input) => AsyncIterable<Output>
   : never;
 
@@ -111,19 +96,12 @@ type MethodKind<Method extends AnyContractMethod> =
 
 type RequestMethodImplementation<Method extends AnyContractMethod> =
   MethodKind<Method> extends "request"
-    ?
-        | RequestRawHandler<Method>
-        | RequestImplementationConfig<
-            ContractMethodInput<Method>,
-            Awaited<ReturnType<Method>>
-          >
+    ? RequestRawHandler<Method> | RequestImplementationConfig<ContractMethodInput<Method>, Awaited<ReturnType<Method>>>
     : never;
 
 type SignalMethodImplementation<Method extends AnyContractMethod> =
   MethodKind<Method> extends "signal"
-    ?
-        | SignalRawHandler<Method>
-        | SignalImplementationConfig<ContractMethodInput<Method>>
+    ? SignalRawHandler<Method> | SignalImplementationConfig<ContractMethodInput<Method>>
     : never;
 
 type FeedMethodImplementation<Method extends AnyContractMethod> =
@@ -132,40 +110,24 @@ type FeedMethodImplementation<Method extends AnyContractMethod> =
         | FeedRawHandler<Method>
         | FeedImplementationConfig<
             ContractMethodInput<Method>,
-            ReturnType<Method> extends AsyncIterable<infer Output>
-              ? Output
-              : never
+            ReturnType<Method> extends AsyncIterable<infer Output> ? Output : never
           >
     : never;
 
-type GroupedRequestImplementationConfig<Input, Output> = Omit<
-  RequestImplementationConfig<Input, Output>,
-  "kind"
->;
-type GroupedSignalImplementationConfig<Input> = Omit<
-  SignalImplementationConfig<Input>,
-  "kind"
->;
-type GroupedFeedImplementationConfig<Input, Output> = Omit<
-  FeedImplementationConfig<Input, Output>,
-  "kind"
->;
+type GroupedRequestImplementationConfig<Input, Output> = Omit<RequestImplementationConfig<Input, Output>, "kind">;
+type GroupedSignalImplementationConfig<Input> = Omit<SignalImplementationConfig<Input>, "kind">;
+type GroupedFeedImplementationConfig<Input, Output> = Omit<FeedImplementationConfig<Input, Output>, "kind">;
 
 type GroupedRequestMethodImplementation<Method extends AnyContractMethod> =
   MethodKind<Method> extends "request"
     ?
         | RequestRawHandler<Method>
-        | GroupedRequestImplementationConfig<
-            ContractMethodInput<Method>,
-            Awaited<ReturnType<Method>>
-          >
+        | GroupedRequestImplementationConfig<ContractMethodInput<Method>, Awaited<ReturnType<Method>>>
     : never;
 
 type GroupedSignalMethodImplementation<Method extends AnyContractMethod> =
   MethodKind<Method> extends "signal"
-    ?
-        | SignalRawHandler<Method>
-        | GroupedSignalImplementationConfig<ContractMethodInput<Method>>
+    ? SignalRawHandler<Method> | GroupedSignalImplementationConfig<ContractMethodInput<Method>>
     : never;
 
 type GroupedFeedMethodImplementation<Method extends AnyContractMethod> =
@@ -174,16 +136,11 @@ type GroupedFeedMethodImplementation<Method extends AnyContractMethod> =
         | FeedRawHandler<Method>
         | GroupedFeedImplementationConfig<
             ContractMethodInput<Method>,
-            ReturnType<Method> extends AsyncIterable<infer Output>
-              ? Output
-              : never
+            ReturnType<Method> extends AsyncIterable<infer Output> ? Output : never
           >
     : never;
 
-type ContractMethodKeysByKind<
-  Contract extends object,
-  Kind extends RouteKind,
-> = {
+type ContractMethodKeysByKind<Contract extends object, Kind extends RouteKind> = {
   [MethodName in ContractMethodKeys<Contract>]: MethodKind<
     Extract<Contract[MethodName], AnyContractMethod>
   > extends Kind
@@ -191,24 +148,12 @@ type ContractMethodKeysByKind<
     : never;
 }[ContractMethodKeys<Contract>];
 
-export type GroupedMethodImplementations<
-  Contract extends object,
-  Kind extends RouteKind,
-> = {
-  [MethodName in ContractMethodKeysByKind<
-    Contract,
-    Kind
-  >]: Kind extends "request"
-    ? GroupedRequestMethodImplementation<
-        Extract<Contract[MethodName], AnyContractMethod>
-      >
+export type GroupedMethodImplementations<Contract extends object, Kind extends RouteKind> = {
+  [MethodName in ContractMethodKeysByKind<Contract, Kind>]: Kind extends "request"
+    ? GroupedRequestMethodImplementation<Extract<Contract[MethodName], AnyContractMethod>>
     : Kind extends "signal"
-      ? GroupedSignalMethodImplementation<
-          Extract<Contract[MethodName], AnyContractMethod>
-        >
-      : GroupedFeedMethodImplementation<
-          Extract<Contract[MethodName], AnyContractMethod>
-        >;
+      ? GroupedSignalMethodImplementation<Extract<Contract[MethodName], AnyContractMethod>>
+      : GroupedFeedMethodImplementation<Extract<Contract[MethodName], AnyContractMethod>>;
 };
 
 type MethodImplementation<Method extends AnyContractMethod> =
@@ -217,18 +162,12 @@ type MethodImplementation<Method extends AnyContractMethod> =
   | FeedMethodImplementation<Method>;
 
 export type ServiceMethodImplementations<Contract extends object> = {
-  [MethodName in ContractMethodKeys<Contract>]: MethodImplementation<
-    Extract<Contract[MethodName], AnyContractMethod>
-  >;
+  [MethodName in ContractMethodKeys<Contract>]: MethodImplementation<Extract<Contract[MethodName], AnyContractMethod>>;
 };
 
-export type FragmentMethodImplementations<Contract extends object> = Partial<
-  ServiceMethodImplementations<Contract>
->;
+export type FragmentMethodImplementations<Contract extends object> = Partial<ServiceMethodImplementations<Contract>>;
 
-type FlatServiceMethodImplementationsInput<Contract extends object> = Partial<
-  ServiceMethodImplementations<Contract>
->;
+type FlatServiceMethodImplementationsInput<Contract extends object> = Partial<ServiceMethodImplementations<Contract>>;
 
 export interface GroupedServiceMethodImplementations<Contract extends object> {
   requests: GroupedMethodImplementations<Contract, "request">;
@@ -249,9 +188,8 @@ export interface GroupedMethodImplementationsInput<Contract extends object> {
   feeds?: Partial<GroupedMethodImplementations<Contract, "feed">>;
 }
 
-export interface GroupedFragmentMethodImplementations<
-  Contract extends object,
-> extends GroupedMethodImplementationsInput<Contract> {}
+export interface GroupedFragmentMethodImplementations<Contract extends object>
+  extends GroupedMethodImplementationsInput<Contract> {}
 
 export type ServiceMethodImplementationsInput<Contract extends object> =
   | FlatServiceMethodImplementationsInput<Contract>
@@ -262,10 +200,7 @@ type GroupedProvidedMethodKeys<Grouped> = Grouped extends {
   signals?: infer Signals;
   feeds?: infer Feeds;
 }
-  ?
-      | keyof NonNullable<Requests>
-      | keyof NonNullable<Signals>
-      | keyof NonNullable<Feeds>
+  ? keyof NonNullable<Requests> | keyof NonNullable<Signals> | keyof NonNullable<Feeds>
   : never;
 
 export type ProvidedMethodKeys<Methods> = Methods extends {
@@ -289,33 +224,29 @@ type UnknownServiceMethodKeys<Contract extends object, Methods> = Exclude<
 type EnsureKnownServiceMethods<Contract extends object, Methods> = [
   UnknownServiceMethodKeys<Contract, Methods>,
 ] extends [never]
-  ? {}
+  ? // biome-ignore lint/complexity/noBannedTypes: intentional empty object for conditional type diagnostics
+    {}
   : {
       __scomp_unknown_methods__: {
-        [MethodName in UnknownServiceMethodKeys<
-          Contract,
-          Methods
-        >]: "Method is not in contract";
+        [MethodName in UnknownServiceMethodKeys<Contract, Methods>]: "Method is not in contract";
       };
     };
 
 type EnsureCompleteServiceImplementation<Contract extends object, Methods> = [
   MissingServiceMethodKeys<Contract, Methods>,
 ] extends [never]
-  ? {}
+  ? // biome-ignore lint/complexity/noBannedTypes: intentional empty object for conditional type diagnostics
+    {}
   : {
       __scomp_missing_methods__: {
-        [MethodName in MissingServiceMethodKeys<
-          Contract,
-          Methods
-        >]: "Missing contract implementation";
+        [MethodName in MissingServiceMethodKeys<Contract, Methods>]: "Missing contract implementation";
       };
     };
 
-export type StrictServiceImplementationChecks<
-  Contract extends object,
-  Methods,
-> = EnsureKnownServiceMethods<Contract, Methods> &
+export type StrictServiceImplementationChecks<Contract extends object, Methods> = EnsureKnownServiceMethods<
+  Contract,
+  Methods
+> &
   EnsureCompleteServiceImplementation<Contract, Methods>;
 
 export interface CompiledRoute {
@@ -338,10 +269,7 @@ export interface ServiceDefinition<Contract extends object> {
   router: CompiledRouter;
 }
 
-export interface FragmentDefinition<
-  Contract extends object,
-  Methods extends string = never,
-> {
+export interface FragmentDefinition<Contract extends object, Methods extends string = never> {
   name: string;
   networkIntent: Partial<ContractNetworkIntent<Contract>>;
   router: CompiledRouter;
@@ -351,10 +279,12 @@ export interface FragmentDefinition<
 export type FragmentMethodNames<Fragment> =
   Fragment extends FragmentDefinition<object, infer Methods> ? Methods : never;
 
-export type CombinedFragmentMethodNames<Fragments extends readonly unknown[]> =
-  Fragments extends readonly [infer Fragment, ...infer Rest]
-    ? FragmentMethodNames<Fragment> | CombinedFragmentMethodNames<Rest>
-    : never;
+export type CombinedFragmentMethodNames<Fragments extends readonly unknown[]> = Fragments extends readonly [
+  infer Fragment,
+  ...infer Rest,
+]
+  ? FragmentMethodNames<Fragment> | CombinedFragmentMethodNames<Rest>
+  : never;
 
 type DuplicateFragmentMethodNames<
   Fragments extends readonly unknown[],
@@ -368,10 +298,11 @@ type DuplicateFragmentMethodNames<
     >
   : Duplicates;
 
-export type EnsureNoDuplicateFragmentMethods<
-  Fragments extends readonly unknown[],
-> = [DuplicateFragmentMethodNames<Fragments>] extends [never]
-  ? {}
+export type EnsureNoDuplicateFragmentMethods<Fragments extends readonly unknown[]> = [
+  DuplicateFragmentMethodNames<Fragments>,
+] extends [never]
+  ? // biome-ignore lint/complexity/noBannedTypes: intentional empty object for conditional type diagnostics
+    {}
   : {
       __scomp_duplicate_fragment_methods__: {
         [MethodName in DuplicateFragmentMethodNames<Fragments>]: "Duplicate method declared across fragments";

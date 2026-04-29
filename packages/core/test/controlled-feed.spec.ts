@@ -1,9 +1,5 @@
 import assert from "node:assert/strict";
-import {
-  createControlledFeed,
-  SCOMP_SCOPE,
-  type ControlledAsyncIterable,
-} from "../src";
+import { createControlledFeed, SCOMP_SCOPE, type ControlledAsyncIterable } from "../src";
 
 async function* generate<T>(...values: T[]): AsyncIterable<T> {
   for (const v of values) yield v;
@@ -62,8 +58,7 @@ describe("createControlledFeed", () => {
           "__scomp.internal": () => {},
         }),
       {
-        message:
-          'Controller method "__scomp.internal" uses reserved __scomp. prefix.',
+        message: 'Controller method "__scomp.internal" uses reserved __scomp. prefix.',
       },
     );
   });
@@ -109,8 +104,7 @@ describe("createControlledFeed", () => {
       request: (x: number): Promise<number> => Promise.resolve(x + 1),
       syncMethod: () => 42,
     };
-    const feed: ControlledAsyncIterable<string, typeof methods> =
-      createControlledFeed(generate("x"), methods);
+    const feed: ControlledAsyncIterable<string, typeof methods> = createControlledFeed(generate("x"), methods);
 
     await feed.controller.signal();
     const reqResult = await feed.controller.request(10);

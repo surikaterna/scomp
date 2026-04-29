@@ -3,9 +3,7 @@ import type { Channel } from "amqplib";
 import type { ScompFeedChunkEnvelope, ScompSerializer } from "@scomp/types";
 import type { RunningFeed } from "./types";
 
-export async function waitForChannelDrainIfNeeded(
-  channel: Channel,
-): Promise<void> {
+export async function waitForChannelDrainIfNeeded(channel: Channel): Promise<void> {
   const writable = (channel as unknown as { writable?: boolean }).writable;
   if (writable === false) {
     await once(channel, "drain");
@@ -20,8 +18,7 @@ export async function publishFeed(
   contentType: string,
   onComplete: (feed: RunningFeed) => void,
 ): Promise<void> {
-  const serializeToBuffer = (value: unknown): Buffer =>
-    Buffer.from(serializer.stringify(value));
+  const serializeToBuffer = (value: unknown): Buffer => Buffer.from(serializer.stringify(value));
 
   try {
     for await (const chunk of iterable) {

@@ -64,19 +64,13 @@ function resolveJestNodeEnvironment() {
     const preferred =
       (preferredMajor === undefined
         ? candidates[0]
-        : candidates.find((candidate) => candidate.major === preferredMajor)) ||
-      candidates[0];
+        : candidates.find((candidate) => candidate.major === preferredMajor)) || candidates[0];
 
     if (!preferred) {
       return undefined;
     }
 
-    const maybeResolved = path.join(
-      storePath,
-      preferred.entry,
-      "node_modules",
-      "jest-environment-node",
-    );
+    const maybeResolved = path.join(storePath, preferred.entry, "node_modules", "jest-environment-node");
 
     return fs.existsSync(maybeResolved) ? maybeResolved : undefined;
   };
@@ -95,12 +89,7 @@ function resolveJestNodeEnvironment() {
     }
   }
 
-  const directPackageJson = path.join(
-    repoRoot,
-    "node_modules",
-    "jest-environment-node",
-    "package.json",
-  );
+  const directPackageJson = path.join(repoRoot, "node_modules", "jest-environment-node", "package.json");
   try {
     const directPackage = require(directPackageJson);
     const major = parseMajor(directPackage.version);
@@ -112,12 +101,9 @@ function resolveJestNodeEnvironment() {
   }
 
   try {
-    const packageJsonPath = require.resolve(
-      "jest-environment-node/package.json",
-      {
-        paths: [repoRoot],
-      },
-    );
+    const packageJsonPath = require.resolve("jest-environment-node/package.json", {
+      paths: [repoRoot],
+    });
     return path.dirname(packageJsonPath);
   } catch {
     return "node";
@@ -146,10 +132,7 @@ function createJestConfig(options = {}) {
         {
           babelrc: false,
           configFile: false,
-          presets: [
-            ["@babel/preset-env", { targets: { node: "current" } }],
-            "@babel/preset-typescript",
-          ],
+          presets: [["@babel/preset-env", { targets: { node: "current" } }], "@babel/preset-typescript"],
         },
       ],
     },

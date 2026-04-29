@@ -1,11 +1,5 @@
-import {
-  ScompFrameworkMethods,
-  type CompiledRoute,
-} from "@scomp/core";
-import type {
-  ScompFeedChunkEnvelope,
-  ScompTransportResponseEnvelope,
-} from "@scomp/types";
+import { ScompFrameworkMethods } from "@scomp/core";
+import type { ScompFeedChunkEnvelope, ScompTransportResponseEnvelope } from "@scomp/types";
 import {
   WebSocketServerRuntime,
   type RuntimeSocket,
@@ -55,11 +49,7 @@ function createConfig(
   };
 }
 
-function makeRequest(
-  route: string,
-  payload?: unknown,
-  extra: Partial<TransportMessage> = {},
-): TransportMessage {
+function makeRequest(route: string, payload?: unknown, extra: Partial<TransportMessage> = {}): TransportMessage {
   return {
     id: `req-${Math.random().toString(36).slice(2, 8)}`,
     route,
@@ -74,9 +64,7 @@ function flushImmediate(): Promise<void> {
 }
 
 function repliesFor(collector: Collector, id: string) {
-  return collector.replies
-    .filter((r) => r.response.id === id)
-    .map((r) => r.response);
+  return collector.replies.filter((r) => r.response.id === id).map((r) => r.response);
 }
 
 // ---------------------------------------------------------------------------
@@ -215,15 +203,11 @@ describe("WebSocketServerRuntime", () => {
       // Give time for async generator to complete
       await new Promise((r) => setTimeout(r, 50));
 
-      const chunks = cfg.collector.feedChunks.filter(
-        (c) => c.chunk.feed === feedResponse.feed,
-      );
+      const chunks = cfg.collector.feedChunks.filter((c) => c.chunk.feed === feedResponse.feed);
       const types = chunks.map((c) => c.chunk.type);
       expect(types).toEqual(["next", "next", "done"]);
 
-      const payloads = chunks
-        .filter((c) => c.chunk.type === "next")
-        .map((c) => c.chunk.payload);
+      const payloads = chunks.filter((c) => c.chunk.type === "next").map((c) => c.chunk.payload);
       expect(payloads).toEqual([10, 20]);
     });
 
@@ -262,9 +246,7 @@ describe("WebSocketServerRuntime", () => {
 
       // Both sockets should receive the feed chunk
       const socketsWithChunks = new Set(
-        cfg.collector.feedChunks
-          .filter((c) => c.chunk.type === "next")
-          .map((c) => c.socket),
+        cfg.collector.feedChunks.filter((c) => c.chunk.type === "next").map((c) => c.socket),
       );
       expect(socketsWithChunks.has(socketA)).toBe(true);
       expect(socketsWithChunks.has(socketB)).toBe(true);
@@ -448,9 +430,7 @@ describe("WebSocketServerRuntime", () => {
       await new Promise((r) => setTimeout(r, 100));
 
       // socketB should still receive chunks (socketA should not after detach)
-      const chunksForB = cfg.collector.feedChunks.filter(
-        (c) => c.socket === socketB && c.chunk.type === "next",
-      );
+      const chunksForB = cfg.collector.feedChunks.filter((c) => c.socket === socketB && c.chunk.type === "next");
       expect(chunksForB.length).toBeGreaterThanOrEqual(1);
       expect(chunksForB[0].chunk.payload).toBe(99);
     });
@@ -504,8 +484,7 @@ describe("WebSocketServerRuntime", () => {
       const socket = new FakeSocket();
       const subMsg = makeRequest("svc.feed", {});
       await runtime.handleIncoming(socket, subMsg);
-      const feedHash = (repliesFor(cfg.collector, subMsg.id!)[0] as any)
-        .payload.feed;
+      const feedHash = (repliesFor(cfg.collector, subMsg.id!)[0] as any).payload.feed;
 
       const msg: TransportMessage = {
         id: "ctrl-2",

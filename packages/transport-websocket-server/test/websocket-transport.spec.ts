@@ -9,10 +9,7 @@ import {
   type CompiledRoute,
   type CompiledRouter,
 } from "@scomp/core";
-import {
-  WebSocketClientTransport,
-  createNodeSocketAdapterFactory,
-} from "@scomp/transport-websocket-client";
+import { WebSocketClientTransport, createNodeSocketAdapterFactory } from "@scomp/transport-websocket-client";
 import { NodeWebSocketServerTransport } from "../src/node";
 
 const nodeSocketAdapter = createNodeSocketAdapterFactory();
@@ -38,9 +35,7 @@ type Harness = {
 
 async function createHarness(router: CompiledRouter): Promise<Harness> {
   const httpServer = createServer();
-  await new Promise<void>((resolve) =>
-    httpServer.listen(0, "127.0.0.1", () => resolve()),
-  );
+  await new Promise<void>((resolve) => httpServer.listen(0, "127.0.0.1", () => resolve()));
 
   const address = httpServer.address() as AddressInfo;
   const url = `ws://127.0.0.1:${address.port}`;
@@ -73,9 +68,7 @@ async function closeHarness(harness: Harness): Promise<void> {
   });
 }
 
-async function closeClientTransport(
-  client: WebSocketClientTransport,
-): Promise<void> {
+async function closeClientTransport(client: WebSocketClientTransport): Promise<void> {
   await client.close();
 }
 
@@ -88,9 +81,7 @@ describe("WebSocket transports (Node)", () => {
     }
 
     const groupedSignals: Array<unknown> = [];
-    const grouped = createScompService<UsersContract>(
-      createContractToken("users"),
-    ).implement({
+    const grouped = createScompService<UsersContract>(createContractToken("users")).implement({
       requests: {
         getUser: async ({ id }: { id: number }) => ({ id, name: `u-${id}` }),
       },
@@ -112,16 +103,12 @@ describe("WebSocket transports (Node)", () => {
     });
 
     const composedSignals: Array<unknown> = [];
-    const requestFragment = createScompFragment<UsersContract>(
-      "users",
-    ).implement({
+    const requestFragment = createScompFragment<UsersContract>("users").implement({
       requests: {
         getUser: async ({ id }: { id: number }) => ({ id, name: `u-${id}` }),
       },
     });
-    const signalFragment = createScompFragment<UsersContract>(
-      "users",
-    ).implement({
+    const signalFragment = createScompFragment<UsersContract>("users").implement({
       signals: {
         notifyLogin: async (payload: { id: number }) => {
           composedSignals.push(payload);
@@ -140,11 +127,7 @@ describe("WebSocket transports (Node)", () => {
         },
       },
     });
-    const composed = composeScompFragments(
-      requestFragment,
-      signalFragment,
-      feedFragment,
-    );
+    const composed = composeScompFragments(requestFragment, signalFragment, feedFragment);
 
     const cases = [
       { router: grouped.router, signals: groupedSignals },
@@ -235,8 +218,7 @@ describe("WebSocket transports (Node)", () => {
         route: "prices.live",
         kind: "feed",
         strategy: "fanout",
-        hashKey: (payload: unknown) =>
-          String((payload as { room: string }).room),
+        hashKey: (payload: unknown) => String((payload as { room: string }).room),
         handler: async function* () {
           feedStarts += 1;
           await wait(20);
@@ -309,9 +291,7 @@ describe("WebSocket transports (Node)", () => {
       await wait(15);
       assert.deepEqual(signals, [{ line: "hello" }]);
 
-      const values = await collect(
-        harness.serverTransport.feed("ops.range", 2),
-      );
+      const values = await collect(harness.serverTransport.feed("ops.range", 2));
       assert.deepEqual(values, [1, 2]);
     } finally {
       await closeHarness(harness);

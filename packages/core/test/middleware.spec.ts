@@ -6,19 +6,11 @@ import {
   createScompPeer,
   createContractToken,
 } from "../src";
-import type {
-  ScompMiddlewareContext,
-  ScompMiddlewareFn,
-  ScompMiddleware,
-  ITransport,
-  CompiledRouter,
-} from "../src";
+import type { ScompMiddlewareContext, ScompMiddlewareFn, ScompMiddleware, ITransport, CompiledRouter } from "../src";
 
 /* ---------- helpers ---------- */
 
-function makeCtx(
-  overrides: Partial<ScompMiddlewareContext> = {},
-): ScompMiddlewareContext {
+function makeCtx(overrides: Partial<ScompMiddlewareContext> = {}): ScompMiddlewareContext {
   return {
     route: "test.route",
     operation: "request",
@@ -28,9 +20,7 @@ function makeCtx(
   };
 }
 
-function createFakeTransport(
-  overrides: Partial<ITransport> = {},
-): ITransport & {
+function createFakeTransport(overrides: Partial<ITransport> = {}): ITransport & {
   registeredRouter: CompiledRouter | undefined;
   closeCalled: boolean;
   requestCalls: Array<{ route: string; payload: unknown; options?: unknown }>;
@@ -76,10 +66,7 @@ function createFakeTransport(
 
 function stubClientFactory() {
   const calls: Array<{ transport: ITransport; tokenName: string }> = [];
-  function factory<C extends object>(
-    transport: ITransport,
-    token: { name: string },
-  ): C {
+  function factory<C extends object>(transport: ITransport, token: { name: string }): C {
     calls.push({ transport, tokenName: token.name });
     return { __stub: token.name } as unknown as C;
   }
@@ -116,13 +103,7 @@ describe("runMiddlewareChain", () => {
       return "done";
     });
 
-    assert.deepEqual(order, [
-      "mw1-before",
-      "mw2-before",
-      "handler",
-      "mw2-after",
-      "mw1-after",
-    ]);
+    assert.deepEqual(order, ["mw1-before", "mw2-before", "handler", "mw2-after", "mw1-after"]);
   });
 
   it("middleware can modify context via next()", async () => {
@@ -183,11 +164,7 @@ describe("runMiddlewareChain", () => {
       return next({ ...ctx, payload: `${ctx.payload}-from-mw2` });
     };
 
-    const result = await runMiddlewareChain(
-      [mw1, mw2],
-      makeCtx(),
-      async (c) => c.payload,
-    );
+    const result = await runMiddlewareChain([mw1, mw2], makeCtx(), async (c) => c.payload);
     assert.equal(result, "from-mw1-from-mw2");
   });
 });
@@ -225,9 +202,7 @@ describe("getMiddlewareFns", () => {
 describe("createMiddlewareTransport", () => {
   it("returns inner transport when no outbound middleware", () => {
     const inner = createFakeTransport();
-    const mws: ScompMiddleware[] = [
-      { name: "inbound-only", inbound: async (ctx, next) => next(ctx) },
-    ];
+    const mws: ScompMiddleware[] = [{ name: "inbound-only", inbound: async (ctx, next) => next(ctx) }];
     const wrapped = createMiddlewareTransport(inner, mws);
     assert.equal(wrapped, inner);
   });
@@ -352,12 +327,7 @@ describe("createMiddlewareTransport", () => {
     const wrapped = createMiddlewareTransport(inner, [mw1, mw2]);
     await wrapped.request("r", "data");
 
-    assert.deepEqual(order, [
-      "first-before",
-      "second-before",
-      "second-after",
-      "first-after",
-    ]);
+    assert.deepEqual(order, ["first-before", "second-before", "second-after", "first-after"]);
   });
 });
 

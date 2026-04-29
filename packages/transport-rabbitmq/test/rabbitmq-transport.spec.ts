@@ -1,15 +1,6 @@
 import assert from "node:assert/strict";
-import {
-  composeScompFragments,
-  createContractToken,
-  createScompFragment,
-  createScompService,
-} from "@scomp/core";
-import {
-  createJsonSerializer,
-  RabbitMQTransport,
-  StreamClosedError,
-} from "../src";
+import { composeScompFragments, createContractToken, createScompFragment, createScompService } from "@scomp/core";
+import { createJsonSerializer, RabbitMQTransport, StreamClosedError } from "../src";
 
 const mockConnect = jest.fn();
 const mockRandomUUID = jest.fn();
@@ -164,10 +155,7 @@ describe("RabbitMQTransport NFR behavior", () => {
     returnHandler?.({ fields: { exchange: "scomp.live.room-x" } });
 
     assert.equal(running.abortController.signal.aborted, true);
-    assert.equal(
-      running.abortController.signal.reason instanceof StreamClosedError,
-      true,
-    );
+    assert.equal(running.abortController.signal.reason instanceof StreamClosedError, true);
   });
 
   it("keeps grouped and composed fragment routers transport-compatible", async () => {
@@ -178,9 +166,7 @@ describe("RabbitMQTransport NFR behavior", () => {
     }
 
     const groupedSignals: Array<unknown> = [];
-    const grouped = createScompService<UsersContract>(
-      createContractToken("users"),
-    ).implement({
+    const grouped = createScompService<UsersContract>(createContractToken("users")).implement({
       requests: {
         getUser: async ({ id }: { id: number }) => ({ id, name: `u-${id}` }),
       },
@@ -201,16 +187,12 @@ describe("RabbitMQTransport NFR behavior", () => {
     });
 
     const composedSignals: Array<unknown> = [];
-    const requestFragment = createScompFragment<UsersContract>(
-      "users",
-    ).implement({
+    const requestFragment = createScompFragment<UsersContract>("users").implement({
       requests: {
         getUser: async ({ id }: { id: number }) => ({ id, name: `u-${id}` }),
       },
     });
-    const signalFragment = createScompFragment<UsersContract>(
-      "users",
-    ).implement({
+    const signalFragment = createScompFragment<UsersContract>("users").implement({
       signals: {
         notifyLogin: async (payload: { id: number }) => {
           composedSignals.push(payload);
@@ -228,11 +210,7 @@ describe("RabbitMQTransport NFR behavior", () => {
         },
       },
     });
-    const composed = composeScompFragments(
-      requestFragment,
-      signalFragment,
-      feedFragment,
-    );
+    const composed = composeScompFragments(requestFragment, signalFragment, feedFragment);
 
     const cases = [
       { router: grouped.router, seenSignals: groupedSignals },
@@ -244,9 +222,7 @@ describe("RabbitMQTransport NFR behavior", () => {
       mockConnect.mockResolvedValue(fake.connection);
 
       const transport = new RabbitMQTransport({ url: "amqp://test" });
-      await transport.registerRoutes(
-        router as unknown as Record<string, unknown>,
-      );
+      await transport.registerRoutes(router as unknown as Record<string, unknown>);
 
       // Intentional parity assertion: grouped/composed outputs still classify
       // request/signal/feed exactly as legacy transport dispatch expects.
@@ -273,13 +249,9 @@ describe("RabbitMQTransport NFR behavior", () => {
         ),
       );
 
-      const requestReply = fake.channel.sendToQueue.mock.calls.find(
-        ([queue]) => queue === "reply-users",
-      );
+      const requestReply = fake.channel.sendToQueue.mock.calls.find(([queue]) => queue === "reply-users");
       assert.ok(requestReply);
-      const requestBody = JSON.parse(
-        Buffer.from(requestReply[1]).toString("utf8"),
-      ) as { payload?: unknown };
+      const requestBody = JSON.parse(Buffer.from(requestReply[1]).toString("utf8")) as { payload?: unknown };
       assert.deepEqual(requestBody.payload, { id: 7, name: "u-7" });
 
       const signalQueue = Array.from(fake.queueConsumers.keys()).find((queue) =>
@@ -313,15 +285,15 @@ describe("RabbitMQTransport NFR behavior", () => {
 
       const feedStartReply = fake.channel.sendToQueue.mock.calls.find(
         ([queue, body]) =>
-          queue === "reply-users" &&
-          String(Buffer.from(body).toString("utf8")).includes("scomp.live."),
+          queue === "reply-users" && String(Buffer.from(body).toString("utf8")).includes("scomp.live."),
       );
       assert.ok(feedStartReply);
 
       await waitFor(() => fake.channel.publish.mock.calls.length > 0);
-      const firstChunk = JSON.parse(
-        Buffer.from(fake.channel.publish.mock.calls[0][2]).toString("utf8"),
-      ) as { type?: string; payload?: unknown };
+      const firstChunk = JSON.parse(Buffer.from(fake.channel.publish.mock.calls[0][2]).toString("utf8")) as {
+        type?: string;
+        payload?: unknown;
+      };
       assert.equal(firstChunk.type, "next");
       assert.deepEqual(firstChunk.payload, { id: 1 });
     }
@@ -413,11 +385,7 @@ describe("RabbitMQTransport NFR behavior", () => {
       },
     });
 
-    const pendingRequest = transport.request(
-      "users.getUser",
-      { id: 1 },
-      { priorityClass: "P1" },
-    );
+    const pendingRequest = transport.request("users.getUser", { id: 1 }, { priorityClass: "P1" });
     await waitFor(() => fake.channel.sendToQueue.mock.calls.length > 0);
 
     const outboundRequestDecision = events.find(
@@ -455,11 +423,7 @@ describe("RabbitMQTransport NFR behavior", () => {
     );
     await pendingRequest;
 
-    await transport.signal(
-      "users.notifyLogin",
-      { id: 1 },
-      { priorityClass: "P4" },
-    );
+    await transport.signal("users.notifyLogin", { id: 1 }, { priorityClass: "P4" });
     const outboundSignalDecision = events.find(
       (event) =>
         event &&
@@ -549,9 +513,7 @@ describe("RabbitMQTransport NFR behavior", () => {
     assert.equal(inboundRequestDecision?.requested, "P0");
     assert.equal(inboundRequestDecision?.effective, "P0");
 
-    const signalQueue = Array.from(fake.queueConsumers.keys()).find((queue) =>
-      queue.startsWith("scomp.event.users."),
-    );
+    const signalQueue = Array.from(fake.queueConsumers.keys()).find((queue) => queue.startsWith("scomp.event.users."));
     assert.ok(signalQueue);
     await fake.queueConsumers.get(String(signalQueue))?.(
       createMessage({
@@ -600,10 +562,7 @@ describe("RabbitMQTransport NFR behavior", () => {
     const first = transport.request("users.getUser", { id: 1 });
     await waitFor(() => fake.channel.sendToQueue.mock.calls.length > 0);
 
-    await assert.rejects(
-      () => transport.request("users.getUser", { id: 2 }),
-      /In-flight request limit/,
-    );
+    await assert.rejects(() => transport.request("users.getUser", { id: 2 }), /In-flight request limit/);
     await assert.rejects(() => first, /timed out/);
   });
 });

@@ -59,17 +59,13 @@ function normalizeMethodConfig(
   }
 
   const configObject = methodConfig as Record<string, unknown>;
-  const kind = deterministicKind
-    ? inferredKind
-    : ((configObject.kind as RouteKind | undefined) ?? inferredKind);
+  const kind = deterministicKind ? inferredKind : ((configObject.kind as RouteKind | undefined) ?? inferredKind);
   return {
     kind,
     parser: configObject.parser as ((payload: unknown) => unknown) | undefined,
     strategy: configObject.strategy as "fanout" | "exclusive" | undefined,
     hashKey: configObject.hashKey as ((payload: unknown) => string) | undefined,
-    backpressure: configObject.backpressure as
-      | { highWaterMark?: number }
-      | undefined,
+    backpressure: configObject.backpressure as { highWaterMark?: number } | undefined,
     handler: configObject.handler as (payload: unknown) => unknown,
   };
 }
@@ -80,11 +76,7 @@ function inferRouteKind(methodConfig: unknown): RouteKind {
   }
 
   const configObject = methodConfig as Record<string, unknown>;
-  if (
-    configObject.kind === "signal" ||
-    configObject.kind === "request" ||
-    configObject.kind === "feed"
-  ) {
+  if (configObject.kind === "signal" || configObject.kind === "request" || configObject.kind === "feed") {
     return configObject.kind;
   }
 
@@ -95,10 +87,7 @@ function inferRouteKind(methodConfig: unknown): RouteKind {
   return "request";
 }
 
-function compileFlatRouter(
-  name: string,
-  methods: Record<string, unknown>,
-): CompiledRouter {
+function compileFlatRouter(name: string, methods: Record<string, unknown>): CompiledRouter {
   const router: CompiledRouter = {};
 
   for (const methodName of Object.keys(methods)) {
@@ -106,11 +95,7 @@ function compileFlatRouter(
     const route = `${name}.${methodName}`;
 
     const inferredKind = inferRouteKind(implementation);
-    const normalized = normalizeMethodConfig(
-      implementation,
-      inferredKind,
-      false,
-    );
+    const normalized = normalizeMethodConfig(implementation, inferredKind, false);
 
     router[route] = buildCompiledRoute(route, normalized);
   }
@@ -133,10 +118,7 @@ function compileGroupedMethods(
   }
 }
 
-function buildCompiledRoute(
-  route: string,
-  normalized: Omit<CompiledRoute, "route">,
-): CompiledRoute {
+function buildCompiledRoute(route: string, normalized: Omit<CompiledRoute, "route">): CompiledRoute {
   return {
     route,
     kind: normalized.kind,
@@ -157,24 +139,9 @@ function compileGroupedRouter<Contract extends object>(
 ): CompiledRouter {
   const router: CompiledRouter = {};
 
-  compileGroupedMethods(
-    name,
-    "request",
-    (groupedMethods.requests ?? {}) as Record<string, unknown>,
-    router,
-  );
-  compileGroupedMethods(
-    name,
-    "signal",
-    (groupedMethods.signals ?? {}) as Record<string, unknown>,
-    router,
-  );
-  compileGroupedMethods(
-    name,
-    "feed",
-    (groupedMethods.feeds ?? {}) as Record<string, unknown>,
-    router,
-  );
+  compileGroupedMethods(name, "request", (groupedMethods.requests ?? {}) as Record<string, unknown>, router);
+  compileGroupedMethods(name, "signal", (groupedMethods.signals ?? {}) as Record<string, unknown>, router);
+  compileGroupedMethods(name, "feed", (groupedMethods.feeds ?? {}) as Record<string, unknown>, router);
 
   return router;
 }
@@ -206,16 +173,12 @@ function isGroupedMethods(methods: unknown): methods is {
     return false;
   }
 
-  return methodKeys.every(
-    (key) => key === "requests" || key === "signals" || key === "feeds",
-  );
+  return methodKeys.every((key) => key === "requests" || key === "signals" || key === "feeds");
 }
 
 export function createScompService<Contract extends object>(
   token: ContractToken<Contract>,
-  ...errors: IsValidContract<Contract> extends true
-    ? []
-    : [diagnosis: DiagnoseContract<Contract>]
+  ..._errors: IsValidContract<Contract> extends true ? [] : [diagnosis: DiagnoseContract<Contract>]
 ) {
   const name = token.name;
   return {
@@ -235,21 +198,12 @@ export function createScompService<Contract extends object>(
 
 export function createScompFragment<Contract extends object>(
   name: string,
-  ...errors: IsValidContract<Contract> extends true
-    ? []
-    : [diagnosis: DiagnoseContract<Contract>]
+  ..._errors: IsValidContract<Contract> extends true ? [] : [diagnosis: DiagnoseContract<Contract>]
 ) {
   return {
-    implement<
-      Methods extends
-        | FragmentMethodImplementations<Contract>
-        | GroupedFragmentMethodImplementations<Contract>,
-    >(
+    implement<Methods extends FragmentMethodImplementations<Contract> | GroupedFragmentMethodImplementations<Contract>>(
       methods: Methods,
-    ): FragmentDefinition<
-      Contract,
-      Extract<ProvidedMethodKeys<Methods>, string>
-    > {
+    ): FragmentDefinition<Contract, Extract<ProvidedMethodKeys<Methods>, string>> {
       const router = compileImplementationsRouter(name, methods);
 
       return {
@@ -263,10 +217,7 @@ export function createScompFragment<Contract extends object>(
 
 export function composeScompFragments<
   Contract extends object,
-  Fragments extends readonly [
-    FragmentDefinition<Contract, string>,
-    ...Array<FragmentDefinition<Contract, string>>,
-  ],
+  Fragments extends readonly [FragmentDefinition<Contract, string>, ...Array<FragmentDefinition<Contract, string>>],
 >(
   ...fragments: Fragments & EnsureNoDuplicateFragmentMethods<Fragments>
 ): FragmentDefinition<Contract, CombinedFragmentMethodNames<Fragments>> {
@@ -275,26 +226,20 @@ export function composeScompFragments<
   const router: CompiledRouter = {};
   const networkIntent: Partial<ContractNetworkIntent<Contract>> = {};
 
-  const methodToSource = new Map<
-    string,
-    { fragmentLabel: string; route: string }
-  >();
+  const methodToSource = new Map<string, { fragmentLabel: string; route: string }>();
 
   for (const [index, fragment] of fragments.entries()) {
     const fragmentLabel = `${fragment.name}#${index + 1}`;
 
     if (fragment.name !== name) {
-      throw new Error(
-        `Cannot compose fragments with different names: expected "${name}", got "${fragment.name}"`,
-      );
+      throw new Error(`Cannot compose fragments with different names: expected "${name}", got "${fragment.name}"`);
     }
 
     Object.assign(networkIntent, fragment.networkIntent);
 
     for (const [routeName, route] of Object.entries(fragment.router)) {
       const separatorIndex = routeName.indexOf(".");
-      const methodName =
-        separatorIndex === -1 ? routeName : routeName.slice(separatorIndex + 1);
+      const methodName = separatorIndex === -1 ? routeName : routeName.slice(separatorIndex + 1);
       const existingSource = methodToSource.get(methodName);
 
       if (existingSource) {
@@ -306,9 +251,7 @@ export function composeScompFragments<
       methodToSource.set(methodName, { fragmentLabel, route: routeName });
 
       if (router[routeName]) {
-        throw new Error(
-          `Duplicate route "${routeName}" while composing fragments`,
-        );
+        throw new Error(`Duplicate route "${routeName}" while composing fragments`);
       }
 
       router[routeName] = route;

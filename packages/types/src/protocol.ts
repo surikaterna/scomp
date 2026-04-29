@@ -27,10 +27,7 @@ export interface ScompClientInvokeOptions extends ScompTransportPriorityHints {
 
 export const SCOMP_CONTROL_PLANE_NAMESPACE = "__scomp";
 
-export type ScompControlPlaneRoute =
-  | "__scomp.discover"
-  | "__scomp.resolve"
-  | "__scomp.health";
+export type ScompControlPlaneRoute = "__scomp.discover" | "__scomp.resolve" | "__scomp.health";
 
 export interface ScompControlPlaneNodeRef {
   id: string;
@@ -108,13 +105,11 @@ export interface ScompControlPlaneRouteContracts {
   };
 }
 
-export type ScompControlPlaneRequestPayload<
-  Route extends ScompControlPlaneRoute,
-> = ScompControlPlaneRouteContracts[Route]["request"];
+export type ScompControlPlaneRequestPayload<Route extends ScompControlPlaneRoute> =
+  ScompControlPlaneRouteContracts[Route]["request"];
 
-export type ScompControlPlaneResponsePayload<
-  Route extends ScompControlPlaneRoute,
-> = ScompControlPlaneRouteContracts[Route]["response"];
+export type ScompControlPlaneResponsePayload<Route extends ScompControlPlaneRoute> =
+  ScompControlPlaneRouteContracts[Route]["response"];
 export interface ScompTransportMessageMeta {
   auth?: unknown;
   traceId?: string;
@@ -180,8 +175,7 @@ export interface ScompTransportErrorResponseEnvelope {
   meta?: ScompTransportMessageMeta;
 }
 
-export type ScompTransportSuccessResponse =
-  ScompTransportSuccessResponseEnvelope;
+export type ScompTransportSuccessResponse = ScompTransportSuccessResponseEnvelope;
 
 export type ScompTransportErrorResponse = ScompTransportErrorResponseEnvelope;
 
@@ -191,19 +185,19 @@ export type ScompTransportResponseEnvelope =
 
 export type ScompTransportResponse = ScompTransportResponseEnvelope;
 
-export type ScompControlPlaneRequestEnvelope<
-  Route extends ScompControlPlaneRoute = ScompControlPlaneRoute,
-> = Omit<ScompTransportRequestEnvelope, "route" | "op" | "payload"> & {
+export type ScompControlPlaneRequestEnvelope<Route extends ScompControlPlaneRoute = ScompControlPlaneRoute> = Omit<
+  ScompTransportRequestEnvelope,
+  "route" | "op" | "payload"
+> & {
   route: Route;
   op: "request";
   payload: ScompControlPlaneRequestPayload<Route>;
 };
 
-export type ScompControlPlaneSuccessResponseEnvelope<
-  Route extends ScompControlPlaneRoute = ScompControlPlaneRoute,
-> = Omit<ScompTransportSuccessResponseEnvelope, "payload"> & {
-  payload: ScompControlPlaneResponsePayload<Route>;
-};
+export type ScompControlPlaneSuccessResponseEnvelope<Route extends ScompControlPlaneRoute = ScompControlPlaneRoute> =
+  Omit<ScompTransportSuccessResponseEnvelope, "payload"> & {
+    payload: ScompControlPlaneResponsePayload<Route>;
+  };
 
 export type ScompControlPlaneRequest = {
   [Route in ScompControlPlaneRoute]: ScompControlPlaneRequestEnvelope<Route>;

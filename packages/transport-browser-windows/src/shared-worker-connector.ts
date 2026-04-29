@@ -4,15 +4,9 @@ import type {
   BrowserWindowsTransportConfig,
   BrowserWindowsTransportMode,
 } from "./types";
-import {
-  createBroadcastFallbackConnector,
-  type BrowserWindowsFallbackRuntimeEvent,
-} from "./broadcast-fallback";
+import { createBroadcastFallbackConnector, type BrowserWindowsFallbackRuntimeEvent } from "./broadcast-fallback";
 import { DEFAULT_BROWSER_WINDOWS_WORKER_URL } from "./worker-url";
-import {
-  toErrorMessage,
-  toUnavailableDetail,
-} from "./shared-worker-connector-errors";
+import { toErrorMessage, toUnavailableDetail } from "./shared-worker-connector-errors";
 
 export interface BrowserWindowsRuntimeConnector {
   readonly activeMode: BrowserWindowsTransportMode;
@@ -42,15 +36,12 @@ export type BrowserWindowsRuntimeEvent =
       atMs: number;
     };
 
-function resolveSharedWorkerCtor(
-  config: BrowserWindowsTransportConfig,
-): BrowserWindowsSharedWorkerCtor {
+function resolveSharedWorkerCtor(config: BrowserWindowsTransportConfig): BrowserWindowsSharedWorkerCtor {
   if (config.sharedWorkerCtor) {
     return config.sharedWorkerCtor;
   }
 
-  const ctor = (globalThis as { SharedWorker?: BrowserWindowsSharedWorkerCtor })
-    .SharedWorker;
+  const ctor = (globalThis as { SharedWorker?: BrowserWindowsSharedWorkerCtor }).SharedWorker;
   if (!ctor) {
     throw new Error("SharedWorker is not available in this runtime.");
   }
@@ -58,15 +49,12 @@ function resolveSharedWorkerCtor(
   return ctor;
 }
 
-function resolveBroadcastChannelCtor(
-  config: BrowserWindowsTransportConfig,
-): BrowserWindowsBroadcastChannelCtor {
+function resolveBroadcastChannelCtor(config: BrowserWindowsTransportConfig): BrowserWindowsBroadcastChannelCtor {
   if (config.broadcastChannelCtor) {
     return config.broadcastChannelCtor;
   }
 
-  const ctor = (globalThis as { BroadcastChannel?: BrowserWindowsBroadcastChannelCtor })
-    .BroadcastChannel;
+  const ctor = (globalThis as { BroadcastChannel?: BrowserWindowsBroadcastChannelCtor }).BroadcastChannel;
   if (!ctor) {
     throw new Error("BroadcastChannel is not available in this runtime.");
   }
@@ -74,19 +62,14 @@ function resolveBroadcastChannelCtor(
   return ctor;
 }
 
-export function createSharedWorkerConnector(
-  config: BrowserWindowsTransportConfig,
-): BrowserWindowsRuntimeConnector {
+export function createSharedWorkerConnector(config: BrowserWindowsTransportConfig): BrowserWindowsRuntimeConnector {
   const WorkerCtor = resolveSharedWorkerCtor(config);
   const workerUrl = config.workerUrl ?? DEFAULT_BROWSER_WINDOWS_WORKER_URL;
   const workerName = config.workerName ?? config.channelName;
   const worker = new WorkerCtor(workerUrl, workerName ? { name: workerName } : undefined);
   const { port } = worker;
 
-  const listeners = new Map<
-    (data: unknown) => void,
-    (event: { data: unknown }) => void
-  >();
+  const listeners = new Map<(data: unknown) => void, (event: { data: unknown }) => void>();
 
   port.start?.();
 
@@ -208,10 +191,7 @@ export function createRuntimeConnector(
         },
       ]);
     } catch (broadcastError) {
-      const broadcastDetail = toErrorMessage(
-        broadcastError,
-        "BroadcastChannel fallback initialization failed.",
-      );
+      const broadcastDetail = toErrorMessage(broadcastError, "BroadcastChannel fallback initialization failed.");
 
       throw new Error(
         toUnavailableDetail(

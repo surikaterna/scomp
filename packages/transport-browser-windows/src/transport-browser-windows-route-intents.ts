@@ -1,23 +1,15 @@
 import type { ScompTransportOperation } from "@scomp/types";
-import type {
-  BrowserWindowsRouteIntent,
-  BrowserWindowsRouteIntentKind,
-  BrowserWindowsRouteIntentMap,
-} from "./types";
+import type { BrowserWindowsRouteIntent, BrowserWindowsRouteIntentKind, BrowserWindowsRouteIntentMap } from "./types";
 
 type BrowserWindowsCompiledRouteLike = {
   kind?: BrowserWindowsRouteIntentKind;
 };
 
-function resolveIntentKind(
-  kind: BrowserWindowsRouteIntentKind | undefined,
-): BrowserWindowsRouteIntentKind {
+function resolveIntentKind(kind: BrowserWindowsRouteIntentKind | undefined): BrowserWindowsRouteIntentKind {
   return kind ?? "request";
 }
 
-function operationToIntentKind(
-  operation: ScompTransportOperation,
-): BrowserWindowsRouteIntentKind {
+function operationToIntentKind(operation: ScompTransportOperation): BrowserWindowsRouteIntentKind {
   if (operation === "signal") {
     return "signal";
   }
@@ -30,9 +22,7 @@ function operationToIntentKind(
 }
 
 function toIntentMap(
-  intents:
-    | BrowserWindowsRouteIntentMap
-    | ReadonlyArray<BrowserWindowsRouteIntent>,
+  intents: BrowserWindowsRouteIntentMap | ReadonlyArray<BrowserWindowsRouteIntent>,
 ): BrowserWindowsRouteIntentMap {
   if (Array.isArray(intents)) {
     const resolved: Record<string, BrowserWindowsRouteIntentKind> = {};
@@ -58,9 +48,7 @@ export function createRouteIntentsFromCompiledRouter(
 }
 
 export function createRouteIntentsFromCompiledRouters(
-  routers: ReadonlyArray<
-    Readonly<Record<string, BrowserWindowsCompiledRouteLike>>
-  >,
+  routers: ReadonlyArray<Readonly<Record<string, BrowserWindowsCompiledRouteLike>>>,
 ): BrowserWindowsRouteIntentMap {
   const intents: Record<string, BrowserWindowsRouteIntentKind> = {};
 
@@ -75,10 +63,7 @@ export function createRouteIntentsFromCompiledRouters(
 
 export function assertStrictRouteIntentAllowed(
   strictEnabled: boolean,
-  configuredIntents:
-    | BrowserWindowsRouteIntentMap
-    | ReadonlyArray<BrowserWindowsRouteIntent>
-    | undefined,
+  configuredIntents: BrowserWindowsRouteIntentMap | ReadonlyArray<BrowserWindowsRouteIntent> | undefined,
   route: string,
   operation: ScompTransportOperation,
 ): void {
@@ -86,19 +71,15 @@ export function assertStrictRouteIntentAllowed(
     return;
   }
 
-  const intentMap = configuredIntents
-    ? toIntentMap(configuredIntents)
-    : undefined;
+  const intentMap = configuredIntents ? toIntentMap(configuredIntents) : undefined;
   if (!intentMap) {
-    throw new Error(
-      "BrowserWindowsTransport strictRouteIntents is enabled, but no routeIntents were configured.",
-    );
+    throw new Error("BrowserWindowsTransport strictRouteIntents is enabled, but no routeIntents were configured.");
   }
 
   const configuredKind = intentMap[route];
   if (!configuredKind) {
     throw new Error(
-      `BrowserWindowsTransport strict route-intent rejection: unknown route \"${route}\" for operation \"${operation}\".`,
+      `BrowserWindowsTransport strict route-intent rejection: unknown route "${route}" for operation "${operation}".`,
     );
   }
 
@@ -111,7 +92,7 @@ export function assertStrictRouteIntentAllowed(
     }
 
     throw new Error(
-      `BrowserWindowsTransport strict route-intent rejection: route \"${route}\" allows \"${configuredKind}\" but attempted \"${operation}\".`,
+      `BrowserWindowsTransport strict route-intent rejection: route "${route}" allows "${configuredKind}" but attempted "${operation}".`,
     );
   }
 }

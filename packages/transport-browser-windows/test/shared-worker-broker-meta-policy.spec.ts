@@ -1,17 +1,7 @@
 import { cleanupDisconnectedParticipant } from "../src/shared-worker-broker-disconnect";
-import {
-  handleHostFeedChunk,
-  handleInvokeFeedStop,
-} from "../src/shared-worker-broker-dispatch";
-import {
-  BROKER_REASON_META_TAG,
-  BROKER_SYSTEM_META_TAG,
-} from "../src/shared-worker-broker-meta";
-import {
-  createBrokerState,
-  createFeedKey,
-  type BrokerContext,
-} from "../src/shared-worker-broker-context";
+import { handleHostFeedChunk, handleInvokeFeedStop } from "../src/shared-worker-broker-dispatch";
+import { BROKER_REASON_META_TAG, BROKER_SYSTEM_META_TAG } from "../src/shared-worker-broker-meta";
+import { createBrokerState, createFeedKey, type BrokerContext } from "../src/shared-worker-broker-context";
 import type { BrowserWindowsProtocolMessage } from "../src/protocol";
 
 function createTestContext() {
@@ -167,9 +157,7 @@ describe("shared-worker broker meta policy", () => {
 
     cleanupDisconnectedParticipant(context, "host-a");
 
-    const feedError = sent.find(
-      (entry) => entry.message.type === "invoke_feed_chunk",
-    )?.message;
+    const feedError = sent.find((entry) => entry.message.type === "invoke_feed_chunk")?.message;
     expect(feedError?.type).toBe("invoke_feed_chunk");
     expect(feedError?.meta).toMatchObject({
       traceId: "feed-meta",
@@ -180,9 +168,7 @@ describe("shared-worker broker meta policy", () => {
       },
     });
 
-    const responseError = sent.find(
-      (entry) => entry.message.type === "invoke_response",
-    )?.message;
+    const responseError = sent.find((entry) => entry.message.type === "invoke_response")?.message;
     expect(responseError?.type).toBe("invoke_response");
     expect(responseError?.meta).toMatchObject({
       traceId: "req-meta",
@@ -235,9 +221,7 @@ describe("shared-worker broker meta policy", () => {
     });
 
     expect(sent).toHaveLength(2);
-    const metaByTarget = new Map(
-      sent.map((entry) => [entry.participantId, entry.message.meta]),
-    );
+    const metaByTarget = new Map(sent.map((entry) => [entry.participantId, entry.message.meta]));
     expect(metaByTarget.get("invoke-a")).toEqual({ traceId: "trace-a" });
     expect(metaByTarget.get("invoke-b")).toEqual({ traceId: "trace-b" });
   });

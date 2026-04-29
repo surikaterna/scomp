@@ -25,7 +25,7 @@ import {
   type BroadcastProtocolFrame,
   isBroadcastFallbackFrame,
 } from "./broadcast-fallback-frames";
-import { BrokerPortLike, InMemoryBrokerPort } from "./broadcast-fallback-port";
+import { type BrokerPortLike, InMemoryBrokerPort } from "./broadcast-fallback-port";
 
 export type {
   BrowserWindowsFallbackConnector,
@@ -40,9 +40,7 @@ export function createBroadcastFallbackConnector(
   const channelName = config.channelName ?? "scomp-browser-windows";
   const channel: BrowserWindowsBroadcastChannelLike = new ChannelCtor(channelName);
   const listeners = new Set<(data: unknown) => void>();
-  const runtimeListeners = new Set<
-    (event: BrowserWindowsFallbackRuntimeEvent) => void
-  >();
+  const runtimeListeners = new Set<(event: BrowserWindowsFallbackRuntimeEvent) => void>();
   const knownParticipants = new Map<string, number>();
   const routes = new Set<string>();
   const heartbeatIntervalMs = config.heartbeatIntervalMs ?? 250;
@@ -159,11 +157,7 @@ export function createBroadcastFallbackConnector(
 
   const maybeElectLeader = (): void => {
     const now = Date.now();
-    const elected = electLeaderId(
-      participantId,
-      knownParticipants,
-      heartbeatTimeoutMs,
-    );
+    const elected = electLeaderId(participantId, knownParticipants, heartbeatTimeoutMs);
     if (!elected) {
       return;
     }
@@ -214,9 +208,7 @@ export function createBroadcastFallbackConnector(
     }
   };
 
-  const onControlFrame = (
-    frame: BroadcastControlFrame,
-  ): void => {
+  const onControlFrame = (frame: BroadcastControlFrame): void => {
     knownParticipants.set(frame.sourceId, Date.now());
 
     if (isRetireFrame(frame)) {

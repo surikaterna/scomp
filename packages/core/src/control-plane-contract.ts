@@ -14,15 +14,9 @@ import { createContractToken, type ContractToken } from "./contract-token";
  * so the contract can be implemented directly with their return values.
  */
 export interface ScompControlPlaneContract {
-  discover(
-    input: ScompControlPlaneDiscoverRequest,
-  ): Promise<ScompControlPlaneDiscoverResponse>;
-  resolve(
-    input: ScompControlPlaneResolveRequest,
-  ): Promise<ScompControlPlaneResolveResponse>;
-  health(
-    input: ScompControlPlaneHealthRequest,
-  ): Promise<ScompControlPlaneHealthResponse>;
+  discover(input: ScompControlPlaneDiscoverRequest): Promise<ScompControlPlaneDiscoverResponse>;
+  resolve(input: ScompControlPlaneResolveRequest): Promise<ScompControlPlaneResolveResponse>;
+  health(input: ScompControlPlaneHealthRequest): Promise<ScompControlPlaneHealthResponse>;
 }
 
 /**

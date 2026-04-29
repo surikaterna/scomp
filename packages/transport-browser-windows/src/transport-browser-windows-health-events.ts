@@ -1,8 +1,5 @@
 import type { BrowserWindowsRuntimeEvent } from "./shared-worker-connector";
-import type {
-  BrowserWindowsTransportHealthReasonCode,
-  BrowserWindowsTransportHealthStatus,
-} from "./types";
+import type { BrowserWindowsTransportHealthReasonCode, BrowserWindowsTransportHealthStatus } from "./types";
 
 type HealthReporter = (
   code: BrowserWindowsTransportHealthReasonCode,
@@ -17,10 +14,7 @@ export function reportAuthDeniedError(reportHealth: HealthReporter, error: unkno
   }
 }
 
-export function reportRuntimeHealthEvent(
-  reportHealth: HealthReporter,
-  event: BrowserWindowsRuntimeEvent,
-): void {
+export function reportRuntimeHealthEvent(reportHealth: HealthReporter, event: BrowserWindowsRuntimeEvent): void {
   if (event.type === "active-mode-changed") {
     return;
   }
@@ -44,10 +38,7 @@ export function reportRuntimeHealthEvent(
   }
 }
 
-export function reportUnavailableConnectorError(
-  reportHealth: HealthReporter,
-  error: unknown,
-): void {
+export function reportUnavailableConnectorError(reportHealth: HealthReporter, error: unknown): void {
   const message = error instanceof Error ? error.message : String(error);
   if (/shared-worker-unavailable:/i.test(message)) {
     reportHealth("shared-worker-unavailable", message, "unavailable");

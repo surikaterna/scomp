@@ -36,9 +36,7 @@ export type BroadcastControlFrame =
 
 export type BroadcastFallbackFrame = BroadcastProtocolFrame | BroadcastControlFrame;
 
-export function isBroadcastFallbackFrame(
-  value: unknown,
-): value is BroadcastFallbackFrame {
+export function isBroadcastFallbackFrame(value: unknown): value is BroadcastFallbackFrame {
   return (
     typeof value === "object" &&
     value !== null &&

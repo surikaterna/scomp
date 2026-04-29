@@ -11,9 +11,9 @@ export interface ScompFeedLike<ResponseType = unknown, ErrorType = Error> extend
 }
 
 type FeedEvent<ResponseType, ErrorType> =
-  | { type: 'next'; value: ResponseType }
-  | { type: 'error'; value: ErrorType }
-  | { type: 'complete' };
+  | { type: "next"; value: ResponseType }
+  | { type: "error"; value: ErrorType }
+  | { type: "complete" };
 
 type PendingPull<ResponseType> = {
   resolve: (value: IteratorResult<ResponseType>) => void;
@@ -49,8 +49,7 @@ export interface LegacyObservableLike<ResponseType = unknown, ErrorType = Error>
  * @typeParam ResponseType - Type emitted through next values.
  * @typeParam ErrorType - Type emitted through terminal errors.
  */
-export class ScompFeed<ResponseType = unknown, ErrorType = Error>
-implements ScompFeedLike<ResponseType, ErrorType> {
+export class ScompFeed<ResponseType = unknown, ErrorType = Error> implements ScompFeedLike<ResponseType, ErrorType> {
   private readonly _onNextListeners: Array<(res: ResponseType) => void> = [];
   private readonly _onErrorListeners: Array<(error: ErrorType) => void> = [];
   private readonly _onCompleteListeners: Array<(res: unknown) => void> = [];
@@ -65,7 +64,7 @@ implements ScompFeedLike<ResponseType, ErrorType> {
       return;
     }
 
-    const iterable = typeof source === 'function' ? source() : source;
+    const iterable = typeof source === "function" ? source() : source;
     void this._consumeSource(iterable);
   }
 
@@ -79,7 +78,7 @@ implements ScompFeedLike<ResponseType, ErrorType> {
       throw: async (error) => {
         this.error(error as ErrorType);
         throw error;
-      }
+      },
     };
   }
 
@@ -118,7 +117,7 @@ implements ScompFeedLike<ResponseType, ErrorType> {
       return this;
     }
 
-    this._eventQueue.push({ type: 'next', value: nextResponse });
+    this._eventQueue.push({ type: "next", value: nextResponse });
     return this;
   }
 
@@ -135,9 +134,11 @@ implements ScompFeedLike<ResponseType, ErrorType> {
 
     const pendingPulls = this._pendingPulls.splice(0);
     if (pendingPulls.length > 0) {
-      pendingPulls.forEach((pendingPull) => pendingPull.reject(errorResponse));
+      for (const pendingPull of pendingPulls) {
+        pendingPull.reject(errorResponse);
+      }
     } else {
-      this._eventQueue.push({ type: 'error', value: errorResponse });
+      this._eventQueue.push({ type: "error", value: errorResponse });
     }
 
     this._clearListeners();
@@ -157,9 +158,11 @@ implements ScompFeedLike<ResponseType, ErrorType> {
 
     const pendingPulls = this._pendingPulls.splice(0);
     if (pendingPulls.length > 0) {
-      pendingPulls.forEach((pendingPull) => pendingPull.resolve({ value: undefined, done: true }));
+      for (const pendingPull of pendingPulls) {
+        pendingPull.resolve({ value: undefined, done: true });
+      }
     } else {
-      this._eventQueue.push({ type: 'complete' });
+      this._eventQueue.push({ type: "complete" });
     }
 
     this._clearListeners();
@@ -206,11 +209,11 @@ implements ScompFeedLike<ResponseType, ErrorType> {
   }
 
   private _resolveQueuedEvent(event: FeedEvent<ResponseType, ErrorType>): Promise<IteratorResult<ResponseType>> {
-    if (event.type === 'next') {
+    if (event.type === "next") {
       return Promise.resolve({ value: event.value, done: false });
     }
 
-    if (event.type === 'error') {
+    if (event.type === "error") {
       return Promise.reject(event.value);
     }
 
@@ -249,9 +252,7 @@ export function createScompFeed<ResponseType = unknown, ErrorType = Error>() {
 /**
  * Adapts an async or sync iterable into a {@link ScompFeed}.
  */
-export function fromAsyncIterable<ResponseType>(
-  iterable: AsyncIterable<ResponseType> | Iterable<ResponseType>
-) {
+export function fromAsyncIterable<ResponseType>(iterable: AsyncIterable<ResponseType> | Iterable<ResponseType>) {
   const feed = createScompFeed<ResponseType, unknown>();
 
   void (async () => {
@@ -275,7 +276,7 @@ export function fromAsyncIterable<ResponseType>(
  * Adapts a generator factory into a {@link ScompFeed}.
  */
 export function fromGenerator<ResponseType>(
-  generator: (() => AsyncGenerator<ResponseType>) | (() => Generator<ResponseType>)
+  generator: (() => AsyncGenerator<ResponseType>) | (() => Generator<ResponseType>),
 ) {
   return fromAsyncIterable(generator());
 }
@@ -284,7 +285,7 @@ export function fromGenerator<ResponseType>(
  * Adapts a legacy observable-like source into a {@link ScompFeed}.
  */
 export function fromLegacyObservable<ResponseType = unknown, ErrorType = Error>(
-  source: LegacyObservableLike<ResponseType, ErrorType>
+  source: LegacyObservableLike<ResponseType, ErrorType>,
 ) {
   const feed = createScompFeed<ResponseType, ErrorType>();
 

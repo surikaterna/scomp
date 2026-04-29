@@ -25,8 +25,6 @@ export {
 import { WebSocketClientTransport } from "./transport";
 import type { WebSocketClientTransportConfig } from "./client-types";
 
-export function createWebSocketClientTransport(
-  config: WebSocketClientTransportConfig,
-): WebSocketClientTransport {
+export function createWebSocketClientTransport(config: WebSocketClientTransportConfig): WebSocketClientTransport {
   return new WebSocketClientTransport(config);
 }

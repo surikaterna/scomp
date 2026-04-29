@@ -123,14 +123,8 @@ describe("priority policy resolution", () => {
       operation: "signal",
     });
 
-    assert.equal(
-      requestDecision.effective,
-      SCOMP_DEFAULT_OPERATION_PRIORITIES.request,
-    );
-    assert.equal(
-      signalDecision.effective,
-      SCOMP_DEFAULT_OPERATION_PRIORITIES.signal,
-    );
+    assert.equal(requestDecision.effective, SCOMP_DEFAULT_OPERATION_PRIORITIES.request);
+    assert.equal(signalDecision.effective, SCOMP_DEFAULT_OPERATION_PRIORITIES.signal);
     assert.equal(requestDecision.source, "operation_default");
     assert.equal(signalDecision.source, "operation_default");
   });
@@ -204,8 +198,7 @@ describe("priority policy resolution", () => {
       {
         metadataHintSelector: ({ meta }) => meta?.tags?.qos,
         routeOverrides: {
-          "feeds.live": (context: ScompPriorityResolutionContext) =>
-            context.operation === "feed" ? "P1" : "P2",
+          "feeds.live": (context: ScompPriorityResolutionContext) => (context.operation === "feed" ? "P1" : "P2"),
         },
       },
     );

@@ -13,9 +13,7 @@ export type BrowserWindowsBrokerSystemMetaReason =
  * - Preserve invoke metadata for parity where available
  * - Add explicit structured broker system tags
  */
-export function createBrokerSystemMeta(
-  reason: BrowserWindowsBrokerSystemMetaReason,
-): ScompTransportMessageMeta {
+export function createBrokerSystemMeta(reason: BrowserWindowsBrokerSystemMetaReason): ScompTransportMessageMeta {
   return {
     tags: {
       [BROKER_SYSTEM_META_TAG]: "true",

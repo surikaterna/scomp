@@ -44,10 +44,7 @@ export function createFakeSharedWorkerCtor(
   return class FakeSharedWorker {
     readonly port: FakeMessagePort;
 
-    constructor(
-      _scriptUrl: string,
-      _optionsOrName: { name?: string } | string | undefined,
-    ) {
+    constructor(_scriptUrl: string, _optionsOrName: { name?: string } | string | undefined) {
       const runtimePort = new FakeMessagePort();
       const brokerPort = new FakeMessagePort();
       runtimePort.peer = brokerPort;
@@ -60,11 +57,4 @@ export function createFakeSharedWorkerCtor(
 
 export class FakeSilentSharedWorker {
   readonly port = new FakeMessagePort();
-
-  constructor(
-    _scriptUrl: string,
-    _optionsOrName: { name?: string } | string | undefined,
-  ) {
-    // no-op
-  }
 }

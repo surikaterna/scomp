@@ -1,7 +1,4 @@
-import type {
-  BrowserWindowsTransportHealthReasonCode,
-  BrowserWindowsTransportHealthStatus,
-} from "./types";
+import type { BrowserWindowsTransportHealthReasonCode, BrowserWindowsTransportHealthStatus } from "./types";
 
 type HealthReporter = (
   code: BrowserWindowsTransportHealthReasonCode,

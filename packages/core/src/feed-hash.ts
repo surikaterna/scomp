@@ -40,11 +40,7 @@ function normalizeHash(hash: string): string {
   return normalized.padEnd(32, "0");
 }
 
-export function createFeedHash(
-  route: string,
-  payload: unknown,
-  options: FeedHashOptions = {},
-): string {
+export function createFeedHash(route: string, payload: unknown, options: FeedHashOptions = {}): string {
   if (options.hashKey) {
     return options.hashKey(payload);
   }

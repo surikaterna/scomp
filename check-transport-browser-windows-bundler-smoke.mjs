@@ -27,14 +27,11 @@ writeFileSync(
     'import { createBrowserWindowsTransport } from "@scomp/transport-browser-windows";',
     'import "@scomp/transport-browser-windows/worker-entry";',
     "",
-    "createBrowserWindowsTransport({ channelName: \"smoke\", mode: \"broadcast-channel\" });",
+    'createBrowserWindowsTransport({ channelName: "smoke", mode: "broadcast-channel" });',
   ].join("\n"),
 );
 
-writeFileSync(
-  join(appDir, "worker.ts"),
-  'import "@scomp/transport-browser-windows/worker-entry";\n',
-);
+writeFileSync(join(appDir, "worker.ts"), 'import "@scomp/transport-browser-windows/worker-entry";\n');
 
 writeFileSync(
   join(appDir, "rollup.config.mjs"),
@@ -46,13 +43,13 @@ writeFileSync(
     "",
     "export default defineConfig([",
     "  {",
-    "    input: \"entry.ts\",",
-    "    output: { file: \"dist/app.js\", format: \"esm\" },",
+    '    input: "entry.ts",',
+    '    output: { file: "dist/app.js", format: "esm" },',
     "    plugins: [resolvePlugin({ browser: true, preferBuiltins: false }), commonjs(), typescript()],",
     "  },",
     "  {",
-    "    input: \"worker.ts\",",
-    "    output: { file: \"dist/worker.js\", format: \"esm\" },",
+    '    input: "worker.ts",',
+    '    output: { file: "dist/worker.js", format: "esm" },',
     "    plugins: [resolvePlugin({ browser: true, preferBuiltins: false }), commonjs(), typescript()],",
     "  },",
     "]);",
@@ -95,11 +92,7 @@ const run = async () => {
 
   if (bundleResult.exitCode !== 0) {
     throw new Error(
-      [
-        "Bundler smoke build failed.",
-        bundleResult.stdout.toString(),
-        bundleResult.stderr.toString(),
-      ].join("\n"),
+      ["Bundler smoke build failed.", bundleResult.stdout.toString(), bundleResult.stderr.toString()].join("\n"),
     );
   }
 

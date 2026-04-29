@@ -1,15 +1,15 @@
-import assert from 'node:assert/strict';
+import assert from "node:assert/strict";
 import {
   ScompFeed,
   createScompFeed,
   fromAsyncIterable,
   fromGenerator,
   fromLegacyObservable,
-  type LegacyObservableLike
-} from '../src';
+  type LegacyObservableLike,
+} from "../src";
 
-describe('ScompFeed', () => {
-  it('supports legacy handler chaining and completion', () => {
+describe("ScompFeed", () => {
+  it("supports legacy handler chaining and completion", () => {
     const feed = createScompFeed<number>();
     let total = 0;
     let completed = false;
@@ -30,7 +30,7 @@ describe('ScompFeed', () => {
     assert.equal(feed.isUnsubscribed(), false);
   });
 
-  it('supports generator consumption through async iteration', async () => {
+  it("supports generator consumption through async iteration", async () => {
     const feed = fromGenerator(function* numbers() {
       yield 1;
       yield 2;
@@ -45,18 +45,18 @@ describe('ScompFeed', () => {
     assert.deepEqual(received, [1, 2, 3]);
   });
 
-  it('propagates errors to async iterators', async () => {
+  it("propagates errors to async iterators", async () => {
     const feed = createScompFeed<number>();
     const iterator = feed[Symbol.asyncIterator]();
     const pendingNext = iterator.next();
 
-    const error = new Error('boom');
+    const error = new Error("boom");
     feed.error(error);
 
     await assert.rejects(pendingNext, /boom/);
   });
 
-  it('can adapt legacy observable-like sources and forward unsubscribe', async () => {
+  it("can adapt legacy observable-like sources and forward unsubscribe", async () => {
     class LegacyObservableStub implements LegacyObservableLike<number> {
       private _onNext?: (res: number) => void;
       private _onError?: (err: Error) => void;
@@ -116,7 +116,7 @@ describe('ScompFeed', () => {
     assert.equal(legacy.unsubscribed, true);
   });
 
-  it('unifies teardown when async iteration is broken early', async () => {
+  it("unifies teardown when async iteration is broken early", async () => {
     const feed = createScompFeed<number>();
     let unsubscribed = false;
     feed.onUnsubscribe(() => {
@@ -140,7 +140,7 @@ describe('ScompFeed', () => {
     assert.equal(feed.isUnsubscribed(), true);
   });
 
-  it('bridges an async source iterable via constructor', async () => {
+  it("bridges an async source iterable via constructor", async () => {
     const source = (async function* () {
       yield 3;
       yield 4;
@@ -156,7 +156,7 @@ describe('ScompFeed', () => {
     assert.deepEqual(values, [3, 4]);
   });
 
-  it('closes source iterator when feed is unsubscribed during _consumeSource', async () => {
+  it("closes source iterator when feed is unsubscribed during _consumeSource", async () => {
     let finallyCalled = false;
 
     async function* slowSource() {
@@ -184,10 +184,10 @@ describe('ScompFeed', () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
 
     assert.deepEqual(values, [1, 2]);
-    assert.equal(finallyCalled, true, 'source generator finally block must run on unsubscribe');
+    assert.equal(finallyCalled, true, "source generator finally block must run on unsubscribe");
   });
 
-  it('closes source iterator in fromAsyncIterable on unsubscribe', async () => {
+  it("closes source iterator in fromAsyncIterable on unsubscribe", async () => {
     let finallyCalled = false;
 
     async function* source() {
@@ -213,10 +213,10 @@ describe('ScompFeed', () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
 
     assert.deepEqual(values, [10, 20]);
-    assert.equal(finallyCalled, true, 'source generator finally block must run on unsubscribe');
+    assert.equal(finallyCalled, true, "source generator finally block must run on unsubscribe");
   });
 
-  it('clears listener arrays after complete()', () => {
+  it("clears listener arrays after complete()", () => {
     const feed = createScompFeed<number>();
     feed.onNext(() => {});
     feed.onError(() => {});
@@ -231,32 +231,38 @@ describe('ScompFeed', () => {
     // verify the internal cleanup happened by checking that adding after close
     // still works without accumulating stale references.
     let nextCalled = false;
-    feed.onNext(() => { nextCalled = true; });
+    feed.onNext(() => {
+      nextCalled = true;
+    });
     feed.next(1);
-    assert.equal(nextCalled, false, 'next listener added after close should not fire');
+    assert.equal(nextCalled, false, "next listener added after close should not fire");
   });
 
-  it('clears listener arrays after error()', () => {
+  it("clears listener arrays after error()", () => {
     const feed = createScompFeed<number>();
     let errorSeen = false;
-    feed.onError(() => { errorSeen = true; });
+    feed.onError(() => {
+      errorSeen = true;
+    });
     feed.onNext(() => {});
     feed.onComplete(() => {});
 
-    feed.error(new Error('test'));
+    feed.error(new Error("test"));
     assert.equal(errorSeen, true);
 
     // After error, adding new listeners should not accumulate stale references
     let nextCalled = false;
-    feed.onNext(() => { nextCalled = true; });
+    feed.onNext(() => {
+      nextCalled = true;
+    });
     feed.next(1);
-    assert.equal(nextCalled, false, 'next listener added after error should not fire');
+    assert.equal(nextCalled, false, "next listener added after error should not fire");
   });
 
-  it('wraps non-Error thrown values safely in _consumeSource', async () => {
+  it("wraps non-Error thrown values safely in _consumeSource", async () => {
     async function* throwString(): AsyncGenerator<number> {
       yield 1;
-      throw 'string error'; // eslint-disable-line no-throw-literal
+      throw "string error"; // eslint-disable-line no-throw-literal
     }
 
     const feed = new ScompFeed<number>(throwString);
@@ -272,7 +278,7 @@ describe('ScompFeed', () => {
     }
 
     assert.deepEqual(values, [1]);
-    assert.ok(caughtError instanceof Error, 'non-Error thrown value should be wrapped in Error');
-    assert.equal((caughtError as Error).message, 'string error');
+    assert.ok(caughtError instanceof Error, "non-Error thrown value should be wrapped in Error");
+    assert.equal((caughtError as Error).message, "string error");
   });
 });

@@ -56,24 +56,18 @@ describe("browser windows resilience (election/failover/degraded)", () => {
 
     await flushMicrotasks();
     await sleep(50);
-    await expect(
-      invoke.request("svc.identity", { phase: "before" }),
-    ).resolves.toEqual({
+    await expect(invoke.request("svc.identity", { phase: "before" })).resolves.toEqual({
       phase: "before",
     });
 
     firstLeader.close();
 
     await sleep(70);
-    await expect(
-      invoke.request("svc.identity", { phase: "after" }),
-    ).resolves.toEqual({
+    await expect(invoke.request("svc.identity", { phase: "after" })).resolves.toEqual({
       phase: "after",
     });
 
-    const reasonCodes = invoke
-      .healthSnapshot()
-      .reasons.map((reason) => reason.code);
+    const reasonCodes = invoke.healthSnapshot().reasons.map((reason) => reason.code);
     expect(reasonCodes).toContain("leader-failover");
     expect(invoke.healthSnapshot().status).toBe("degraded");
 

@@ -16,10 +16,7 @@ export interface ReconnectOptions {
   signal?: AbortSignal;
 }
 
-export async function reconnectWithBackoff<T>(
-  tryConnect: () => Promise<T>,
-  options: ReconnectOptions,
-): Promise<T> {
+export async function reconnectWithBackoff<T>(tryConnect: () => Promise<T>, options: ReconnectOptions): Promise<T> {
   let lastError: unknown;
 
   for (let attempt = 1; attempt <= options.maxAttempts; attempt++) {
@@ -28,10 +25,7 @@ export async function reconnectWithBackoff<T>(
     options.onAttempt?.(attempt);
 
     const jitter = Math.floor(Math.random() * 100);
-    const delay = Math.min(
-      options.maxDelayMs,
-      options.baseDelayMs * 2 ** (attempt - 1) + jitter,
-    );
+    const delay = Math.min(options.maxDelayMs, options.baseDelayMs * 2 ** (attempt - 1) + jitter);
 
     await new Promise<void>((resolve) => {
       const timer = setTimeout(resolve, delay);
@@ -77,16 +71,13 @@ export interface ReconnectLoopDeps<T> {
  * Returns a promise that settles when reconnection succeeds or exhausts
  * all attempts (resolves `undefined` on failure — never throws).
  */
-export async function runReconnectLoop<T>(
-  deps: ReconnectLoopDeps<T>,
-): Promise<T | undefined> {
+export async function runReconnectLoop<T>(deps: ReconnectLoopDeps<T>): Promise<T | undefined> {
   try {
     const result = await reconnectWithBackoff(deps.connect, {
       maxAttempts: deps.cfg.maxAttempts ?? 6,
       baseDelayMs: deps.cfg.baseDelayMs ?? 250,
       maxDelayMs: deps.cfg.maxDelayMs ?? 8_000,
-      onAttempt: (attempt) =>
-        deps.emitEvent({ type: "connection_reconnect", attempt }),
+      onAttempt: (attempt) => deps.emitEvent({ type: "connection_reconnect", attempt }),
       onFailure: (attempts, err) =>
         deps.emitEvent({
           type: "connection_reconnect_failed",

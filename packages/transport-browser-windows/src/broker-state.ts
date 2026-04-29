@@ -19,10 +19,7 @@ export interface BrowserWindowsFeedSubscriptionState {
   route: string;
   payloadKey: BrowserWindowsPayloadKey;
   payloadHash: BrowserWindowsCanonicalPayloadHash;
-  subscribersByRequestId: Map<
-    BrowserWindowsRequestId,
-    BrowserWindowsParticipantId
-  >;
+  subscribersByRequestId: Map<BrowserWindowsRequestId, BrowserWindowsParticipantId>;
   metaByRequestId: Map<BrowserWindowsRequestId, ScompTransportMessageMeta | undefined>;
 }
 
@@ -35,15 +32,9 @@ export interface BrowserWindowsUpstreamFeedOwnerState {
   startedAtMs: number;
 }
 
-export type BrowserWindowsRouteHostRegistry = Map<
-  string,
-  Set<BrowserWindowsParticipantId>
->;
+export type BrowserWindowsRouteHostRegistry = Map<string, Set<BrowserWindowsParticipantId>>;
 
-export type BrowserWindowsPendingRequestMap = Map<
-  BrowserWindowsRequestId,
-  BrowserWindowsPendingRequestState
->;
+export type BrowserWindowsPendingRequestMap = Map<BrowserWindowsRequestId, BrowserWindowsPendingRequestState>;
 
 export type BrowserWindowsFeedSubscriptionKey =
   `${string}:${BrowserWindowsPayloadKey}:${BrowserWindowsCanonicalPayloadHash}`;
