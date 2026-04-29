@@ -1,8 +1,8 @@
 import type { ContractToken } from "./contract-token";
-import type { CompiledRouter, ServiceDefinition } from "./builder";
+import type { CompiledRouter, CompiledRoute, ServiceDefinition } from "./builder";
 import { createScompService } from "./builder";
 import type { ITransport } from "./transport";
-import type { ScompMiddleware, ScompHandlerContext, ScompMiddlewareContext } from "./middleware";
+import type { ScompMiddleware, ScompHandlerContext, ScompMiddlewareContext, ScompMiddlewareFn } from "./middleware";
 import { createMiddlewareTransport } from "./middleware-transport";
 import { getMiddlewareFns, runMiddlewareChain } from "./middleware";
 import { ScompControlPlane } from "./control-plane-contract";
@@ -47,6 +47,29 @@ function generateNodeId(): string {
   return `node-${timestamp}-${random}`;
 }
 
+function wrapRouteWithMiddleware(
+  routeName: string,
+  route: CompiledRoute,
+  inboundFns: ScompMiddlewareFn[],
+): CompiledRoute {
+  const originalHandler = route.handler;
+  return {
+    ...route,
+    handler: (payload: unknown, ctx?: ScompHandlerContext) => {
+      const mwCtx: ScompMiddlewareContext = {
+        route: routeName,
+        operation: route.kind,
+        direction: "inbound" as const,
+        payload,
+        meta: ctx?.meta,
+      };
+      return runMiddlewareChain(inboundFns, mwCtx, async (finalCtx) => {
+        return originalHandler(finalCtx.payload, ctx);
+      });
+    },
+  };
+}
+
 /**
  * Creates a peer that can both provide and consume scomp services.
  *
@@ -79,10 +102,7 @@ export function createScompPeer(config: CreateScompPeerConfig): IScompPeer {
     }
   }
 
-  function provides(...services: ServiceDefinition<object>[]): void {
-    assertOpen();
-
-    // Merge routers, checking for duplicate route names.
+  function mergeServiceRouters(services: ServiceDefinition<object>[]): void {
     for (const service of services) {
       for (const routeName of Object.keys(service.router)) {
         if (combinedRouter[routeName] !== undefined) {
@@ -91,35 +111,24 @@ export function createScompPeer(config: CreateScompPeerConfig): IScompPeer {
         combinedRouter[routeName] = service.router[routeName];
       }
     }
+  }
 
-    // Wrap handlers with inbound middleware when present.
-    if (inboundFns.length > 0) {
-      for (const service of services) {
-        for (const routeName of Object.keys(service.router)) {
-          const route = combinedRouter[routeName];
-          const originalHandler = route.handler;
-
-          combinedRouter[routeName] = {
-            ...route,
-            handler: (payload: unknown, ctx?: ScompHandlerContext) => {
-              const mwCtx: ScompMiddlewareContext = {
-                route: routeName,
-                operation: route.kind,
-                direction: "inbound" as const,
-                payload,
-                meta: ctx?.meta,
-              };
-
-              return runMiddlewareChain(inboundFns, mwCtx, async (finalCtx) => {
-                return originalHandler(finalCtx.payload, ctx);
-              });
-            },
-          };
-        }
+  function applyInboundMiddleware(services: ServiceDefinition<object>[]): void {
+    for (const service of services) {
+      for (const routeName of Object.keys(service.router)) {
+        combinedRouter[routeName] = wrapRouteWithMiddleware(routeName, combinedRouter[routeName], inboundFns);
       }
     }
+  }
 
-    // Register the combined router on all transports.
+  function provides(...services: ServiceDefinition<object>[]): void {
+    assertOpen();
+    mergeServiceRouters(services);
+
+    if (inboundFns.length > 0) {
+      applyInboundMiddleware(services);
+    }
+
     for (const transport of transports) {
       transport.registerRoutes(combinedRouter);
     }

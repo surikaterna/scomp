@@ -39,8 +39,60 @@ export class ScompAuthError extends Error {
   }
 }
 
+type AuthOperation = "request" | "signal" | "feed";
+
+async function resolveAuthPrincipal(
+  config: AuthMiddlewareConfig,
+  ctx: ScompMiddlewareContext,
+): Promise<ScompTransportPrincipal | null | undefined> {
+  if (!config.authenticate) {
+    return undefined;
+  }
+  return config.authenticate({
+    route: ctx.route,
+    operation: ctx.operation as AuthOperation,
+    payload: ctx.payload,
+    meta: ctx.meta,
+  });
+}
+
+async function enforceAuthorization(
+  config: AuthMiddlewareConfig,
+  ctx: ScompMiddlewareContext,
+  principal: ScompTransportPrincipal | null | undefined,
+): Promise<void> {
+  if (!config.authorize) {
+    return;
+  }
+  const allowed = await config.authorize({
+    route: ctx.route,
+    operation: ctx.operation as AuthOperation,
+    payload: ctx.payload,
+    meta: ctx.meta,
+    principal: principal ?? undefined,
+  });
+  if (!allowed) {
+    throw new ScompAuthError(`Not authorized for route: ${ctx.route}`);
+  }
+}
+
+function buildAuthMeta(ctx: ScompMiddlewareContext, principal: ScompTransportPrincipal): ScompTransportMessageMeta {
+  return {
+    ...ctx.meta,
+    auth: {
+      subject: principal.subject,
+      tenantId: principal.tenantId,
+      scopes: principal.scopes,
+      claims: principal.claims,
+      issuedAt: principal.issuedAt,
+      expiresAt: principal.expiresAt,
+      authType: principal.authType,
+    },
+    ...(principal.tenantId ? { tenantId: principal.tenantId } : {}),
+  } as ScompTransportMessageMeta;
+}
+
 /**
- * Creates an inbound middleware that authenticates and authorizes requests.
  * Creates middleware that authenticates and authorizes requests.
  */
 export function createAuthMiddleware(config: AuthMiddlewareConfig): ScompMiddleware {
@@ -49,75 +101,18 @@ export function createAuthMiddleware(config: AuthMiddlewareConfig): ScompMiddlew
   return {
     name: "auth",
     inbound: async (ctx: ScompMiddlewareContext, next) => {
-      const principal = config.authenticate
-        ? await config.authenticate({
-            route: ctx.route,
-            operation: ctx.operation as "request" | "signal" | "feed",
-            payload: ctx.payload,
-            meta: ctx.meta,
-          })
-        : undefined;
-
-      if (config.authorize) {
-        const allowed = await config.authorize({
-          route: ctx.route,
-          operation: ctx.operation as "request" | "signal" | "feed",
-          payload: ctx.payload,
-          meta: ctx.meta,
-          principal: principal ?? undefined,
-        });
-        if (!allowed) {
-          throw new ScompAuthError(`Not authorized for route: ${ctx.route}`);
-        }
-      }
-
-      // Pass principal downstream in context
+      const principal = await resolveAuthPrincipal(config, ctx);
+      await enforceAuthorization(config, ctx, principal);
       return next({ ...ctx, principal: principal ?? undefined });
     },
 
-    // Only set outbound if there are auth hooks to run
     outbound: hasAuthHooks
       ? async (ctx: ScompMiddlewareContext, next) => {
-          const principal = config.authenticate
-            ? await config.authenticate({
-                route: ctx.route,
-                operation: ctx.operation as "request" | "signal" | "feed",
-                payload: ctx.payload,
-                meta: ctx.meta,
-              })
-            : undefined;
-
-          if (config.authorize) {
-            const allowed = await config.authorize({
-              route: ctx.route,
-              operation: ctx.operation as "request" | "signal" | "feed",
-              payload: ctx.payload,
-              meta: ctx.meta,
-              principal: principal ?? undefined,
-            });
-            if (!allowed) {
-              throw new ScompAuthError(`Not authorized for route: ${ctx.route}`);
-            }
-          }
-
-          // Inject principal into outbound meta so the server can see it
+          const principal = await resolveAuthPrincipal(config, ctx);
+          await enforceAuthorization(config, ctx, principal);
           if (principal) {
-            const updatedMeta = {
-              ...ctx.meta,
-              auth: {
-                subject: principal.subject,
-                tenantId: principal.tenantId,
-                scopes: principal.scopes,
-                claims: principal.claims,
-                issuedAt: principal.issuedAt,
-                expiresAt: principal.expiresAt,
-                authType: principal.authType,
-              },
-              ...(principal.tenantId ? { tenantId: principal.tenantId } : {}),
-            };
-            return next({ ...ctx, principal, meta: updatedMeta });
+            return next({ ...ctx, principal, meta: buildAuthMeta(ctx, principal) });
           }
-
           return next({ ...ctx, principal: principal ?? undefined });
         }
       : undefined,
