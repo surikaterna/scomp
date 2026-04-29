@@ -157,6 +157,28 @@ function checkFeedDone(state: FeedQueueState): Error | "done" | null {
   return state.terminalError ?? "done";
 }
 
+async function sendFeedStop(
+  context: BrowserWindowsTransportClientContext,
+  state: FeedQueueState,
+  requestId: string,
+  route: string,
+  _options?: ScompClientInvokeOptions,
+): Promise<void> {
+  context.postMessage({
+    type: "invoke_feed_stop",
+    sourceId: context.participantId,
+    sentAtMs: Date.now(),
+    requestId,
+    route,
+    operation: "signal",
+    method: "__scomp.unsubscribe",
+    payloadKey: state.payloadKey,
+    payloadHash: state.payloadHash,
+    meta: state.meta,
+  });
+  state.stopSent = true;
+}
+
 async function cleanupFeed(
   context: BrowserWindowsTransportClientContext,
   state: FeedQueueState,
@@ -173,28 +195,6 @@ async function cleanupFeed(
 
 function throwIfTerminalError(state: FeedQueueState): void {
   if (state.terminalError) throw state.terminalError;
-}
-
-async function* iterateFeedState(state: FeedQueueState): AsyncGenerator<unknown> {
-  while (true) {
-    if (state.queue.length > 0) {
-      const nextValue = state.queue.shift();
-      if (nextValue !== undefined) yield nextValue;
-      const done = checkFeedDone(state);
-      if (done === "done") return;
-      if (done) throw done;
-      continue;
-    }
-
-    if (state.closed) {
-      throwIfTerminalError(state);
-      return;
-    }
-
-    await new Promise<void>((resolve) => {
-      state.waiters.push(resolve);
-    });
-  }
 }
 
 export function feedWithContext(
@@ -216,7 +216,26 @@ export function feedWithContext(
       try {
         await startFeed(context, state, requestId, route, payload, options);
         feedStarted = true;
-        yield* iterateFeedState(state);
+
+        while (true) {
+          if (state.queue.length > 0) {
+            const nextValue = state.queue.shift();
+            if (nextValue !== undefined) yield nextValue;
+            const done = checkFeedDone(state);
+            if (done === "done") return;
+            if (done) throw done;
+            continue;
+          }
+
+          if (state.closed) {
+            throwIfTerminalError(state);
+            return;
+          }
+
+          await new Promise<void>((resolve) => {
+            state.waiters.push(resolve);
+          });
+        }
       } finally {
         await cleanupFeed(context, state, requestId, route, feedStarted, options);
       }

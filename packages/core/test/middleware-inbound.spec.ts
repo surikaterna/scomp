@@ -1,4 +1,3 @@
-import { describe, it, expect, vi } from "vitest";
 import {
   runMiddlewareChain,
   getMiddlewareFns,
@@ -171,7 +170,7 @@ describe("createAuthMiddleware", () => {
   });
 
   it("authenticate is called with correct context", async () => {
-    const authenticate = vi.fn().mockResolvedValue({ id: "user-1", roles: ["admin"] });
+    const authenticate = jest.fn().mockResolvedValue({ id: "user-1", roles: ["admin"] });
     const mw = createAuthMiddleware({ authenticate });
     const fns = getMiddlewareFns([mw], "inbound");
 
@@ -195,8 +194,8 @@ describe("createAuthMiddleware", () => {
 
   it("authorize is called with principal", async () => {
     const principal = { id: "user-1", roles: ["admin"] };
-    const authenticate = vi.fn().mockResolvedValue(principal);
-    const authorize = vi.fn().mockResolvedValue(true);
+    const authenticate = jest.fn().mockResolvedValue(principal);
+    const authorize = jest.fn().mockResolvedValue(true);
 
     const mw = createAuthMiddleware({ authenticate, authorize });
     const fns = getMiddlewareFns([mw], "inbound");
