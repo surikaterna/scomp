@@ -8,22 +8,13 @@ import type {
   ScompTransportResponseEnvelope,
 } from "@scomp/types";
 import type { Channel } from "amqplib";
-import {
-  toPriorityMeta,
-  mergeMeta,
-} from "@scomp/transport-shared";
-import {
-  type RabbitMQTransportEvent,
-  toServiceName,
-  toRpcQueue,
-} from "./types";
+import { toPriorityMeta, mergeMeta } from "@scomp/transport-shared";
+import { type RabbitMQTransportEvent, toServiceName, toRpcQueue } from "./types";
 
 export interface ClientContext {
   serializer: ScompSerializer;
   contentType: string;
-  configMeta?:
-    | ScompTransportMessageMeta
-    | (() => ScompTransportMessageMeta | Promise<ScompTransportMessageMeta>);
+  configMeta?: ScompTransportMessageMeta | (() => ScompTransportMessageMeta | Promise<ScompTransportMessageMeta>);
   getChannel: () => Promise<Channel>;
   emitEvent: (event: RabbitMQTransportEvent) => void;
   emitPriorityDecision: (
@@ -43,9 +34,7 @@ export interface ClientContext {
   getMaxInFlightRequests: () => number;
 }
 
-async function resolveMeta(
-  configMeta: ClientContext["configMeta"],
-): Promise<ScompTransportMessageMeta | undefined> {
+async function resolveMeta(configMeta: ClientContext["configMeta"]): Promise<ScompTransportMessageMeta | undefined> {
   if (!configMeta) return undefined;
   if (typeof configMeta === "function") return configMeta();
   return configMeta;
@@ -60,16 +49,11 @@ export async function sendRpc(
 ): Promise<unknown> {
   const priorityMeta = toPriorityMeta(options);
   const resolvedConfigMeta = await resolveMeta(ctx.configMeta);
-  const baseMeta = mergeMeta(
-    mergeMeta(resolvedConfigMeta, options?.meta),
-    priorityMeta,
-  );
+  const baseMeta = mergeMeta(mergeMeta(resolvedConfigMeta, options?.meta), priorityMeta);
   ctx.emitPriorityDecision("outbound", route, op, baseMeta);
 
   if (ctx.requestResolvers.size >= ctx.getMaxInFlightRequests()) {
-    throw new Error(
-      `In-flight request limit reached: ${ctx.getMaxInFlightRequests()}`,
-    );
+    throw new Error(`In-flight request limit reached: ${ctx.getMaxInFlightRequests()}`);
   }
 
   const channel = await ctx.getChannel();
@@ -112,9 +96,7 @@ export async function sendRpc(
         correlationId,
         timeoutMs,
       });
-      reject(
-        new Error(`Request timed out after ${timeoutMs}ms for route: ${route}`),
-      );
+      reject(new Error(`Request timed out after ${timeoutMs}ms for route: ${route}`));
     }, timeoutMs);
 
     void replyPromise.finally(() => clearTimeout(timer));
@@ -148,10 +130,7 @@ async function ensureReplyConsumer(ctx: ClientContext): Promise<void> {
     ctx.requestResolvers.delete(correlationId);
     ctx.requestRejecters.delete(correlationId);
 
-    const body = deserializeFromBuffer<ScompTransportResponseEnvelope>(
-      ctx.serializer,
-      message.content,
-    );
+    const body = deserializeFromBuffer<ScompTransportResponseEnvelope>(ctx.serializer, message.content);
     if ("error" in body) {
       ctx.emitEvent({
         type: "request_rejected",
@@ -178,36 +157,20 @@ async function ensureReplyConsumer(ctx: ClientContext): Promise<void> {
 
 export function createFeedConsumer(
   ctx: ClientContext,
-  signal: (
-    route: string,
-    payload: unknown,
-    options?: ScompClientInvokeOptions,
-  ) => Promise<void>,
+  signal: (route: string, payload: unknown, options?: ScompClientInvokeOptions) => Promise<void>,
   getFeedBufferLimit: () => number,
-): (
-  route: string,
-  payload: unknown,
-  options?: ScompClientInvokeOptions,
-) => AsyncIterable<unknown> {
+): (route: string, payload: unknown, options?: ScompClientInvokeOptions) => AsyncIterable<unknown> {
   return (route, payload, options) => ({
     async *[Symbol.asyncIterator]() {
       const channel = await ctx.getChannel();
-      const handshake = (await sendRpc(
-        ctx,
-        route,
-        "feed",
-        payload,
-        options,
-      )) as {
+      const handshake = (await sendRpc(ctx, route, "feed", payload, options)) as {
         exchange: string;
         feed: string;
       };
 
       const exchangeName = String(handshake.exchange);
       const feedHash = String(handshake.feed);
-      const queueName = (
-        await channel.assertQueue("", { exclusive: true, durable: false })
-      ).queue;
+      const queueName = (await channel.assertQueue("", { exclusive: true, durable: false })).queue;
       await channel.bindQueue(queueName, exchangeName, "");
 
       const queueBuffer: Array<unknown> = [];
@@ -220,29 +183,18 @@ export function createFeedConsumer(
           return;
         }
 
-        const parsed = deserializeFromBuffer<ScompFeedChunkEnvelope>(
-          ctx.serializer,
-          message.content,
-        );
+        const parsed = deserializeFromBuffer<ScompFeedChunkEnvelope>(ctx.serializer, message.content);
         channel.ack(message);
 
         if (parsed.type === "done") {
           closed = true;
         } else if (parsed.type === "error") {
           closed = true;
-          queueBuffer.push(
-            Promise.reject(new Error(parsed.message ?? "Feed error")),
-          );
+          queueBuffer.push(Promise.reject(new Error(parsed.message ?? "Feed error")));
         } else {
           if (queueBuffer.length >= feedBufferLimit) {
             closed = true;
-            queueBuffer.push(
-              Promise.reject(
-                new Error(
-                  `Feed buffer high-water mark exceeded (${feedBufferLimit})`,
-                ),
-              ),
-            );
+            queueBuffer.push(Promise.reject(new Error(`Feed buffer high-water mark exceeded (${feedBufferLimit})`)));
             return;
           }
           queueBuffer.push(parsed.payload);
@@ -288,16 +240,10 @@ export function createFeedConsumer(
   });
 }
 
-function serializeToBuffer(
-  serializer: ScompSerializer,
-  value: unknown,
-): Buffer {
+function serializeToBuffer(serializer: ScompSerializer, value: unknown): Buffer {
   return Buffer.from(serializer.stringify(value));
 }
 
-function deserializeFromBuffer<T = unknown>(
-  serializer: ScompSerializer,
-  value: Buffer,
-): T {
+function deserializeFromBuffer<T = unknown>(serializer: ScompSerializer, value: Buffer): T {
   return serializer.parse<T>(value.toString("utf8"));
 }

@@ -2,9 +2,7 @@ import assert from "node:assert/strict";
 import { ScompControlPlane, createScompPeer } from "../src";
 import type { ITransport, CompiledRouter } from "../src";
 
-function createFakeTransport(
-  overrides: Partial<ITransport> = {},
-): ITransport & {
+function createFakeTransport(overrides: Partial<ITransport> = {}): ITransport & {
   registeredRouter: CompiledRouter | undefined;
   closeCalled: boolean;
 } {
@@ -29,10 +27,7 @@ function createFakeTransport(
 function stubClientFactory() {
   const calls: Array<{ transport: ITransport; tokenName: string }> = [];
 
-  function factory<C extends object>(
-    transport: ITransport,
-    token: { name: string },
-  ): C {
+  function factory<C extends object>(transport: ITransport, token: { name: string }): C {
     const proxy = { __stub: token.name } as unknown as C;
     calls.push({ transport, tokenName: token.name });
     return proxy;
@@ -58,18 +53,9 @@ describe("peer auto-provides control plane", () => {
     });
 
     assert.ok(transport.registeredRouter, "router should be registered");
-    assert.ok(
-      "__scomp.discover" in transport.registeredRouter,
-      "discover route should be present",
-    );
-    assert.ok(
-      "__scomp.resolve" in transport.registeredRouter,
-      "resolve route should be present",
-    );
-    assert.ok(
-      "__scomp.health" in transport.registeredRouter,
-      "health route should be present",
-    );
+    assert.ok("__scomp.discover" in transport.registeredRouter, "discover route should be present");
+    assert.ok("__scomp.resolve" in transport.registeredRouter, "resolve route should be present");
+    assert.ok("__scomp.health" in transport.registeredRouter, "health route should be present");
   });
 
   it("registers control-plane routes with controlPlane: true", () => {

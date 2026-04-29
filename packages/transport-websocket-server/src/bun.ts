@@ -1,20 +1,8 @@
-import type {
-  CompiledRoute,
-  ITransport,
-  ScompClientInvokeOptions,
-} from "@scomp/core";
-import type {
-  ScompTransportResponseEnvelope,
-} from "@scomp/types";
-import {
-  parseTransportMessage,
-  WebSocketServerRuntime,
-} from "@scomp/transport-websocket-server-runtime";
+import type { CompiledRoute, ITransport, ScompClientInvokeOptions } from "@scomp/core";
+import type { ScompTransportResponseEnvelope } from "@scomp/types";
+import { parseTransportMessage, WebSocketServerRuntime } from "@scomp/transport-websocket-server-runtime";
 import { createBrowserSocketAdapterFactory } from "@scomp/transport-websocket-shared";
-import {
-  type BunWebSocketServerTransportConfig,
-  resolveOutboundTransport,
-} from "./shared";
+import { type BunWebSocketServerTransportConfig, resolveOutboundTransport } from "./shared";
 
 /**
  * Bun's global `WebSocket` is browser-compatible, so the browser
@@ -49,10 +37,7 @@ interface BunLikeServeOptions {
   ) => Response | undefined;
   websocket: {
     open?: (socket: BunLikeServerWebSocket) => void;
-    message?: (
-      socket: BunLikeServerWebSocket,
-      data: string | Buffer | ArrayBuffer | Uint8Array,
-    ) => void;
+    message?: (socket: BunLikeServerWebSocket, data: string | Buffer | ArrayBuffer | Uint8Array) => void;
     close?: (socket: BunLikeServerWebSocket) => void;
   };
 }
@@ -124,9 +109,7 @@ export class BunWebSocketServerTransport implements ITransport {
     }
 
     if (!this.config.port) {
-      throw new Error(
-        "BunWebSocketServerTransport requires a port for Bun.serve.",
-      );
+      throw new Error("BunWebSocketServerTransport requires a port for Bun.serve.");
     }
 
     const expectedPath = this.config.path ?? "/";
@@ -185,36 +168,20 @@ export class BunWebSocketServerTransport implements ITransport {
     this.server = undefined;
   }
 
-  async request(
-    route: string,
-    payload: unknown,
-    options?: ScompClientInvokeOptions,
-  ): Promise<unknown> {
+  async request(route: string, payload: unknown, options?: ScompClientInvokeOptions): Promise<unknown> {
     return this.getOutboundTransport().request(route, payload, options);
   }
 
-  async signal(
-    route: string,
-    payload: unknown,
-    options?: ScompClientInvokeOptions,
-  ): Promise<void> {
+  async signal(route: string, payload: unknown, options?: ScompClientInvokeOptions): Promise<void> {
     await this.getOutboundTransport().signal(route, payload, options);
   }
 
-  feed(
-    route: string,
-    payload: unknown,
-    options?: ScompClientInvokeOptions,
-  ): AsyncIterable<unknown> {
+  feed(route: string, payload: unknown, options?: ScompClientInvokeOptions): AsyncIterable<unknown> {
     return this.getOutboundTransport().feed(route, payload, options);
   }
 
   private getOutboundTransport(): ITransport {
-    this.outboundTransport = resolveOutboundTransport(
-      this.config,
-      this.outboundTransport,
-      bunSocketAdapter,
-    );
+    this.outboundTransport = resolveOutboundTransport(this.config, this.outboundTransport, bunSocketAdapter);
     return this.outboundTransport;
   }
 }
@@ -238,5 +205,4 @@ export type WebSocketServerTransportConfig = BunWebSocketServerTransportConfig;
 /**
  * @deprecated Use `createBunWebSocketServerTransport` instead.
  */
-export const createWebSocketServerTransport =
-  createBunWebSocketServerTransport;
+export const createWebSocketServerTransport = createBunWebSocketServerTransport;

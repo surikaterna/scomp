@@ -39,20 +39,14 @@ export interface ScompPriorityBounds {
 
 export interface ScompPriorityPolicy {
   routeOverrides?: Partial<Record<string, ScompPriorityRouteOverride>>;
-  operationDefaults?: Partial<
-    Record<ScompTransportOperation, ScompPriorityValue>
-  >;
+  operationDefaults?: Partial<Record<ScompTransportOperation, ScompPriorityValue>>;
   defaultPriority?: ScompPriorityValue;
   allowMetadataHint?: boolean;
   metadataHintSelector?: (context: ScompPriorityResolutionContext) => unknown;
   bounds?: ScompPriorityBounds;
 }
 
-export type ScompPrioritySource =
-  | "route_override"
-  | "metadata_hint"
-  | "operation_default"
-  | "fallback_default";
+export type ScompPrioritySource = "route_override" | "metadata_hint" | "operation_default" | "fallback_default";
 
 export interface ScompPriorityDecision {
   route: string;
@@ -62,13 +56,12 @@ export interface ScompPriorityDecision {
   effective: ScompPriorityClass;
 }
 
-export const SCOMP_DEFAULT_OPERATION_PRIORITIES: Readonly<
-  Record<ScompTransportOperation, ScompPriorityClass>
-> = Object.freeze({
-  request: "P2",
-  signal: "P3",
-  feed: "P1",
-});
+export const SCOMP_DEFAULT_OPERATION_PRIORITIES: Readonly<Record<ScompTransportOperation, ScompPriorityClass>> =
+  Object.freeze({
+    request: "P2",
+    signal: "P3",
+    feed: "P1",
+  });
 
 function valueToPriorityIndex(value: unknown): PriorityIndex | undefined {
   if (typeof value === "number" && Number.isInteger(value)) {
@@ -99,9 +92,7 @@ function priorityClassFromIndex(index: PriorityIndex): ScompPriorityClass {
   return PRIORITY_INDEX_TO_CLASS[index];
 }
 
-function readDefaultMetadataHint(
-  context: ScompPriorityResolutionContext,
-): unknown {
+function readDefaultMetadataHint(context: ScompPriorityResolutionContext): unknown {
   if (context.requestedPriority !== undefined) {
     return context.requestedPriority;
   }
@@ -136,8 +127,7 @@ function resolveRouteOverride(
     return undefined;
   }
 
-  const rawValue =
-    typeof override === "function" ? override(context) : override;
+  const rawValue = typeof override === "function" ? override(context) : override;
   return normalizeScompPriority(rawValue);
 }
 
@@ -152,9 +142,7 @@ function resolveOperationDefault(
   }
 
   const operationDefault =
-    SCOMP_DEFAULT_OPERATION_PRIORITIES[
-      context.operation as keyof typeof SCOMP_DEFAULT_OPERATION_PRIORITIES
-    ];
+    SCOMP_DEFAULT_OPERATION_PRIORITIES[context.operation as keyof typeof SCOMP_DEFAULT_OPERATION_PRIORITIES];
   return normalizeScompPriority(operationDefault);
 }
 
@@ -178,10 +166,7 @@ function getBounds(policy?: ScompPriorityPolicy): {
   };
 }
 
-function clampToBounds(
-  priority: ScompPriorityClass,
-  policy?: ScompPriorityPolicy,
-): ScompPriorityClass {
+function clampToBounds(priority: ScompPriorityClass, policy?: ScompPriorityPolicy): ScompPriorityClass {
   const bounds = getBounds(policy);
   const rawIndex = PRIORITY_CLASS_TO_INDEX[priority];
 
@@ -204,15 +189,11 @@ function resolveRequestedPriority(
     return undefined;
   }
 
-  const raw = policy?.metadataHintSelector
-    ? policy.metadataHintSelector(context)
-    : readDefaultMetadataHint(context);
+  const raw = policy?.metadataHintSelector ? policy.metadataHintSelector(context) : readDefaultMetadataHint(context);
   return normalizeScompPriority(raw);
 }
 
-export function normalizeScompPriority(
-  value: unknown,
-): ScompPriorityClass | undefined {
+export function normalizeScompPriority(value: unknown): ScompPriorityClass | undefined {
   const index = valueToPriorityIndex(value);
   if (index === undefined) {
     return undefined;
@@ -225,8 +206,7 @@ export function resolveScompPriority(
   context: ScompPriorityResolutionContext,
   policy?: ScompPriorityPolicy,
 ): ScompPriorityDecision {
-  const fallbackDefault =
-    normalizeScompPriority(policy?.defaultPriority) ?? "P2";
+  const fallbackDefault = normalizeScompPriority(policy?.defaultPriority) ?? "P2";
   const routeOverride = resolveRouteOverride(context, policy);
   const requested = resolveRequestedPriority(context, policy);
   const operationDefault = resolveOperationDefault(context, policy);

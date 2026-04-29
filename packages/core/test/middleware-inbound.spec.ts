@@ -6,10 +6,7 @@ import {
   type ScompMiddlewareContext,
   type ScompHandlerContext,
 } from "../src/middleware";
-import {
-  createAuthMiddleware,
-  ScompAuthError,
-} from "../src/auth-middleware";
+import { createAuthMiddleware, ScompAuthError } from "../src/auth-middleware";
 import type { CompiledRoute, CompiledRouter } from "../src/builder-types";
 
 // ---------------------------------------------------------------------------
@@ -25,7 +22,7 @@ function makeRoute(overrides: Partial<CompiledRoute> = {}): CompiledRoute {
   };
 }
 
-function makeRouter(routes: Record<string, Partial<CompiledRoute>> = {}): CompiledRouter {
+function _makeRouter(routes: Record<string, Partial<CompiledRoute>> = {}): CompiledRouter {
   const router: CompiledRouter = {};
   for (const [name, overrides] of Object.entries(routes)) {
     router[name] = makeRoute({ route: name, ...overrides });
@@ -101,9 +98,7 @@ describe("inbound middleware", () => {
       payload: "hello",
     };
 
-    await expect(
-      runMiddlewareChain(fns, ctx, async (c) => c.payload),
-    ).rejects.toThrow("blocked");
+    await expect(runMiddlewareChain(fns, ctx, async (c) => c.payload)).rejects.toThrow("blocked");
   });
 
   it("multiple inbound middleware compose correctly", async () => {
@@ -215,9 +210,7 @@ describe("createAuthMiddleware", () => {
 
     await runMiddlewareChain(fns, ctx, async (c) => c.payload);
 
-    expect(authorize).toHaveBeenCalledWith(
-      expect.objectContaining({ principal }),
-    );
+    expect(authorize).toHaveBeenCalledWith(expect.objectContaining({ principal }));
   });
 
   it("throws ScompAuthError when authorize returns false", async () => {
@@ -233,9 +226,7 @@ describe("createAuthMiddleware", () => {
       payload: "data",
     };
 
-    await expect(
-      runMiddlewareChain(fns, ctx, async (c) => c.payload),
-    ).rejects.toThrow(ScompAuthError);
+    await expect(runMiddlewareChain(fns, ctx, async (c) => c.payload)).rejects.toThrow(ScompAuthError);
   });
 
   it("ScompAuthError has correct code property", () => {
@@ -277,9 +268,7 @@ describe("createAuthMiddleware", () => {
       direction: "inbound",
       payload: "data",
     };
-    await expect(
-      runMiddlewareChain(fns, ctx, async (c) => c.payload),
-    ).rejects.toThrow(ScompAuthError);
+    await expect(runMiddlewareChain(fns, ctx, async (c) => c.payload)).rejects.toThrow(ScompAuthError);
   });
 
   it("denies unauthorized feed operations", async () => {
@@ -291,9 +280,7 @@ describe("createAuthMiddleware", () => {
       direction: "inbound",
       payload: "data",
     };
-    await expect(
-      runMiddlewareChain(fns, ctx, async (c) => c.payload),
-    ).rejects.toThrow(ScompAuthError);
+    await expect(runMiddlewareChain(fns, ctx, async (c) => c.payload)).rejects.toThrow(ScompAuthError);
   });
 
   it("allows authorized signal operations", async () => {
@@ -371,9 +358,7 @@ describe("createAuthMiddleware", () => {
       direction: "outbound",
       payload: "data",
     };
-    await expect(
-      runMiddlewareChain(fns, ctx, async (c) => c.payload),
-    ).rejects.toThrow(ScompAuthError);
+    await expect(runMiddlewareChain(fns, ctx, async (c) => c.payload)).rejects.toThrow(ScompAuthError);
   });
 
   it("outbound: passes through when no auth hooks configured", () => {

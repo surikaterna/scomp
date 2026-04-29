@@ -1,32 +1,33 @@
 export type AnyContractMethod = (...args: Array<never>) => unknown;
 
-export type ContractMethodInput<Method> =
-  Method extends (input: infer Input, ...args: Array<unknown>) => unknown ? Input : never;
+export type ContractMethodInput<Method> = Method extends (input: infer Input, ...args: Array<unknown>) => unknown
+  ? Input
+  : never;
 
-export type ContractMethodOutput<Method> =
-  Method extends (...args: Array<unknown>) => Promise<infer Output> ? Output
-    : Method extends (...args: Array<unknown>) => AsyncIterable<infer Output> ? Output
-      : never;
+export type ContractMethodOutput<Method> = Method extends (...args: Array<unknown>) => Promise<infer Output>
+  ? Output
+  : Method extends (...args: Array<unknown>) => AsyncIterable<infer Output>
+    ? Output
+    : never;
 
-export type MethodNetworkIntent<Method> =
-  Method extends (...args: Array<unknown>) => AsyncIterable<infer Output>
-    ? {
-      type: 'feed';
+export type MethodNetworkIntent<Method> = Method extends (...args: Array<unknown>) => AsyncIterable<infer Output>
+  ? {
+      type: "feed";
       input: ContractMethodInput<Method>;
       output: Output;
     }
-    : Method extends (...args: Array<unknown>) => void | Promise<void>
-      ? {
-        type: 'signal';
+  : Method extends (...args: Array<unknown>) => void | Promise<void>
+    ? {
+        type: "signal";
         input: ContractMethodInput<Method>;
       }
-      : Method extends (...args: Array<unknown>) => Promise<infer Output>
-        ? {
-          type: 'request';
+    : Method extends (...args: Array<unknown>) => Promise<infer Output>
+      ? {
+          type: "request";
           input: ContractMethodInput<Method>;
           output: Output;
         }
-        : never;
+      : never;
 
 export type ContractNetworkIntent<Contract extends object> = {
   [MethodName in keyof Contract as Contract[MethodName] extends AnyContractMethod
@@ -34,27 +35,22 @@ export type ContractNetworkIntent<Contract extends object> = {
     : never]: MethodNetworkIntent<Contract[MethodName]>;
 };
 
-type MergeUnion<UnionType> = (
-  UnionType extends unknown ? (input: UnionType) => void : never
-) extends ((input: infer Intersection) => void)
+type MergeUnion<UnionType> = (UnionType extends unknown ? (input: UnionType) => void : never) extends (
+  input: infer Intersection,
+) => void
   ? { [Key in keyof Intersection]: Intersection[Key] }
   : never;
 
-type JoinRoute<Prefix extends string, Key extends string> = Prefix extends ''
-  ? Key
-  : `${Prefix}.${Key}`;
+type JoinRoute<Prefix extends string, Key extends string> = Prefix extends "" ? Key : `${Prefix}.${Key}`;
 
-type FlatContractRouteUnion<Contract, Prefix extends string = ''> =
-  Contract extends AnyContractMethod
-    ? {
+type FlatContractRouteUnion<Contract, Prefix extends string = ""> = Contract extends AnyContractMethod
+  ? {
       [Route in Prefix]: MethodNetworkIntent<Contract>;
     }
-    : Contract extends object
-      ? {
+  : Contract extends object
+    ? {
         [Key in keyof Contract & string]: FlatContractRouteUnion<Contract[Key], JoinRoute<Prefix, Key>>;
       }[keyof Contract & string]
-      : never;
+    : never;
 
-export type ContractRouteIntents<Contract extends object> = MergeUnion<
-  FlatContractRouteUnion<Contract>
->;
+export type ContractRouteIntents<Contract extends object> = MergeUnion<FlatContractRouteUnion<Contract>>;

@@ -7,19 +7,19 @@ import type {
 } from "./protocol";
 import { createRuntimeConnector } from "./shared-worker-connector";
 import { createParticipantId } from "./shared-worker-internal";
-import {
-  type BrowserWindowsParticipantId,
-  type BrowserWindowsRequestId,
-  type BrowserWindowsTransportConfig,
-  type BrowserWindowsTransportHealthListener,
-  type BrowserWindowsTransportHealthSnapshot,
-  type BrowserWindowsTransportMode,
+import type {
+  BrowserWindowsParticipantId,
+  BrowserWindowsRequestId,
+  BrowserWindowsTransportConfig,
+  BrowserWindowsTransportHealthListener,
+  BrowserWindowsTransportHealthSnapshot,
+  BrowserWindowsTransportMode,
 } from "./types";
-import {
-  type HostedFeedState,
-  type FeedQueueState,
-  type PendingRequestState,
-  type RuntimeRoute,
+import type {
+  HostedFeedState,
+  FeedQueueState,
+  PendingRequestState,
+  RuntimeRoute,
 } from "./transport-browser-windows-state";
 import {
   handleHostFeedStart,
@@ -27,30 +27,16 @@ import {
   handleHostRequest,
   handleHostSignal,
 } from "./transport-browser-windows-host";
-import {
-  feedWithContext,
-  requestWithContext,
-  signalWithContext,
-} from "./transport-browser-windows-client";
+import { feedWithContext, requestWithContext, signalWithContext } from "./transport-browser-windows-client";
 import { createTransportHealthStore } from "./transport-browser-windows-health";
 import type { BrowserWindowsRuntimeEvent } from "./shared-worker-connector";
 import { createTransportContexts } from "./transport-browser-windows-context";
 import { dispatchIncomingMessage } from "./transport-browser-windows-dispatch";
-import {
-  reportRuntimeHealthEvent,
-  reportUnavailableConnectorError,
-} from "./transport-browser-windows-health-events";
-import {
-  processInvokeFeedChunk,
-  processInvokeResponse,
-} from "./transport-browser-windows-invoke";
+import { reportRuntimeHealthEvent, reportUnavailableConnectorError } from "./transport-browser-windows-health-events";
+import { processInvokeFeedChunk, processInvokeResponse } from "./transport-browser-windows-invoke";
 import { publishMessageWithHealth } from "./transport-browser-windows-publish";
 import { composeOutboundMeta } from "./transport-browser-windows-meta";
-import {
-  sendHello,
-  shutdownTransport,
-  syncRoutes,
-} from "./transport-browser-windows-lifecycle";
+import { sendHello, shutdownTransport, syncRoutes } from "./transport-browser-windows-lifecycle";
 import { assertStrictRouteIntentAllowed } from "./transport-browser-windows-route-intents";
 
 export class BrowserWindowsTransport implements ITransport {
@@ -64,34 +50,19 @@ export class BrowserWindowsTransport implements ITransport {
   private readonly requestTimeoutMs: number;
   private readonly maxPendingRequests: number;
   private readonly maxBufferedFeedChunksPerSubscriber: number;
-  private readonly pendingRequests = new Map<
-    BrowserWindowsRequestId,
-    PendingRequestState
-  >();
+  private readonly pendingRequests = new Map<BrowserWindowsRequestId, PendingRequestState>();
   private preparingRequests = 0;
-  private readonly feedStates = new Map<
-    BrowserWindowsRequestId,
-    FeedQueueState
-  >();
-  private readonly hostedFeeds = new Map<
-    BrowserWindowsRequestId,
-    HostedFeedState
-  >();
+  private readonly feedStates = new Map<BrowserWindowsRequestId, FeedQueueState>();
+  private readonly hostedFeeds = new Map<BrowserWindowsRequestId, HostedFeedState>();
   private readonly health: ReturnType<typeof createTransportHealthStore>;
   private activeRuntimeMode!: BrowserWindowsTransportMode;
-  private readonly hostContext: ReturnType<
-    typeof createTransportContexts
-  >["hostContext"];
-  private readonly clientContext: ReturnType<
-    typeof createTransportContexts
-  >["clientContext"];
+  private readonly hostContext: ReturnType<typeof createTransportContexts>["hostContext"];
+  private readonly clientContext: ReturnType<typeof createTransportContexts>["clientContext"];
   private router: Record<string, RuntimeRoute> = {};
   private readonly messageHandler = (data: unknown) => {
     this.handleIncoming(data as BrowserWindowsProtocolMessage);
   };
-  private readonly runtimeEventHandler = (
-    event: BrowserWindowsRuntimeEvent,
-  ) => {
+  private readonly runtimeEventHandler = (event: BrowserWindowsRuntimeEvent) => {
     if (event.type === "active-mode-changed") {
       this.activeRuntimeMode = event.mode;
       this.health.setActiveMode(event.mode);
@@ -104,15 +75,10 @@ export class BrowserWindowsTransport implements ITransport {
   };
   constructor(config: BrowserWindowsTransportConfig = {}) {
     this.config = config;
-    this.requestTimeoutMs = Math.max(
-      1,
-      config.requestTimeoutMs ??
-        BrowserWindowsTransport.DEFAULT_REQUEST_TIMEOUT_MS,
-    );
+    this.requestTimeoutMs = Math.max(1, config.requestTimeoutMs ?? BrowserWindowsTransport.DEFAULT_REQUEST_TIMEOUT_MS);
     this.maxPendingRequests = Math.max(
       1,
-      config.maxPendingRequests ??
-        BrowserWindowsTransport.DEFAULT_MAX_PENDING_REQUESTS,
+      config.maxPendingRequests ?? BrowserWindowsTransport.DEFAULT_MAX_PENDING_REQUESTS,
     );
     this.maxBufferedFeedChunksPerSubscriber = Math.max(
       1,
@@ -137,8 +103,7 @@ export class BrowserWindowsTransport implements ITransport {
       participantId: this.participantId,
       requestTimeoutMs: this.requestTimeoutMs,
       maxPendingRequests: this.maxPendingRequests,
-      maxBufferedFeedChunksPerSubscriber:
-        this.maxBufferedFeedChunksPerSubscriber,
+      maxBufferedFeedChunksPerSubscriber: this.maxBufferedFeedChunksPerSubscriber,
       getRouter: () => this.router,
       getPreparingRequests: () => this.preparingRequests,
       incrementPreparingRequests: () => {
@@ -156,10 +121,7 @@ export class BrowserWindowsTransport implements ITransport {
       reportHealth: (code, detail, status) => {
         this.health.report(code, detail, status);
       },
-      assertOutboundAllowed: (
-        route: string,
-        operation: "request" | "signal" | "feed",
-      ) => {
+      assertOutboundAllowed: (route: string, operation: "request" | "signal" | "feed") => {
         this.assertOutboundAllowed(route, operation);
       },
       composeMetaForOperation: (
@@ -180,9 +142,7 @@ export class BrowserWindowsTransport implements ITransport {
     const previousRoutes = Object.keys(this.router);
     const nextRouter = router as Record<string, RuntimeRoute>;
     const nextRoutes = Object.keys(nextRouter);
-    syncRoutes(this.participantId, previousRoutes, nextRoutes, (message) =>
-      this.publishMessage(message),
-    );
+    syncRoutes(this.participantId, previousRoutes, nextRoutes, (message) => this.publishMessage(message));
     this.router = nextRouter;
   }
 
@@ -194,10 +154,8 @@ export class BrowserWindowsTransport implements ITransport {
       feedStates: this.feedStates,
       hostedFeeds: this.hostedFeeds,
       publishMessage: (message) => this.publishMessage(message),
-      removeMessageListener: () =>
-        this.connector.removeMessageListener(this.messageHandler),
-      removeRuntimeEventListener: () =>
-        this.connector.removeRuntimeEventListener?.(this.runtimeEventHandler),
+      removeMessageListener: () => this.connector.removeMessageListener(this.messageHandler),
+      removeRuntimeEventListener: () => this.connector.removeRuntimeEventListener?.(this.runtimeEventHandler),
       closeConnector: () => this.connector.close(),
     });
     this.router = {};
@@ -211,25 +169,13 @@ export class BrowserWindowsTransport implements ITransport {
   activeMode(): BrowserWindowsTransportMode {
     return this.activeRuntimeMode;
   }
-  async request(
-    route: string,
-    payload: unknown,
-    options?: ScompClientInvokeOptions,
-  ): Promise<unknown> {
+  async request(route: string, payload: unknown, options?: ScompClientInvokeOptions): Promise<unknown> {
     return requestWithContext(this.clientContext, route, payload, options);
   }
-  async signal(
-    route: string,
-    payload: unknown,
-    options?: ScompClientInvokeOptions,
-  ): Promise<void> {
+  async signal(route: string, payload: unknown, options?: ScompClientInvokeOptions): Promise<void> {
     await signalWithContext(this.clientContext, route, payload, options);
   }
-  feed(
-    route: string,
-    payload: unknown,
-    options?: ScompClientInvokeOptions,
-  ): AsyncIterable<unknown> {
+  feed(route: string, payload: unknown, options?: ScompClientInvokeOptions): AsyncIterable<unknown> {
     return feedWithContext(this.clientContext, route, payload, options);
   }
   private handleIncoming(message: BrowserWindowsProtocolMessage): void {
@@ -254,20 +200,12 @@ export class BrowserWindowsTransport implements ITransport {
       },
     });
   }
-  private handleInvokeResponse(
-    message: BrowserWindowsInvokeResponseMessage,
-  ): void {
-    processInvokeResponse(
-      this.pendingRequests,
-      message,
-      (code, detail, status) => {
-        this.health.report(code, detail, status);
-      },
-    );
+  private handleInvokeResponse(message: BrowserWindowsInvokeResponseMessage): void {
+    processInvokeResponse(this.pendingRequests, message, (code, detail, status) => {
+      this.health.report(code, detail, status);
+    });
   }
-  private handleInvokeFeedChunk(
-    message: BrowserWindowsInvokeFeedChunkMessage,
-  ): void {
+  private handleInvokeFeedChunk(message: BrowserWindowsInvokeFeedChunkMessage): void {
     processInvokeFeedChunk(
       this.feedStates,
       message,
@@ -289,19 +227,13 @@ export class BrowserWindowsTransport implements ITransport {
       message,
     );
   }
-  private async handleHostRequest(
-    message: Parameters<typeof handleHostRequest>[1],
-  ): Promise<void> {
+  private async handleHostRequest(message: Parameters<typeof handleHostRequest>[1]): Promise<void> {
     await handleHostRequest(this.hostContext, message);
   }
-  private async handleHostSignal(
-    message: Parameters<typeof handleHostSignal>[1],
-  ): Promise<void> {
+  private async handleHostSignal(message: Parameters<typeof handleHostSignal>[1]): Promise<void> {
     await handleHostSignal(this.hostContext, message);
   }
-  private async handleHostFeedStart(
-    message: Parameters<typeof handleHostFeedStart>[1],
-  ): Promise<void> {
+  private async handleHostFeedStart(message: Parameters<typeof handleHostFeedStart>[1]): Promise<void> {
     await handleHostFeedStart(this.hostContext, message);
   }
 
@@ -309,21 +241,11 @@ export class BrowserWindowsTransport implements ITransport {
     void handleHostFeedStop(this.hostContext, message);
   }
 
-  private assertOutboundAllowed(
-    route: string,
-    operation: "request" | "signal" | "feed",
-  ): void {
-    assertStrictRouteIntentAllowed(
-      this.config.strictRouteIntents === true,
-      this.config.routeIntents,
-      route,
-      operation,
-    );
+  private assertOutboundAllowed(route: string, operation: "request" | "signal" | "feed"): void {
+    assertStrictRouteIntentAllowed(this.config.strictRouteIntents === true, this.config.routeIntents, route, operation);
   }
 }
 
-export function createBrowserWindowsTransport(
-  config: BrowserWindowsTransportConfig = {},
-): BrowserWindowsTransport {
+export function createBrowserWindowsTransport(config: BrowserWindowsTransportConfig = {}): BrowserWindowsTransport {
   return new BrowserWindowsTransport(config);
 }

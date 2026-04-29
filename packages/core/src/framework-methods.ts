@@ -13,5 +13,4 @@ export const ScompFrameworkMethods = {
   STATS: "__scomp.stats",
 } as const;
 
-export type ScompFrameworkMethod =
-  (typeof ScompFrameworkMethods)[keyof typeof ScompFrameworkMethods];
+export type ScompFrameworkMethod = (typeof ScompFrameworkMethods)[keyof typeof ScompFrameworkMethods];

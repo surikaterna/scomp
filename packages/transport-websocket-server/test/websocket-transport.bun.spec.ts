@@ -1,10 +1,7 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
 import { createServer } from "node:net";
-import {
-  WebSocketClientTransport,
-  createNodeSocketAdapterFactory,
-} from "@scomp/transport-websocket-client";
+import { WebSocketClientTransport, createNodeSocketAdapterFactory } from "@scomp/transport-websocket-client";
 import { BunWebSocketServerTransport } from "../src/bun";
 
 const nodeSocketAdapter = createNodeSocketAdapterFactory();
@@ -52,8 +49,7 @@ async function reservePort(): Promise<number> {
   return port;
 }
 
-const transports: Array<BunWebSocketServerTransport | WebSocketClientTransport> =
-  [];
+const transports: Array<BunWebSocketServerTransport | WebSocketClientTransport> = [];
 
 afterEach(async () => {
   while (transports.length > 0) {
@@ -117,8 +113,7 @@ describe("BunWebSocketServerTransport Bun integration", () => {
         route: "math.count",
         kind: "feed",
         strategy: "fanout",
-        hashKey: (payload: unknown) =>
-          String((payload as { room: string }).room),
+        hashKey: (payload: unknown) => String((payload as { room: string }).room),
         handler: async function* () {
           yield 1;
           yield 2;
@@ -139,8 +134,6 @@ describe("BunWebSocketServerTransport Bun integration", () => {
     await wait(20);
     expect(seenSignals).toEqual([{ id: 7 }]);
 
-    await expect(
-      collect(client.feed("math.count", { room: "main" })),
-    ).resolves.toEqual([1, 2, 3]);
+    await expect(collect(client.feed("math.count", { room: "main" }))).resolves.toEqual([1, 2, 3]);
   });
 });

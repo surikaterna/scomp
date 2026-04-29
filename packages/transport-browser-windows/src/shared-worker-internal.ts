@@ -8,9 +8,7 @@ import type {
 } from "./types";
 
 export function createRuntimeId(prefix: string): string {
-  const globalCrypto = globalThis.crypto as
-    | { randomUUID?: () => string }
-    | undefined;
+  const globalCrypto = globalThis.crypto as { randomUUID?: () => string } | undefined;
   const uuid = globalCrypto?.randomUUID?.();
   if (uuid) {
     return `${prefix}-${uuid}`;
@@ -20,9 +18,7 @@ export function createRuntimeId(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${random}`;
 }
 
-export function createParticipantId(
-  config: BrowserWindowsTransportConfig,
-): BrowserWindowsParticipantId {
+export function createParticipantId(config: BrowserWindowsTransportConfig): BrowserWindowsParticipantId {
   return config.nodeId ?? createRuntimeId("bw");
 }
 
@@ -38,9 +34,6 @@ export function createPayloadKey(payload: unknown): BrowserWindowsPayloadKey {
   }
 }
 
-export function createPayloadHash(
-  route: string,
-  payload: unknown,
-): BrowserWindowsCanonicalPayloadHash {
+export function createPayloadHash(route: string, payload: unknown): BrowserWindowsCanonicalPayloadHash {
   return createFeedHash(route, payload);
 }

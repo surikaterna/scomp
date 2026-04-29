@@ -1,4 +1,4 @@
-import type { ScompSerializer } from '@scomp/types';
+import type { ScompSerializer } from "@scomp/types";
 
 export const defaultJsonSerializer: ScompSerializer = {
   stringify(value: unknown): string {
@@ -7,7 +7,7 @@ export const defaultJsonSerializer: ScompSerializer = {
   parse<T = unknown>(text: string): T {
     return JSON.parse(text) as T;
   },
-  contentType: 'application/json'
+  contentType: "application/json",
 };
 
 export interface ExtendedJsonSerializerOptions {
@@ -24,6 +24,6 @@ export function createJsonSerializer(options: ExtendedJsonSerializerOptions = {}
     parse<T = unknown>(text: string): T {
       return JSON.parse(text, options.reviver) as T;
     },
-    contentType: options.contentType ?? 'application/json'
+    contentType: options.contentType ?? "application/json",
   };
 }

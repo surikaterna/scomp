@@ -6,10 +6,7 @@ import {
   createAuthMiddleware,
   ScompAuthError,
 } from "../src/index";
-import type {
-  ITransport,
-  ScompClientInvokeOptions,
-} from "../src/index";
+import type { ITransport, ScompClientInvokeOptions } from "../src/index";
 import { createInprocessTransport } from "../../transport-inprocess/src/index";
 
 // ---------------------------------------------------------------------------
@@ -26,10 +23,7 @@ const TestToken = createContractToken<TestContract>("test");
 // Client factory: creates a simple proxy that calls transport.request()
 // ---------------------------------------------------------------------------
 
-function simpleClientFactory<C extends object>(
-  transport: ITransport,
-  token: { name: string },
-): C {
+function simpleClientFactory<C extends object>(transport: ITransport, token: { name: string }): C {
   return new Proxy({} as C, {
     get(_target, method: string) {
       return (payload: unknown) => {
@@ -63,9 +57,7 @@ describe("auth middleware integration through transport", () => {
 
     const client = peer.consumes(TestToken);
 
-    await expect(client.echo({ msg: "hi" })).rejects.toThrow(
-      /not authorized/i,
-    );
+    await expect(client.echo({ msg: "hi" })).rejects.toThrow(/not authorized/i);
   });
 
   it("allows authorized inbound requests through transport", async () => {
@@ -149,9 +141,7 @@ describe("auth middleware integration through transport", () => {
     expect(echoCall?.options?.meta).toBeDefined();
 
     const auth = (echoCall?.options?.meta as Record<string, unknown>)?.auth;
-    expect(auth).toEqual(
-      expect.objectContaining({ subject: "user-1", tenantId: "tenant-a" }),
-    );
+    expect(auth).toEqual(expect.objectContaining({ subject: "user-1", tenantId: "tenant-a" }));
   });
 
   it("outbound blocks unauthorized calls before transport", async () => {

@@ -3,7 +3,7 @@ import type { CompiledRouter, ServiceDefinition } from "./builder";
 import { createScompService } from "./builder";
 import type { ITransport } from "./transport";
 import type { ScompMiddleware, ScompHandlerContext, ScompMiddlewareContext } from "./middleware";
-import { createMiddlewareTransport, } from "./middleware-transport";
+import { createMiddlewareTransport } from "./middleware-transport";
 import { getMiddlewareFns, runMiddlewareChain } from "./middleware";
 import { ScompControlPlane } from "./control-plane-contract";
 import {
@@ -16,10 +16,7 @@ import {
  * Factory that creates a typed client proxy from a transport and contract token.
  * Injected to avoid a circular dependency between @scomp/core and @scomp/client.
  */
-export type ClientFactory = <C extends object>(
-  transport: ITransport,
-  token: ContractToken<C>,
-) => C;
+export type ClientFactory = <C extends object>(transport: ITransport, token: ContractToken<C>) => C;
 
 export interface IScompPeer {
   /** Register service definitions, merging their routers and pushing routes to all transports. */
@@ -74,9 +71,7 @@ export function createScompPeer(config: CreateScompPeerConfig): IScompPeer {
 
   // Wrap transports with middleware for outbound (client) use
   const wrappedTransports =
-    middleware.length > 0
-      ? transports.map((t) => createMiddlewareTransport(t, middleware))
-      : transports;
+    middleware.length > 0 ? transports.map((t) => createMiddlewareTransport(t, middleware)) : transports;
 
   function assertOpen(): void {
     if (closed) {
@@ -91,9 +86,7 @@ export function createScompPeer(config: CreateScompPeerConfig): IScompPeer {
     for (const service of services) {
       for (const routeName of Object.keys(service.router)) {
         if (combinedRouter[routeName] !== undefined) {
-          throw new Error(
-            `Duplicate route "${routeName}" from service "${service.name}".`,
-          );
+          throw new Error(`Duplicate route "${routeName}" from service "${service.name}".`);
         }
         combinedRouter[routeName] = service.router[routeName];
       }
@@ -152,27 +145,18 @@ export function createScompPeer(config: CreateScompPeerConfig): IScompPeer {
 
     const results = await Promise.allSettled(transports.map((t) => t.close()));
 
-    const failures = results.filter(
-      (r): r is PromiseRejectedResult => r.status === "rejected",
-    );
+    const failures = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
     if (failures.length > 0) {
       const messages = failures
-        .map((f) =>
-          f.reason instanceof Error ? f.reason.message : String(f.reason),
-        )
+        .map((f) => (f.reason instanceof Error ? f.reason.message : String(f.reason)))
         .join("; ");
-      throw new Error(
-        `${failures.length} transport(s) failed to close: ${messages}`,
-      );
+      throw new Error(`${failures.length} transport(s) failed to close: ${messages}`);
     }
   }
 
   // Auto-provide control-plane service when enabled.
   if (controlPlane !== false) {
-    const nodeId =
-      typeof controlPlane === "object" && controlPlane.nodeId
-        ? controlPlane.nodeId
-        : generateNodeId();
+    const nodeId = typeof controlPlane === "object" && controlPlane.nodeId ? controlPlane.nodeId : generateNodeId();
 
     // Handlers close over `combinedRouter`, so they see routes added later.
     const discoverHandler = createNodeLocalDiscoverHandler(combinedRouter, {
@@ -183,13 +167,11 @@ export function createScompPeer(config: CreateScompPeerConfig): IScompPeer {
       nodeId,
     });
 
-    const controlPlaneService = createScompService(ScompControlPlane).implement(
-      {
-        discover: async (input) => discoverHandler(input),
-        resolve: async (input) => resolveHandler(input),
-        health: async (input) => healthHandler(input),
-      },
-    );
+    const controlPlaneService = createScompService(ScompControlPlane).implement({
+      discover: async (input) => discoverHandler(input),
+      resolve: async (input) => resolveHandler(input),
+      health: async (input) => healthHandler(input),
+    });
 
     provides(controlPlaneService);
   }

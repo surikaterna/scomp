@@ -1,10 +1,10 @@
-export {
-  type AnyContractMethod,
-  type ContractMethodInput,
-  type ContractMethodOutput,
-  type MethodNetworkIntent,
-  type ContractNetworkIntent,
-  type ContractRouteIntents,
+export type {
+  AnyContractMethod,
+  ContractMethodInput,
+  ContractMethodOutput,
+  MethodNetworkIntent,
+  ContractNetworkIntent,
+  ContractRouteIntents,
 } from "./network";
 
 export {

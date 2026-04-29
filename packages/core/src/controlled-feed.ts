@@ -18,10 +18,7 @@ export interface ControlledFeedOptions {
  * An async iterable that also exposes a typed controller for
  * client-to-server messages scoped to an active feed subscription.
  */
-export interface ControlledAsyncIterable<
-  T,
-  C = unknown,
-> extends AsyncIterable<T> {
+export interface ControlledAsyncIterable<T, C = unknown> extends AsyncIterable<T> {
   readonly controller: C;
   /** @internal Feed scoping mode for the runtime. */
   readonly [SCOMP_SCOPE]?: "exclusive" | "fanout";
@@ -42,9 +39,7 @@ export function createControlledFeed<T, C extends object>(
 ): ControlledAsyncIterable<T, C> {
   for (const key of Object.keys(controllerMethods)) {
     if (key.startsWith("__scomp.")) {
-      throw new Error(
-        `Controller method "${key}" uses reserved __scomp. prefix.`,
-      );
+      throw new Error(`Controller method "${key}" uses reserved __scomp. prefix.`);
     }
   }
 

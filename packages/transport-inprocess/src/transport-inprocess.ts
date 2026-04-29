@@ -1,12 +1,12 @@
-import type { ScompTransport } from '@scomp/core';
-import { executeFireAndForget } from './fire-and-forget';
-import { toFeedResponse, toRequestResponse } from './result-adapters';
-import { invokeServiceMethod } from './service-invoker';
-import type { AnyServiceDefinition, InprocessTransportOptions } from './types';
+import type { ScompTransport } from "@scomp/core";
+import { executeFireAndForget } from "./fire-and-forget";
+import { toFeedResponse, toRequestResponse } from "./result-adapters";
+import { invokeServiceMethod } from "./service-invoker";
+import type { AnyServiceDefinition, InprocessTransportOptions } from "./types";
 
 export function createInprocessTransport(
   service: AnyServiceDefinition,
-  options: InprocessTransportOptions = {}
+  options: InprocessTransportOptions = {},
 ): ScompTransport {
   return {
     async request<ResponseType>(methodName: string, args: ReadonlyArray<unknown>) {
@@ -21,6 +21,6 @@ export function createInprocessTransport(
 
     fireAndForget(methodName: string, args: ReadonlyArray<unknown>) {
       executeFireAndForget(service, methodName, args, options.onFireAndForgetError);
-    }
+    },
   };
 }

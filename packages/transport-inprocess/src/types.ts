@@ -1,4 +1,4 @@
-import type { ScompServiceDefinition } from '@scomp/core';
+import type { ScompServiceDefinition } from "@scomp/core";
 
 export type AnyServiceDefinition = ScompServiceDefinition<
   Record<string, (...args: Array<unknown>) => Promise<unknown>>,
@@ -6,11 +6,7 @@ export type AnyServiceDefinition = ScompServiceDefinition<
   Record<string, (...args: Array<unknown>) => void | Promise<void>>
 >;
 
-export type FireAndForgetErrorHandler = (
-  error: unknown,
-  methodName: string,
-  args: ReadonlyArray<unknown>
-) => void;
+export type FireAndForgetErrorHandler = (error: unknown, methodName: string, args: ReadonlyArray<unknown>) => void;
 
 export interface InprocessTransportOptions {
   onFireAndForgetError?: FireAndForgetErrorHandler;

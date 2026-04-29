@@ -6,11 +6,7 @@ import {
   type CompiledRoute,
   type ScompHandlerContext,
 } from "@scomp/core";
-import {
-  type ScompErrorCode,
-  type ScompFeedChunkEnvelope,
-  type ScompTransportMessageMeta,
-} from "@scomp/types";
+import type { ScompErrorCode, ScompFeedChunkEnvelope, ScompTransportMessageMeta } from "@scomp/types";
 import {
   StreamClosedError,
   ensureFeedIterable,
@@ -39,10 +35,7 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
   private router?: Record<string, CompiledRoute>;
   private readonly runningFeeds = new Map<string, RunningFeed<Socket>>();
   /** Shared controllers for fanout feeds, keyed by route+feedHash. */
-  private readonly sharedControllers = new Map<
-    string,
-    Record<string, (payload: unknown) => unknown>
-  >();
+  private readonly sharedControllers = new Map<string, Record<string, (payload: unknown) => unknown>>();
 
   constructor(private readonly config: WebSocketServerRuntimeConfig<Socket>) {}
 
@@ -56,13 +49,7 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
     const op = body.op ?? "request";
 
     if (!routeEntry) {
-      this.replyWithError(
-        socket,
-        body.id,
-        `Route not found: ${routeName}`,
-        undefined,
-        "ROUTE_NOT_FOUND",
-      );
+      this.replyWithError(socket, body.id, `Route not found: ${routeName}`, undefined, "ROUTE_NOT_FOUND");
       return;
     }
 
@@ -72,11 +59,7 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
       meta: body.meta,
     };
 
-    if (
-      op === "signal" &&
-      body.method === ScompFrameworkMethods.UNSUBSCRIBE &&
-      body.feed
-    ) {
+    if (op === "signal" && body.method === ScompFrameworkMethods.UNSUBSCRIBE && body.feed) {
       this.handleFeedUnsubscribe(socket, body);
       return;
     }
@@ -104,7 +87,10 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
       const result = await this.config.invokeRoute(routeEntry, body, handlerCtx);
       this.replyWithPayload(socket, body.id, result);
     } catch (error) {
-      const code = (error as any)?.code === "UNAUTHORIZED" ? "UNAUTHORIZED" as ScompErrorCode : undefined;
+      const code =
+        (error as unknown as { code?: string })?.code === "UNAUTHORIZED"
+          ? ("UNAUTHORIZED" as ScompErrorCode)
+          : undefined;
       this.replyWithError(socket, body.id, error, undefined, code);
     }
   }
@@ -114,9 +100,7 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
       if (!runningFeed.subscribers.has(socket)) continue;
       runningFeed.subscribers.delete(socket);
       if (runningFeed.subscribers.size === 0) {
-        runningFeed.abortController.abort(
-          new StreamClosedError(runningFeed.key),
-        );
+        runningFeed.abortController.abort(new StreamClosedError(runningFeed.key));
       }
     }
   }
@@ -139,22 +123,13 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
     this.replyWithPayload(socket, body.id, { ok: true });
   }
 
-  private async handleControllerCall(
-    socket: Socket,
-    body: TransportMessage,
-  ): Promise<void> {
+  private async handleControllerCall(socket: Socket, body: TransportMessage): Promise<void> {
     const feedId = String(body.feed ?? "");
     const method = String(body.method ?? "");
 
     const running = this.runningFeeds.get(feedId);
     if (!running) {
-      this.replyWithError(
-        socket,
-        body.id,
-        `Feed not found: ${feedId}`,
-        undefined,
-        "FEED_NOT_FOUND",
-      );
+      this.replyWithError(socket, body.id, `Feed not found: ${feedId}`, undefined, "FEED_NOT_FOUND");
       return;
     }
 
@@ -171,13 +146,7 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
 
     const controller = running.controller;
     if (!controller || typeof controller[method] !== "function") {
-      this.replyWithError(
-        socket,
-        body.id,
-        `Controller method not found: ${method}`,
-        undefined,
-        "CONTROLLER_NOT_FOUND",
-      );
+      this.replyWithError(socket, body.id, `Controller method not found: ${method}`, undefined, "CONTROLLER_NOT_FOUND");
       return;
     }
 
@@ -206,10 +175,7 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
   ): Promise<void> {
     const rawPayload = body.payload;
     const parsedPayload = route.parser ? route.parser(rawPayload) : rawPayload;
-    const hash = String(
-      body.feed ??
-        createFeedHash(route.route, parsedPayload, { hashKey: route.hashKey }),
-    );
+    const hash = String(body.feed ?? createFeedHash(route.route, parsedPayload, { hashKey: route.hashKey }));
 
     const existing = this.runningFeeds.get(hash);
     if (existing) {
@@ -238,10 +204,7 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
     const iterable = ensureFeedIterable(result);
 
     if (isControlledAsyncIterable(result)) {
-      const controllerRef = result.controller as Record<
-        string,
-        (payload: unknown) => unknown
-      >;
+      const controllerRef = result.controller as Record<string, (payload: unknown) => unknown>;
       if (result[SCOMP_SCOPE] === "fanout") {
         const existing = this.sharedControllers.get(hash);
         runningFeed.controller = existing ?? controllerRef;
@@ -256,10 +219,7 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
     });
   }
 
-  private async publishFeed(
-    runningFeed: RunningFeed<Socket>,
-    iterable: AsyncIterable<unknown>,
-  ): Promise<void> {
+  private async publishFeed(runningFeed: RunningFeed<Socket>, iterable: AsyncIterable<unknown>): Promise<void> {
     try {
       for await (const chunk of iterable) {
         if (runningFeed.abortController.signal.aborted) {
@@ -287,10 +247,7 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
     }
   }
 
-  private broadcastFeedChunk(
-    runningFeed: RunningFeed<Socket>,
-    chunk: FeedChunkData,
-  ): void {
+  private broadcastFeedChunk(runningFeed: RunningFeed<Socket>, chunk: FeedChunkData): void {
     for (const socket of runningFeed.subscribers) {
       if (!this.config.isSocketOpen(socket)) continue;
       this.config.onFeedChunk(socket, {
@@ -329,5 +286,4 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
       meta,
     } satisfies import("@scomp/types").ScompTransportResponseEnvelope);
   }
-
 }

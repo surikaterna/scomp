@@ -1,25 +1,13 @@
-import type { Server as HttpServer } from "node:http";
-import type { Server as HttpsServer } from "node:https";
-import type {
-  CompiledRoute,
-  ITransport,
-  ScompClientInvokeOptions,
-} from "@scomp/core";
+import type { CompiledRoute, ITransport, ScompClientInvokeOptions } from "@scomp/core";
 import type {
   ScompTransportRequestEnvelope,
   ScompTransportResponseEnvelope,
   ScompFeedChunkEnvelope,
 } from "@scomp/types";
-import {
-  parseTransportMessage,
-  WebSocketServerRuntime,
-} from "@scomp/transport-websocket-server-runtime";
+import { parseTransportMessage, WebSocketServerRuntime } from "@scomp/transport-websocket-server-runtime";
 import { createNodeSocketAdapterFactory } from "@scomp/transport-websocket-shared";
 import WebSocket, { type RawData, WebSocketServer } from "ws";
-import {
-  type NodeWebSocketServerTransportConfig,
-  resolveOutboundTransport,
-} from "./shared";
+import { type NodeWebSocketServerTransportConfig, resolveOutboundTransport } from "./shared";
 
 const nodeSocketAdapter = createNodeSocketAdapterFactory();
 
@@ -55,36 +43,23 @@ export class NodeWebSocketServerTransport implements ITransport {
   constructor(config: NodeWebSocketServerTransportConfig) {
     this.config = config;
     this.runtime = new WebSocketServerRuntime<WebSocket>({
-      invokeRoute: async (
-        route: CompiledRoute,
-        message: ScompTransportRequestEnvelope,
-        ctx,
-      ) => {
+      invokeRoute: async (route: CompiledRoute, message: ScompTransportRequestEnvelope, ctx) => {
         const rawPayload = message.payload;
         const payload = route.parser ? route.parser(rawPayload) : rawPayload;
         return route.handler(payload, ctx);
       },
-      isSocketOpen: (socket: WebSocket) =>
-        socket.readyState === WebSocket.OPEN,
-      onReply: (
-        socket: WebSocket,
-        response: ScompTransportResponseEnvelope,
-      ) => {
+      isSocketOpen: (socket: WebSocket) => socket.readyState === WebSocket.OPEN,
+      onReply: (socket: WebSocket, response: ScompTransportResponseEnvelope) => {
         socket.send(JSON.stringify(response));
       },
-      onFeedChunk: (
-        socket: WebSocket,
-        chunk: ScompFeedChunkEnvelope,
-      ) => {
+      onFeedChunk: (socket: WebSocket, chunk: ScompFeedChunkEnvelope) => {
         socket.send(JSON.stringify(chunk));
       },
       onFeedExchange: toFeedExchange,
     });
   }
 
-  async registerRoutes(
-    router: Record<string, CompiledRoute>,
-  ): Promise<void> {
+  async registerRoutes(router: Record<string, CompiledRoute>): Promise<void> {
     this.runtime.setRouter(router);
     const server = this.getServer();
 
@@ -139,36 +114,20 @@ export class NodeWebSocketServerTransport implements ITransport {
     });
   }
 
-  async request(
-    route: string,
-    payload: unknown,
-    options?: ScompClientInvokeOptions,
-  ): Promise<unknown> {
+  async request(route: string, payload: unknown, options?: ScompClientInvokeOptions): Promise<unknown> {
     return this.getOutboundTransport().request(route, payload, options);
   }
 
-  async signal(
-    route: string,
-    payload: unknown,
-    options?: ScompClientInvokeOptions,
-  ): Promise<void> {
+  async signal(route: string, payload: unknown, options?: ScompClientInvokeOptions): Promise<void> {
     await this.getOutboundTransport().signal(route, payload, options);
   }
 
-  feed(
-    route: string,
-    payload: unknown,
-    options?: ScompClientInvokeOptions,
-  ): AsyncIterable<unknown> {
+  feed(route: string, payload: unknown, options?: ScompClientInvokeOptions): AsyncIterable<unknown> {
     return this.getOutboundTransport().feed(route, payload, options);
   }
 
   private getOutboundTransport(): ITransport {
-    this.outboundTransport = resolveOutboundTransport(
-      this.config,
-      this.outboundTransport,
-      nodeSocketAdapter,
-    );
+    this.outboundTransport = resolveOutboundTransport(this.config, this.outboundTransport, nodeSocketAdapter);
     return this.outboundTransport;
   }
 
@@ -186,9 +145,7 @@ export class NodeWebSocketServerTransport implements ITransport {
     }
 
     if (!this.config.port) {
-      throw new Error(
-        "NodeWebSocketServerTransport requires either a port or an existing HTTP server.",
-      );
+      throw new Error("NodeWebSocketServerTransport requires either a port or an existing HTTP server.");
     }
 
     this.server = new WebSocketServer({
@@ -220,5 +177,4 @@ export type WebSocketServerTransportConfig = NodeWebSocketServerTransportConfig;
 /**
  * @deprecated Use `createNodeWebSocketServerTransport` instead.
  */
-export const createWebSocketServerTransport =
-  createNodeWebSocketServerTransport;
+export const createWebSocketServerTransport = createNodeWebSocketServerTransport;

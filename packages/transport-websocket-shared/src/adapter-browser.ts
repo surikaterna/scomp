@@ -1,9 +1,6 @@
 import type { ISocketAdapter, SocketAdapterFactory } from "./socket-adapter";
 
-export type BrowserWebSocketCtor = new (
-  url: string,
-  protocols?: string | string[],
-) => WebSocket;
+export type BrowserWebSocketCtor = new (url: string, protocols?: string | string[]) => WebSocket;
 
 async function toText(data: unknown): Promise<string> {
   if (typeof data === "string") return data;
@@ -27,11 +24,7 @@ export class BrowserSocketAdapter implements ISocketAdapter {
     handler: EventListenerOrEventListenerObject;
   }> = [];
 
-  constructor(
-    url: string,
-    protocols: string | string[] | undefined,
-    WebSocketCtor: BrowserWebSocketCtor,
-  ) {
+  constructor(url: string, protocols: string | string[] | undefined, WebSocketCtor: BrowserWebSocketCtor) {
     this.socket = new WebSocketCtor(url, protocols);
   }
 
@@ -73,18 +66,13 @@ export class BrowserSocketAdapter implements ISocketAdapter {
     this.listeners.length = 0;
   }
 
-  private track(
-    type: string,
-    handler: EventListenerOrEventListenerObject,
-  ): void {
+  private track(type: string, handler: EventListenerOrEventListenerObject): void {
     this.socket.addEventListener(type, handler);
     this.listeners.push({ type, handler });
   }
 }
 
-export function createBrowserSocketAdapterFactory(
-  WebSocketCtor?: BrowserWebSocketCtor,
-): SocketAdapterFactory {
+export function createBrowserSocketAdapterFactory(WebSocketCtor?: BrowserWebSocketCtor): SocketAdapterFactory {
   const Ctor = WebSocketCtor ?? resolveGlobalWebSocket();
   return (url, protocols) => new BrowserSocketAdapter(url, protocols, Ctor);
 }
@@ -92,8 +80,7 @@ export function createBrowserSocketAdapterFactory(
 function resolveGlobalWebSocket(): BrowserWebSocketCtor {
   if (typeof globalThis.WebSocket !== "function") {
     throw new Error(
-      "No WebSocket constructor found. " +
-        "Provide a WebSocket constructor to createBrowserSocketAdapterFactory().",
+      "No WebSocket constructor found. " + "Provide a WebSocket constructor to createBrowserSocketAdapterFactory().",
     );
   }
   return globalThis.WebSocket as unknown as BrowserWebSocketCtor;

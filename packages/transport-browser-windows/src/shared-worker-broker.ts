@@ -1,9 +1,6 @@
 import type { BrowserWindowsProtocolMessage } from "./protocol";
 import type { BrowserWindowsParticipantId } from "./types";
-import {
-  createBrokerState,
-  type BrokerContext,
-} from "./shared-worker-broker-context";
+import { createBrokerState, type BrokerContext } from "./shared-worker-broker-context";
 import { cleanupDisconnectedParticipant } from "./shared-worker-broker-disconnect";
 import {
   handleHostFeedChunk,
@@ -14,21 +11,12 @@ import {
   handleInvokeRequest,
   handleInvokeSignal,
 } from "./shared-worker-broker-dispatch";
-import {
-  registerRoutes,
-  unregisterRoutes,
-} from "./shared-worker-broker-routes";
+import { registerRoutes, unregisterRoutes } from "./shared-worker-broker-routes";
 
 export interface BrowserWindowsMessagePortLike {
   postMessage(message: BrowserWindowsProtocolMessage): void;
-  addEventListener(
-    type: "message",
-    listener: (event: { data: BrowserWindowsProtocolMessage }) => void,
-  ): void;
-  removeEventListener(
-    type: "message",
-    listener: (event: { data: BrowserWindowsProtocolMessage }) => void,
-  ): void;
+  addEventListener(type: "message", listener: (event: { data: BrowserWindowsProtocolMessage }) => void): void;
+  removeEventListener(type: "message", listener: (event: { data: BrowserWindowsProtocolMessage }) => void): void;
   start?(): void;
 }
 
@@ -64,10 +52,7 @@ export class BrowserWindowsSharedWorkerBroker {
     cleanupDisconnectedParticipant(this.context, participantId);
   }
 
-  private handleMessage(
-    sourcePort: BrowserWindowsMessagePortLike,
-    message: BrowserWindowsProtocolMessage,
-  ): void {
+  private handleMessage(sourcePort: BrowserWindowsMessagePortLike, message: BrowserWindowsProtocolMessage): void {
     if (!message?.sourceId) {
       return;
     }

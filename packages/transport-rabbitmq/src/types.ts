@@ -1,9 +1,6 @@
 import type { CompiledRoute, ScompPriorityDecision } from "@scomp/core";
 import { resolveScompPriority } from "@scomp/core";
-import type {
-  ScompTransportMessageMeta,
-  ScompTransportRequestEnvelope,
-} from "@scomp/types";
+import type { ScompTransportMessageMeta, ScompTransportRequestEnvelope } from "@scomp/types";
 
 export const SIGNAL_EXCHANGE = "scomp.signals";
 
@@ -88,9 +85,7 @@ export interface RabbitMQTransportConfig {
   prefetch?: number;
   serviceName?: string;
   serializer?: import("@scomp/types").ScompSerializer;
-  meta?:
-    | ScompTransportMessageMeta
-    | (() => ScompTransportMessageMeta | Promise<ScompTransportMessageMeta>);
+  meta?: ScompTransportMessageMeta | (() => ScompTransportMessageMeta | Promise<ScompTransportMessageMeta>);
   retry?: RabbitMQTransportRetryConfig;
   security?: RabbitMQTransportSecurityConfig;
   performance?: RabbitMQTransportPerformanceConfig;
@@ -121,9 +116,7 @@ export function buildPriorityDecisionEvent(
   const decision = resolveScompPriority({
     route,
     operation,
-    meta: meta as
-      | (ScompTransportMessageMeta & Record<string, unknown>)
-      | undefined,
+    meta: meta as (ScompTransportMessageMeta & Record<string, unknown>) | undefined,
   });
   return {
     type: "priority_decision",

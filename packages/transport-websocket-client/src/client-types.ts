@@ -1,7 +1,4 @@
-import type {
-  ScompFeedChunkEnvelope,
-  ScompTransportMessageMeta,
-} from "@scomp/types";
+import type { ScompFeedChunkEnvelope, ScompTransportMessageMeta } from "@scomp/types";
 import type { ISocketAdapter, SocketAdapterFactory } from "@scomp/transport-websocket-shared";
 
 // ---------------------------------------------------------------------------
@@ -17,9 +14,7 @@ export class SocketDisconnectedError extends Error {
 
 export class RequestTimeoutError extends Error {
   constructor(route: string, timeoutMs: number) {
-    super(
-      `WebSocket request timed out after ${timeoutMs}ms for route: ${route}`,
-    );
+    super(`WebSocket request timed out after ${timeoutMs}ms for route: ${route}`);
     this.name = "RequestTimeoutError";
   }
 }
@@ -88,9 +83,7 @@ export interface WebSocketReconnectConfig {
 export interface WebSocketClientTransportConfig {
   url: string;
   protocols?: string | string[];
-  meta?:
-    | ScompTransportMessageMeta
-    | (() => ScompTransportMessageMeta | Promise<ScompTransportMessageMeta>);
+  meta?: ScompTransportMessageMeta | (() => ScompTransportMessageMeta | Promise<ScompTransportMessageMeta>);
   socketAdapter: SocketAdapterFactory;
   requestTimeoutMs?: number;
   connectionTimeoutMs?: number;
@@ -110,18 +103,11 @@ function noop(): void {}
 export function toDisconnectError(error: unknown): Error {
   if (error instanceof Error) return error;
 
-  const message =
-    typeof error === "string" && error.length > 0
-      ? error
-      : "WebSocket connection closed.";
+  const message = typeof error === "string" && error.length > 0 ? error : "WebSocket connection closed.";
   return new SocketDisconnectedError(message);
 }
 
-export function enqueueFeedChunk(
-  feed: FeedState,
-  message: ScompFeedChunkEnvelope,
-  bufferLimit = 1_024,
-): void {
+export function enqueueFeedChunk(feed: FeedState, message: ScompFeedChunkEnvelope, bufferLimit = 1_024): void {
   if (message.type === "next" && feed.queue.length >= bufferLimit) {
     feed.closed = true;
     const error = new FeedBackpressureError(
@@ -216,7 +202,11 @@ export function createSocketConnection(
     const adapter = config.socketAdapter(config.url, config.protocols);
     const timer = setTimeout(() => {
       adapter.removeAllHandlers();
-      try { adapter.close(); } catch { /* ignore */ }
+      try {
+        adapter.close();
+      } catch {
+        /* ignore */
+      }
       reject(new ConnectionTimeoutError(timeoutMs));
     }, timeoutMs);
 

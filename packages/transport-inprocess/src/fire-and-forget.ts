@@ -1,11 +1,11 @@
-import type { AnyServiceDefinition, FireAndForgetErrorHandler } from './types';
-import { invokeServiceMethod } from './service-invoker';
+import type { AnyServiceDefinition, FireAndForgetErrorHandler } from "./types";
+import { invokeServiceMethod } from "./service-invoker";
 
 function reportFireAndForgetError(
   error: unknown,
   methodName: string,
   args: ReadonlyArray<unknown>,
-  onError?: FireAndForgetErrorHandler
+  onError?: FireAndForgetErrorHandler,
 ): void {
   if (onError) {
     onError(error, methodName, args);
@@ -21,7 +21,7 @@ export function executeFireAndForget(
   service: AnyServiceDefinition,
   methodName: string,
   args: ReadonlyArray<unknown>,
-  onError?: FireAndForgetErrorHandler
+  onError?: FireAndForgetErrorHandler,
 ): void {
   try {
     const result = invokeServiceMethod(service, methodName, args);

@@ -23,11 +23,5 @@
     { "path": "../../packages/transport-websocket-client" },
     { "path": "../../packages/transport-websocket-server" }
   ],
-  "include": [
-    "run.ts",
-    "run-browser.ts",
-    "backend/**/*",
-    "frontend/**/*",
-    "shared/**/*"
-  ]
+  "include": ["run.ts", "run-browser.ts", "backend/**/*", "frontend/**/*", "shared/**/*"]
 }

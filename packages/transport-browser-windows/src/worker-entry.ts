@@ -1,7 +1,4 @@
-import {
-  BrowserWindowsSharedWorkerBroker,
-  type BrowserWindowsMessagePortLike,
-} from "./shared-worker-broker";
+import { BrowserWindowsSharedWorkerBroker, type BrowserWindowsMessagePortLike } from "./shared-worker-broker";
 
 const broker = new BrowserWindowsSharedWorkerBroker();
 

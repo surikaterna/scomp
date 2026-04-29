@@ -1,11 +1,6 @@
-import type {
-  ScompClientInvokeOptions,
-  ScompTransportMessageMeta,
-} from "@scomp/types";
+import type { ScompClientInvokeOptions, ScompTransportMessageMeta } from "@scomp/types";
 
-export function toPriorityMeta(
-  options?: ScompClientInvokeOptions,
-): ScompTransportMessageMeta | undefined {
+export function toPriorityMeta(options?: ScompClientInvokeOptions): ScompTransportMessageMeta | undefined {
   if (!options) {
     return undefined;
   }

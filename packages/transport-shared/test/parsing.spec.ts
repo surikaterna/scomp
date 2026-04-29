@@ -20,10 +20,7 @@ describe("safeJsonParse", () => {
   it("returns ok result for JSON arrays", () => {
     const result = safeJsonParse("[1,2,3]");
     assert.equal(result.ok, true);
-    assert.deepEqual(
-      (result as Extract<JsonParseResult, { ok: true }>).value,
-      [1, 2, 3],
-    );
+    assert.deepEqual((result as Extract<JsonParseResult, { ok: true }>).value, [1, 2, 3]);
   });
 
   it("returns error result for invalid JSON", () => {

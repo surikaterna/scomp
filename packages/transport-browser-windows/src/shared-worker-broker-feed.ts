@@ -1,7 +1,4 @@
-import type {
-  BrowserWindowsFeedSubscriptionState,
-  BrowserWindowsFeedSubscriptionKey,
-} from "./broker-state";
+import type { BrowserWindowsFeedSubscriptionState, BrowserWindowsFeedSubscriptionKey } from "./broker-state";
 import { createFeedKey, type BrokerContext } from "./shared-worker-broker-context";
 import { withBrokerSystemMeta } from "./shared-worker-broker-meta";
 

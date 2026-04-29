@@ -1,8 +1,4 @@
-import type {
-  ScompFeedChunkType,
-  ScompTransportMessageMeta,
-  ScompTransportOperation,
-} from "@scomp/types";
+import type { ScompFeedChunkType, ScompTransportMessageMeta, ScompTransportOperation } from "@scomp/types";
 import type {
   BrowserWindowsCanonicalPayloadHash,
   BrowserWindowsParticipantId,

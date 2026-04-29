@@ -6,8 +6,7 @@ export function registerRoutes(
   participantId: BrowserWindowsParticipantId,
   routes: Array<string>,
 ): void {
-  const participantRoutes =
-    context.routesByParticipant.get(participantId) ?? new Set<string>();
+  const participantRoutes = context.routesByParticipant.get(participantId) ?? new Set<string>();
   context.routesByParticipant.set(participantId, participantRoutes);
 
   for (const route of routes) {
@@ -42,10 +41,7 @@ export function unregisterRoutes(
   }
 }
 
-export function unregisterAllRoutes(
-  context: BrokerContext,
-  participantId: BrowserWindowsParticipantId,
-): void {
+export function unregisterAllRoutes(context: BrokerContext, participantId: BrowserWindowsParticipantId): void {
   const participantRoutes = context.routesByParticipant.get(participantId);
   if (!participantRoutes) {
     return;
@@ -65,10 +61,7 @@ export function unregisterAllRoutes(
   }
 }
 
-export function pickHost(
-  context: BrokerContext,
-  route: string,
-): BrowserWindowsParticipantId | undefined {
+export function pickHost(context: BrokerContext, route: string): BrowserWindowsParticipantId | undefined {
   const hosts = context.state.routeHosts.get(route);
   if (!hosts || hosts.size === 0) {
     return undefined;

@@ -11,9 +11,7 @@ export interface ContractToken<C extends object> {
 /**
  * Creates a contract token that binds a contract type to a service name.
  */
-export function createContractToken<C extends object>(
-  name: string,
-): ContractToken<C> {
+export function createContractToken<C extends object>(name: string): ContractToken<C> {
   if (!name || typeof name !== "string") {
     throw new Error("Contract token name must be a non-empty string.");
   }

@@ -6,10 +6,7 @@ import type {
   BrowserWindowsHostRequestMessage,
   BrowserWindowsHostSignalMessage,
 } from "./protocol";
-import type {
-  HostedFeedState,
-  RuntimeRoute,
-} from "./transport-browser-windows-state";
+import type { HostedFeedState, RuntimeRoute } from "./transport-browser-windows-state";
 import { routeOperation } from "./transport-browser-windows-state";
 import { toAsyncIterable, toError } from "./transport-browser-windows-runtime";
 
@@ -54,9 +51,7 @@ export async function handleHostRequest(
   }
 
   try {
-    const parsedPayload = route.parser
-      ? route.parser(message.payload)
-      : message.payload;
+    const parsedPayload = route.parser ? route.parser(message.payload) : message.payload;
     const handlerCtx: ScompHandlerContext = {
       route: message.route,
       operation: "request",
@@ -89,19 +84,14 @@ export async function handleHostRequest(
   }
 }
 
-export async function handleHostSignal(
-  context: HostContext,
-  message: BrowserWindowsHostSignalMessage,
-): Promise<void> {
+export async function handleHostSignal(context: HostContext, message: BrowserWindowsHostSignalMessage): Promise<void> {
   const route = context.router[message.route];
   if (!route || routeOperation(route) !== "signal") {
     return;
   }
 
   try {
-    const parsedPayload = route.parser
-      ? route.parser(message.payload)
-      : message.payload;
+    const parsedPayload = route.parser ? route.parser(message.payload) : message.payload;
     const handlerCtx: ScompHandlerContext = {
       route: message.route,
       operation: "signal",
@@ -153,9 +143,7 @@ export async function handleHostFeedStart(
   }
 
   try {
-    const parsedPayload = route.parser
-      ? route.parser(message.payload)
-      : message.payload;
+    const parsedPayload = route.parser ? route.parser(message.payload) : message.payload;
     const handlerCtx: ScompHandlerContext = {
       route: message.route,
       operation: "feed",
@@ -169,8 +157,7 @@ export async function handleHostFeedStart(
       typeof produced === "object" &&
       produced !== null &&
       "unsubscribe" in produced &&
-      typeof (produced as { unsubscribe?: () => void }).unsubscribe ===
-        "function"
+      typeof (produced as { unsubscribe?: () => void }).unsubscribe === "function"
     ) {
       hostedState.unsubscribe = () => {
         (produced as { unsubscribe: () => void }).unsubscribe();

@@ -7,22 +7,14 @@
  */
 import { createScompService, createScompFragment } from "../src/builder";
 import { createContractToken } from "../src/contract-token";
-import type {
-  DiagnoseContract,
-  IsValidContract,
-  ValidContract,
-} from "../src/builder-types";
+import type { DiagnoseContract, IsValidContract, ValidContract } from "../src/builder-types";
 
 // ---------------------------------------------------------------------------
 // Helpers for type-level assertions
 // ---------------------------------------------------------------------------
 
 type Expect<T extends true> = T;
-type Equal<X, Y> = (<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y
-  ? 1
-  : 2
-  ? true
-  : false;
+type Equal<X, Y> = (<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y ? 1 : 2 ? true : false;
 
 // ---------------------------------------------------------------------------
 // 1. Valid contracts compile without errors
@@ -88,8 +80,8 @@ createScompService(mixedToken).implement({
 // 2. Empty contracts are valid (edge case)
 // ---------------------------------------------------------------------------
 
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
-interface EmptyContract {}
+// biome-ignore lint/complexity/noBannedTypes: intentional test of empty type behavior
+type EmptyContract = {};
 
 type _EmptyIsValid = Expect<Equal<IsValidContract<EmptyContract>, true>>;
 
@@ -137,9 +129,7 @@ type _NonMethodMapped = Expect<
   >
 >;
 
-type _NonMethodIsInvalid = Expect<
-  Equal<IsValidContract<NonMethodContract>, false>
->;
+type _NonMethodIsInvalid = Expect<Equal<IsValidContract<NonMethodContract>, false>>;
 
 // @ts-expect-error - non-method property (version: string) is not assignable to (...args) => unknown
 createScompService(createContractToken<NonMethodContract>("non-method"));
@@ -152,9 +142,7 @@ interface UnionReturnContract {
   getUser(input: { id: number }): Promise<{ id: number }> | string;
 }
 
-type _UnionIsInvalid = Expect<
-  Equal<IsValidContract<UnionReturnContract>, false>
->;
+type _UnionIsInvalid = Expect<Equal<IsValidContract<UnionReturnContract>, false>>;
 
 // @ts-expect-error - union return type is not a supported contract method
 createScompService(createContractToken<UnionReturnContract>("union"));
@@ -167,12 +155,9 @@ interface ControlledFeedContract {
   liveData(input: { key: string }): AsyncIterable<{ value: number }>;
 }
 
-type _FeedIsValid = Expect<
-  Equal<IsValidContract<ControlledFeedContract>, true>
->;
+type _FeedIsValid = Expect<Equal<IsValidContract<ControlledFeedContract>, true>>;
 
-const controlledFeedToken =
-  createContractToken<ControlledFeedContract>("controlled");
+const controlledFeedToken = createContractToken<ControlledFeedContract>("controlled");
 createScompService(controlledFeedToken).implement({
   feeds: {
     liveData: async function* () {

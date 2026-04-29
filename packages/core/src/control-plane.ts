@@ -7,24 +7,24 @@ import {
   type ScompControlPlaneResolveRequest,
   type ScompControlPlaneResolveResponse,
   type ScompControlPlaneRoute,
-} from '@scomp/types';
-import type { CompiledRoute, CompiledRouter } from './builder';
+} from "@scomp/types";
+import type { CompiledRoute, CompiledRouter } from "./builder";
 
 const CONTROL_PLANE_ROUTE_NAMES = {
-  discover: '__scomp.discover',
-  resolve: '__scomp.resolve',
-  health: '__scomp.health'
-} as const satisfies Record<'discover' | 'resolve' | 'health', ScompControlPlaneRoute>;
+  discover: "__scomp.discover",
+  resolve: "__scomp.resolve",
+  health: "__scomp.health",
+} as const satisfies Record<"discover" | "resolve" | "health", ScompControlPlaneRoute>;
 
 export interface ScompControlPlaneRouteHandlers {
   discover: (
-    request: ScompControlPlaneDiscoverRequest
+    request: ScompControlPlaneDiscoverRequest,
   ) => ScompControlPlaneDiscoverResponse | Promise<ScompControlPlaneDiscoverResponse>;
   resolve: (
-    request: ScompControlPlaneResolveRequest
+    request: ScompControlPlaneResolveRequest,
   ) => ScompControlPlaneResolveResponse | Promise<ScompControlPlaneResolveResponse>;
   health: (
-    request: ScompControlPlaneHealthRequest
+    request: ScompControlPlaneHealthRequest,
   ) => ScompControlPlaneHealthResponse | Promise<ScompControlPlaneHealthResponse>;
 }
 
@@ -42,7 +42,7 @@ export interface NodeLocalResolveHandlerOptions {
 
 export interface NodeLocalHealthCheckResult {
   name: string;
-  status: 'ok' | 'degraded' | 'down';
+  status: "ok" | "degraded" | "down";
   message?: string;
 }
 
@@ -54,13 +54,15 @@ export interface NodeLocalHealthHandlerContext {
 export interface NodeLocalHealthHandlerOptions {
   nodeId: string;
   now?: () => Date;
-  checks?: Array<(context: NodeLocalHealthHandlerContext) => NodeLocalHealthCheckResult | Promise<NodeLocalHealthCheckResult>>;
+  checks?: Array<
+    (context: NodeLocalHealthHandlerContext) => NodeLocalHealthCheckResult | Promise<NodeLocalHealthCheckResult>
+  >;
 }
 
 export interface ControlPlaneRouteSecurityAdvice {
   route: ScompControlPlaneRoute;
-  defaultExposure: 'internal-only';
-  requiredAuthorization: 'explicit-policy';
+  defaultExposure: "internal-only";
+  requiredAuthorization: "explicit-policy";
   recommendedScopes: Array<string>;
   notes: string;
 }
@@ -75,8 +77,8 @@ function parseControlPlanePayload<T extends object>(payload: unknown): T {
     return {} as T;
   }
 
-  if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) {
-    throw new Error('Control-plane request payload must be an object.');
+  if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new Error("Control-plane request payload must be an object.");
   }
 
   return payload as T;
@@ -89,9 +91,9 @@ function toRequestRoute(
 ): CompiledRoute {
   return {
     route,
-    kind: 'request',
+    kind: "request",
     parser,
-    handler
+    handler,
   };
 }
 
@@ -101,14 +103,11 @@ function isReservedControlPlaneRoute(routeName: string): boolean {
 }
 
 function toServiceName(routeName: string): string {
-  const [serviceName] = routeName.split('.');
-  return serviceName || 'default';
+  const [serviceName] = routeName.split(".");
+  return serviceName || "default";
 }
 
-function buildServiceInventory(
-  router: CompiledRouter,
-  includeReservedRoutes: boolean,
-): Array<ServiceInventory> {
+function buildServiceInventory(router: CompiledRouter, includeReservedRoutes: boolean): Array<ServiceInventory> {
   const services = new Map<string, Array<string>>();
 
   for (const route of Object.values(router)) {
@@ -127,7 +126,7 @@ function buildServiceInventory(
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([name, routes]) => ({
       name,
-      routes: [...new Set(routes)].sort((left, right) => left.localeCompare(right))
+      routes: [...new Set(routes)].sort((left, right) => left.localeCompare(right)),
     }));
 }
 
@@ -135,27 +134,20 @@ export function createNodeLocalDiscoverHandler(
   appRouter: CompiledRouter,
   options: NodeLocalDiscoverHandlerOptions,
 ): (request: ScompControlPlaneDiscoverRequest) => ScompControlPlaneDiscoverResponse {
-  const {
-    nodeId,
-    ttlMs = 1000,
-    now = () => new Date(),
-    includeReservedRoutes = false
-  } = options;
+  const { nodeId, ttlMs = 1000, now = () => new Date(), includeReservedRoutes = false } = options;
 
   return (request) => {
     const servicePrefix = request.servicePrefix?.trim();
     const includeRoutes = request.includeRoutes === true;
     const services = buildServiceInventory(appRouter, includeReservedRoutes)
       .filter((service) => !servicePrefix || service.name.startsWith(servicePrefix))
-      .map((service) => includeRoutes
-        ? { name: service.name, routes: service.routes }
-        : { name: service.name });
+      .map((service) => (includeRoutes ? { name: service.name, routes: service.routes } : { name: service.name }));
 
     return {
       services,
       node: { id: nodeId },
       generatedAt: now().toISOString(),
-      ttlMs
+      ttlMs,
     };
   };
 }
@@ -176,24 +168,22 @@ function hasRoute(router: CompiledRouter, routeName: string, includeReservedRout
 function buildCandidateChannels(requestedChannel?: string): Array<string> {
   const normalizedRequestedChannel = requestedChannel?.trim();
   if (!normalizedRequestedChannel) {
-    return ['current-channel'];
+    return ["current-channel"];
   }
 
-  return [normalizedRequestedChannel, 'current-channel'];
+  return [normalizedRequestedChannel, "current-channel"];
 }
 
-function aggregateHealthStatus(
-  checks: Array<NodeLocalHealthCheckResult>,
-): 'ok' | 'degraded' | 'down' {
-  if (checks.some((check) => check.status === 'down')) {
-    return 'down';
+function aggregateHealthStatus(checks: Array<NodeLocalHealthCheckResult>): "ok" | "degraded" | "down" {
+  if (checks.some((check) => check.status === "down")) {
+    return "down";
   }
 
-  if (checks.some((check) => check.status === 'degraded')) {
-    return 'degraded';
+  if (checks.some((check) => check.status === "degraded")) {
+    return "degraded";
   }
 
-  return 'ok';
+  return "ok";
 }
 
 function isCheckRelevantForService(checkName: string, serviceName?: string): boolean {
@@ -208,12 +198,11 @@ function createDefaultHealthChecks(router: CompiledRouter): Array<NodeLocalHealt
   const routeCount = Object.keys(router).length;
   return [
     {
-      name: 'node.router',
-      status: routeCount > 0 ? 'ok' : 'degraded',
-      message: routeCount > 0
-        ? `Compiled routes available: ${routeCount}`
-        : 'No compiled routes were found on this node.'
-    }
+      name: "node.router",
+      status: routeCount > 0 ? "ok" : "degraded",
+      message:
+        routeCount > 0 ? `Compiled routes available: ${routeCount}` : "No compiled routes were found on this node.",
+    },
   ];
 }
 
@@ -221,24 +210,22 @@ export function createNodeLocalHealthHandler(
   appRouter: CompiledRouter,
   options: NodeLocalHealthHandlerOptions,
 ): (request: ScompControlPlaneHealthRequest) => Promise<ScompControlPlaneHealthResponse> {
-  const {
-    nodeId,
-    now = () => new Date(),
-    checks = []
-  } = options;
+  const { nodeId, now = () => new Date(), checks = [] } = options;
 
   return async (request) => {
-    const mode = request.mode ?? 'shallow';
+    const mode = request.mode ?? "shallow";
     const shouldIncludeChecks = request.verbose === true;
     const baseChecks = createDefaultHealthChecks(appRouter);
 
     let executedChecks = baseChecks;
-    if (mode === 'deep' && checks.length > 0) {
+    if (mode === "deep" && checks.length > 0) {
       const customChecks = await Promise.all(
-        checks.map((runCheck) => runCheck({
-          router: appRouter,
-          request
-        }))
+        checks.map((runCheck) =>
+          runCheck({
+            router: appRouter,
+            request,
+          }),
+        ),
       );
       executedChecks = [...baseChecks, ...customChecks];
     }
@@ -250,7 +237,7 @@ export function createNodeLocalHealthHandler(
       status,
       checks: shouldIncludeChecks ? filteredChecks : undefined,
       node: { id: nodeId },
-      timestamp: now().toISOString()
+      timestamp: now().toISOString(),
     };
   };
 }
@@ -259,22 +246,19 @@ export function createNodeLocalResolveHandler(
   appRouter: CompiledRouter,
   options: NodeLocalResolveHandlerOptions = {},
 ): (request: ScompControlPlaneResolveRequest) => ScompControlPlaneResolveResponse {
-  const {
-    defaultTransport,
-    includeReservedRoutes = false
-  } = options;
+  const { defaultTransport, includeReservedRoutes = false } = options;
 
   return (request) => {
     const routeName = request.route?.trim();
     if (!routeName) {
-      throw new Error('Resolve request requires a route string.');
+      throw new Error("Resolve request requires a route string.");
     }
 
     if (!hasRoute(appRouter, routeName, includeReservedRoutes)) {
       return {
         resolved: false,
         fallbackUsed: false,
-        candidates: []
+        candidates: [],
       };
     }
 
@@ -282,25 +266,23 @@ export function createNodeLocalResolveHandler(
     const candidates = channelCandidates.map((channelName) => ({
       route: routeName,
       channel: channelName,
-      transport: defaultTransport
+      transport: defaultTransport,
     }));
 
     const preferred = candidates[0];
-    const fallback = candidates.find((candidate) => candidate.channel === 'current-channel') ?? preferred;
-    const fallbackUsed = Boolean(request.channel?.trim()) && fallback.channel === 'current-channel';
+    const fallback = candidates.find((candidate) => candidate.channel === "current-channel") ?? preferred;
+    const fallbackUsed = Boolean(request.channel?.trim()) && fallback.channel === "current-channel";
 
     return {
       resolved: true,
       fallbackUsed,
       endpoint: fallbackUsed ? fallback : preferred,
-      candidates
+      candidates,
     };
   };
 }
 
-export function createControlPlaneRouter(
-  handlers: ScompControlPlaneRouteHandlers,
-): CompiledRouter {
+export function createControlPlaneRouter(handlers: ScompControlPlaneRouteHandlers): CompiledRouter {
   return {
     [CONTROL_PLANE_ROUTE_NAMES.discover]: toRequestRoute(
       CONTROL_PLANE_ROUTE_NAMES.discover,
@@ -316,7 +298,7 @@ export function createControlPlaneRouter(
       CONTROL_PLANE_ROUTE_NAMES.health,
       (payload) => parseControlPlanePayload<ScompControlPlaneHealthRequest>(payload),
       (payload) => handlers.health(payload as ScompControlPlaneHealthRequest),
-    )
+    ),
   };
 }
 
@@ -336,7 +318,7 @@ export function composeRouterWithControlPlaneRoutes(
 
   const controlPlaneRouter = createControlPlaneRouter(handlers);
   const composed: CompiledRouter = {
-    ...appRouter
+    ...appRouter,
   };
 
   for (const [routeName, route] of Object.entries(controlPlaneRouter)) {
@@ -354,28 +336,26 @@ export function getControlPlaneRouteSecurityAdvice(): Array<ControlPlaneRouteSec
   return [
     {
       route: CONTROL_PLANE_ROUTE_NAMES.discover,
-      defaultExposure: 'internal-only',
-      requiredAuthorization: 'explicit-policy',
-      recommendedScopes: ['scomp:control:discover'],
-      notes: 'Discovery should be filtered to avoid leaking sensitive service topology.'
+      defaultExposure: "internal-only",
+      requiredAuthorization: "explicit-policy",
+      recommendedScopes: ["scomp:control:discover"],
+      notes: "Discovery should be filtered to avoid leaking sensitive service topology.",
     },
     {
       route: CONTROL_PLANE_ROUTE_NAMES.resolve,
-      defaultExposure: 'internal-only',
-      requiredAuthorization: 'explicit-policy',
-      recommendedScopes: ['scomp:control:resolve'],
-      notes: 'Resolve responses should only include endpoint metadata required by the caller.'
+      defaultExposure: "internal-only",
+      requiredAuthorization: "explicit-policy",
+      recommendedScopes: ["scomp:control:resolve"],
+      notes: "Resolve responses should only include endpoint metadata required by the caller.",
     },
     {
       route: CONTROL_PLANE_ROUTE_NAMES.health,
-      defaultExposure: 'internal-only',
-      requiredAuthorization: 'explicit-policy',
-      recommendedScopes: ['scomp:control:health'],
-      notes: 'Default health output should remain minimal unless verbose checks are authorized.'
-    }
+      defaultExposure: "internal-only",
+      requiredAuthorization: "explicit-policy",
+      recommendedScopes: ["scomp:control:health"],
+      notes: "Default health output should remain minimal unless verbose checks are authorized.",
+    },
   ];
 }
 
-export {
-  CONTROL_PLANE_ROUTE_NAMES as SCOMP_CONTROL_PLANE_ROUTE_NAMES
-};
+export { CONTROL_PLANE_ROUTE_NAMES as SCOMP_CONTROL_PLANE_ROUTE_NAMES };

@@ -1,8 +1,4 @@
-import {
-  createFeedHash,
-  createRuntimeNeutralFeedHasher,
-  type FeedHashOptions,
-} from "../src/feed-hash";
+import { createFeedHash, createRuntimeNeutralFeedHasher, type FeedHashOptions } from "../src/feed-hash";
 
 describe("createFeedHash", () => {
   // ── Determinism ──────────────────────────────────────────────────────
@@ -82,9 +78,13 @@ describe("createFeedHash", () => {
 
   it("custom stringify changes the resulting hash", () => {
     const defaultHash = createFeedHash("route", { a: 1 });
-    const customHash = createFeedHash("route", { a: 1 }, {
-      stringify: () => "always-the-same",
-    });
+    const customHash = createFeedHash(
+      "route",
+      { a: 1 },
+      {
+        stringify: () => "always-the-same",
+      },
+    );
     expect(defaultHash).not.toBe(customHash);
   });
 
@@ -97,11 +97,15 @@ describe("createFeedHash", () => {
   });
 
   it("normalizes short custom hash output to 32 chars", () => {
-    const result = createFeedHash("route", {}, {
-      hash: () => "abc",
-    });
+    const result = createFeedHash(
+      "route",
+      {},
+      {
+        hash: () => "abc",
+      },
+    );
     expect(result).toHaveLength(32);
-    expect(result).toBe("abc" + "0".repeat(29));
+    expect(result).toBe(`abc${"0".repeat(29)}`);
   });
 
   it("truncates long custom hash output to 32 chars", () => {

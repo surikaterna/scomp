@@ -1,9 +1,5 @@
 import { randomUUID } from "node:crypto";
-import {
-  type ITransport,
-  type ScompClientInvokeOptions,
-  ScompFrameworkMethods,
-} from "@scomp/core";
+import { type ITransport, type ScompClientInvokeOptions, ScompFrameworkMethods } from "@scomp/core";
 import type {
   ScompFeedChunkEnvelope,
   ScompTransportMessageMeta,
@@ -42,10 +38,7 @@ export class WebSocketClientTransport implements ITransport {
   private reconnectAbort?: AbortController;
   private readonly pendingRequests = new Map<string, PendingRequest>();
   private readonly feeds = new Map<string, FeedState>();
-  private readonly pendingFeedChunks = new Map<
-    string,
-    Array<ScompFeedChunkEnvelope>
-  >();
+  private readonly pendingFeedChunks = new Map<string, Array<ScompFeedChunkEnvelope>>();
 
   constructor(config: WebSocketClientTransportConfig) {
     this.config = config;
@@ -58,9 +51,7 @@ export class WebSocketClientTransport implements ITransport {
   async close(): Promise<void> {
     this.reconnectAbort?.abort();
     const socket = this.socket;
-    this.onDisconnect(
-      new SocketDisconnectedError("WebSocket transport closed."),
-    );
+    this.onDisconnect(new SocketDisconnectedError("WebSocket transport closed."));
 
     if (!socket) return;
     if (socket.readyState >= 2) return;
@@ -71,19 +62,11 @@ export class WebSocketClientTransport implements ITransport {
     }
   }
 
-  async request(
-    route: string,
-    payload: unknown,
-    options?: ScompClientInvokeOptions,
-  ): Promise<unknown> {
+  async request(route: string, payload: unknown, options?: ScompClientInvokeOptions): Promise<unknown> {
     return this.sendRpc(route, "request", payload, options);
   }
 
-  async signal(
-    route: string,
-    payload: unknown,
-    options?: ScompClientInvokeOptions,
-  ): Promise<void> {
+  async signal(route: string, payload: unknown, options?: ScompClientInvokeOptions): Promise<void> {
     const socket = await this.getSocket();
     const meta = await this.composeOutboundMeta(options);
 
@@ -99,23 +82,15 @@ export class WebSocketClientTransport implements ITransport {
     socket.send(JSON.stringify(envelope));
   }
 
-  feed(
-    route: string,
-    payload: unknown,
-    options?: ScompClientInvokeOptions,
-  ): AsyncIterable<unknown> {
+  feed(route: string, payload: unknown, options?: ScompClientInvokeOptions): AsyncIterable<unknown> {
     const self = this;
 
     return {
       async *[Symbol.asyncIterator]() {
         const handshake = await self.sendRpc(route, "feed", payload, options);
-        const feedHash = String(
-          (handshake as Record<string, unknown> | null | undefined)?.feed ?? "",
-        );
+        const feedHash = String((handshake as Record<string, unknown> | null | undefined)?.feed ?? "");
         if (!feedHash) {
-          throw new Error(
-            "Feed start response did not include a feed identifier.",
-          );
+          throw new Error("Feed start response did not include a feed identifier.");
         }
 
         const state: FeedState = {
@@ -128,8 +103,7 @@ export class WebSocketClientTransport implements ITransport {
 
         if (!self.socket || !self.isOpen(self.socket)) {
           state.closed = true;
-          const err =
-            self.lastDisconnectError ?? new SocketDisconnectedError();
+          const err = self.lastDisconnectError ?? new SocketDisconnectedError();
           const rejection = Promise.reject(err);
           rejection.catch(() => {});
           state.queue.push(rejection);
@@ -162,6 +136,7 @@ export class WebSocketClientTransport implements ITransport {
           self.feeds.delete(feedHash);
           self.pendingFeedChunks.delete(feedHash);
           const activeSocket = self.socket;
+          // biome-ignore lint/correctness/noUnsafeFinally: intentional early return when socket unavailable
           if (!activeSocket || !self.isOpen(activeSocket)) return;
           try {
             activeSocket.send(
@@ -174,6 +149,7 @@ export class WebSocketClientTransport implements ITransport {
               }),
             );
           } catch (err) {
+            // biome-ignore lint/correctness/noUnsafeFinally: intentional rethrow for unexpected errors
             if (!(err instanceof SocketDisconnectedError)) throw err;
           }
         }
@@ -183,7 +159,9 @@ export class WebSocketClientTransport implements ITransport {
 
   // Private — socket lifecycle
 
-  private isOpen(s: ISocketAdapter): boolean { return s.readyState === SOCKET_OPEN; }
+  private isOpen(s: ISocketAdapter): boolean {
+    return s.readyState === SOCKET_OPEN;
+  }
 
   private async getSocket(): Promise<ISocketAdapter> {
     if (this.socket && this.isOpen(this.socket)) return this.socket;
@@ -216,9 +194,7 @@ export class WebSocketClientTransport implements ITransport {
       if (!parsed.ok) return;
       this.handleIncoming(parsed.value as TransportMessage);
     });
-    adapter.onClose(() =>
-      this.onDisconnect(new SocketDisconnectedError()),
-    );
+    adapter.onClose(() => this.onDisconnect(new SocketDisconnectedError()));
     adapter.onError((error) => this.onDisconnect(error));
   }
 
@@ -234,11 +210,7 @@ export class WebSocketClientTransport implements ITransport {
         this.pendingFeedChunks.set(feedId, pending);
         return;
       }
-      enqueueFeedChunk(
-        feed,
-        message,
-        this.config.feedBufferHighWaterMark ?? 1_024,
-      );
+      enqueueFeedChunk(feed, message, this.config.feedBufferHighWaterMark ?? 1_024);
       return;
     }
 
@@ -248,11 +220,7 @@ export class WebSocketClientTransport implements ITransport {
     if (!pending) return;
     this.pendingRequests.delete(id);
 
-    if (
-      "error" in message &&
-      typeof message.error === "string" &&
-      message.error.length > 0
-    ) {
+    if ("error" in message && typeof message.error === "string" && message.error.length > 0) {
       pending.reject(new Error(message.error));
       return;
     }
@@ -265,22 +233,13 @@ export class WebSocketClientTransport implements ITransport {
 
   private onDisconnect(error: unknown): void {
     this.socket = undefined;
-    const { disconnectError } = handleDisconnect(
-      this.pendingRequests,
-      this.feeds,
-      this.pendingFeedChunks,
-      error,
-    );
+    const { disconnectError } = handleDisconnect(this.pendingRequests, this.feeds, this.pendingFeedChunks, error);
     this.lastDisconnectError = disconnectError;
     this.emitEvent({
       type: "connection_closed",
       reason: disconnectError.message,
     });
-    if (
-      this.config.reconnect?.enabled &&
-      !this.reconnectAbort?.signal.aborted &&
-      !this.openingPromise
-    ) {
+    if (this.config.reconnect?.enabled && !this.reconnectAbort?.signal.aborted && !this.openingPromise) {
       this.reconnectAbort = new AbortController();
       const loop = runReconnectLoop({
         cfg: this.config.reconnect,
@@ -296,9 +255,11 @@ export class WebSocketClientTransport implements ITransport {
         if (!s) throw new Error("Reconnect failed");
         return s;
       });
-      void this.openingPromise.catch(() => {}).finally(() => {
-        this.openingPromise = undefined;
-      });
+      void this.openingPromise
+        .catch(() => {})
+        .finally(() => {
+          this.openingPromise = undefined;
+        });
     }
   }
 

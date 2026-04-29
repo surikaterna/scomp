@@ -8,10 +8,7 @@ import { runMiddlewareChain, getMiddlewareFns } from "./middleware";
  *
  * registerRoutes() and close() pass through to the inner transport.
  */
-export function createMiddlewareTransport(
-  inner: ITransport,
-  middlewares: ScompMiddleware[],
-): ITransport {
+export function createMiddlewareTransport(inner: ITransport, middlewares: ScompMiddleware[]): ITransport {
   const outboundFns = getMiddlewareFns(middlewares, "outbound");
 
   if (outboundFns.length === 0) {
@@ -37,8 +34,9 @@ export function createMiddlewareTransport(
       };
 
       return runMiddlewareChain(outboundFns, ctx, async (finalCtx) => {
-        const finalOptions: ScompClientInvokeOptions | undefined =
-          finalCtx.meta ? { ...options, meta: finalCtx.meta } : options;
+        const finalOptions: ScompClientInvokeOptions | undefined = finalCtx.meta
+          ? { ...options, meta: finalCtx.meta }
+          : options;
         return inner.request(finalCtx.route, finalCtx.payload, finalOptions);
       });
     },
@@ -53,8 +51,9 @@ export function createMiddlewareTransport(
       };
 
       await runMiddlewareChain(outboundFns, ctx, async (finalCtx) => {
-        const finalOptions: ScompClientInvokeOptions | undefined =
-          finalCtx.meta ? { ...options, meta: finalCtx.meta } : options;
+        const finalOptions: ScompClientInvokeOptions | undefined = finalCtx.meta
+          ? { ...options, meta: finalCtx.meta }
+          : options;
         await inner.signal(finalCtx.route, finalCtx.payload, finalOptions);
         return undefined;
       });
@@ -71,8 +70,9 @@ export function createMiddlewareTransport(
 
       // Middleware wraps the subscription creation; individual chunks flow unchanged.
       const resultPromise = runMiddlewareChain(outboundFns, ctx, async (finalCtx) => {
-        const finalOptions: ScompClientInvokeOptions | undefined =
-          finalCtx.meta ? { ...options, meta: finalCtx.meta } : options;
+        const finalOptions: ScompClientInvokeOptions | undefined = finalCtx.meta
+          ? { ...options, meta: finalCtx.meta }
+          : options;
         return inner.feed(finalCtx.route, finalCtx.payload, finalOptions);
       });
 

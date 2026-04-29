@@ -19,7 +19,4 @@ export interface ISocketAdapter {
   removeAllHandlers(): void;
 }
 
-export type SocketAdapterFactory = (
-  url: string,
-  protocols?: string | string[],
-) => ISocketAdapter;
+export type SocketAdapterFactory = (url: string, protocols?: string | string[]) => ISocketAdapter;

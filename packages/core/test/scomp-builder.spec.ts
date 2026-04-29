@@ -61,14 +61,15 @@ describe("createScompService contract builder", () => {
     assert.equal(liveRoute.backpressure?.highWaterMark, 8);
     assert.equal(typeof liveRoute.hashKey, "function");
 
-    const getUserResult = await (getUserRoute.handler(
-      getUserRoute.parser?.({ id: "9" }) ?? { id: 0 },
-    ) as Promise<{ id: number; name: string }>);
+    const getUserResult = await (getUserRoute.handler(getUserRoute.parser?.({ id: "9" }) ?? { id: 0 }) as Promise<{
+      id: number;
+      name: string;
+    }>);
     assert.deepEqual(getUserResult, { id: 9, name: "u-9" });
 
-    const liveIterator = (
-      liveRoute.handler({ room: "general" }) as AsyncIterable<{ id: number }>
-    )[Symbol.asyncIterator]();
+    const liveIterator = (liveRoute.handler({ room: "general" }) as AsyncIterable<{ id: number }>)[
+      Symbol.asyncIterator
+    ]();
     const firstChunk = await liveIterator.next();
     assert.deepEqual(firstChunk, { value: { id: 1 }, done: false });
   });
@@ -103,9 +104,7 @@ describe("createScompService contract builder", () => {
           handler: async function* () {
             yield { id: 1 };
           },
-        } as unknown as (input: {
-          room: string;
-        }) => AsyncIterable<{ id: number }>,
+        } as unknown as (input: { room: string }) => AsyncIterable<{ id: number }>,
       },
     });
 
@@ -164,14 +163,15 @@ describe("createScompService contract builder", () => {
     assert.equal(liveRoute.backpressure?.highWaterMark, 8);
     assert.equal(typeof liveRoute.hashKey, "function");
 
-    const getUserResult = await (getUserRoute.handler(
-      getUserRoute.parser?.({ id: "9" }) ?? { id: 0 },
-    ) as Promise<{ id: number; name: string }>);
+    const getUserResult = await (getUserRoute.handler(getUserRoute.parser?.({ id: "9" }) ?? { id: 0 }) as Promise<{
+      id: number;
+      name: string;
+    }>);
     assert.deepEqual(getUserResult, { id: 9, name: "u-9" });
 
-    const liveIterator = (
-      liveRoute.handler({ room: "general" }) as AsyncIterable<{ id: number }>
-    )[Symbol.asyncIterator]();
+    const liveIterator = (liveRoute.handler({ room: "general" }) as AsyncIterable<{ id: number }>)[
+      Symbol.asyncIterator
+    ]();
     const firstChunk = await liveIterator.next();
     assert.deepEqual(firstChunk, { value: { id: 1 }, done: false });
   });
@@ -205,14 +205,8 @@ describe("createScompService contract builder", () => {
     });
 
     assert.equal(service.name, "orders");
-    assert.ok(
-      service.router["orders.placeOrder"],
-      "route uses token.name as prefix",
-    );
-    assert.equal(
-      service.router["orders.placeOrder"].route,
-      "orders.placeOrder",
-    );
+    assert.ok(service.router["orders.placeOrder"], "route uses token.name as prefix");
+    assert.equal(service.router["orders.placeOrder"].route, "orders.placeOrder");
   });
 });
 
@@ -277,17 +271,13 @@ describe("createScompFragment contract builder", () => {
       liveUsers(input: { room: string }): AsyncIterable<{ id: number }>;
     }
 
-    const requestsFragment = createScompFragment<UsersContract>(
-      "users",
-    ).implement({
+    const requestsFragment = createScompFragment<UsersContract>("users").implement({
       requests: {
         getUser: async ({ id }) => ({ id, name: `u-${id}` }),
       },
     });
 
-    const signalsFragment = createScompFragment<UsersContract>(
-      "users",
-    ).implement({
+    const signalsFragment = createScompFragment<UsersContract>("users").implement({
       signals: {
         notifyLogin: async () => {
           return;
@@ -308,17 +298,13 @@ describe("createScompFragment contract builder", () => {
       liveUsers(input: { room: string }): AsyncIterable<{ id: number }>;
     }
 
-    const requestsFragment = createScompFragment<UsersContract>(
-      "users",
-    ).implement({
+    const requestsFragment = createScompFragment<UsersContract>("users").implement({
       requests: {
         getUser: async ({ id }) => ({ id, name: `u-${id}` }),
       },
     });
 
-    const signalsFragment = createScompFragment<UsersContract>(
-      "users",
-    ).implement({
+    const signalsFragment = createScompFragment<UsersContract>("users").implement({
       signals: {
         notifyLogin: async () => {
           return;
@@ -326,24 +312,18 @@ describe("createScompFragment contract builder", () => {
       },
     });
 
-    const feedsFragment = createScompFragment<UsersContract>("users").implement(
-      {
-        feeds: {
-          liveUsers: {
-            strategy: "fanout",
-            handler: async function* () {
-              yield { id: 1 };
-            },
+    const feedsFragment = createScompFragment<UsersContract>("users").implement({
+      feeds: {
+        liveUsers: {
+          strategy: "fanout",
+          handler: async function* () {
+            yield { id: 1 };
           },
         },
       },
-    );
+    });
 
-    const composed = composeScompFragments(
-      requestsFragment,
-      signalsFragment,
-      feedsFragment,
-    );
+    const composed = composeScompFragments(requestsFragment, signalsFragment, feedsFragment);
     const discover = createNodeLocalDiscoverHandler(composed.router, {
       nodeId: "node-1",
     });

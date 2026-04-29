@@ -32,9 +32,7 @@ describe("active mode observability", () => {
     expect(transport.activeMode()).toBe("broadcast-channel");
     expect(snapshot.activeMode).toBe("broadcast-channel");
     expect(snapshot.status).toBe("degraded");
-    expect(snapshot.reasons.some((reason) => reason.code === "shared-worker-unavailable")).toBe(
-      true,
-    );
+    expect(snapshot.reasons.some((reason) => reason.code === "shared-worker-unavailable")).toBe(true);
 
     transport.close();
   });

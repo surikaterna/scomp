@@ -1,8 +1,5 @@
 import amqp, { type ChannelModel } from "amqplib";
-import type {
-  RabbitMQTransportRetryConfig,
-  RabbitMQTransportEvent,
-} from "./types";
+import type { RabbitMQTransportRetryConfig, RabbitMQTransportEvent } from "./types";
 
 export async function connectWithRetry(
   config: RabbitMQTransportRetryConfig & { url: string },
@@ -29,15 +26,10 @@ export async function connectWithRetry(
       }
 
       const jitter = Math.floor(Math.random() * 100);
-      const delay = Math.min(
-        maxDelayMs,
-        baseDelayMs * 2 ** (attempt - 1) + jitter,
-      );
+      const delay = Math.min(maxDelayMs, baseDelayMs * 2 ** (attempt - 1) + jitter);
       await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
 
-  throw new Error(
-    `Unable to connect to RabbitMQ after ${maxAttempts} attempts: ${String(lastError)}`,
-  );
+  throw new Error(`Unable to connect to RabbitMQ after ${maxAttempts} attempts: ${String(lastError)}`);
 }

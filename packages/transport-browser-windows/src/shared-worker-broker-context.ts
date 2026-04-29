@@ -1,26 +1,14 @@
-import type {
-  BrowserWindowsBrokerState,
-  BrowserWindowsFeedSubscriptionKey,
-} from "./broker-state";
+import type { BrowserWindowsBrokerState, BrowserWindowsFeedSubscriptionKey } from "./broker-state";
 import type { BrowserWindowsProtocolMessage } from "./protocol";
 import type { BrowserWindowsParticipantId } from "./types";
 import type { BrowserWindowsMessagePortLike } from "./shared-worker-broker";
 
 export interface BrokerContext {
   state: BrowserWindowsBrokerState;
-  portsByParticipant: Map<
-    BrowserWindowsParticipantId,
-    BrowserWindowsMessagePortLike
-  >;
+  portsByParticipant: Map<BrowserWindowsParticipantId, BrowserWindowsMessagePortLike>;
   routesByParticipant: Map<BrowserWindowsParticipantId, Set<string>>;
-  sendToParticipant(
-    participantId: BrowserWindowsParticipantId,
-    message: BrowserWindowsProtocolMessage,
-  ): void;
-  sendTo(
-    port: BrowserWindowsMessagePortLike,
-    message: BrowserWindowsProtocolMessage,
-  ): void;
+  sendToParticipant(participantId: BrowserWindowsParticipantId, message: BrowserWindowsProtocolMessage): void;
+  sendTo(port: BrowserWindowsMessagePortLike, message: BrowserWindowsProtocolMessage): void;
 }
 
 export function createBrokerState(): BrowserWindowsBrokerState {

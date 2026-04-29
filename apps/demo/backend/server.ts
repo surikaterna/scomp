@@ -5,15 +5,8 @@ import {
   createScompService,
   type CompiledRouter,
 } from "@scomp/core";
-import {
-  createRabbitMqTransport,
-  type RabbitMQTransportConfig,
-} from "@scomp/transport-rabbitmq";
-import type {
-  DemoApiContract,
-  LiveTickerInput,
-  LiveTickerTick,
-} from "../shared/api.contract";
+import { createRabbitMqTransport, type RabbitMQTransportConfig } from "@scomp/transport-rabbitmq";
+import type { DemoApiContract, LiveTickerInput, LiveTickerTick } from "../shared/api.contract";
 
 const usersToken = createContractToken<DemoApiContract["users"]>("users");
 
@@ -48,9 +41,7 @@ export const usersService = createScompService(usersToken).implement({
     liveTicker: {
       strategy: "fanout",
       hashKey: (input: LiveTickerInput) => input.channel,
-      handler: async function* (
-        input: LiveTickerInput,
-      ): AsyncIterable<LiveTickerTick> {
+      handler: async function* (input: LiveTickerInput): AsyncIterable<LiveTickerTick> {
         let sequence = 0;
         try {
           while (true) {
@@ -70,9 +61,7 @@ export const usersService = createScompService(usersToken).implement({
   },
 });
 
-export const usersRequestsFragment = createScompFragment<
-  DemoApiContract["users"]
->("users").implement({
+export const usersRequestsFragment = createScompFragment<DemoApiContract["users"]>("users").implement({
   requests: {
     getUser: {
       parser: (payload): { id: number } => {
@@ -87,9 +76,7 @@ export const usersRequestsFragment = createScompFragment<
   },
 });
 
-export const usersSignalsFragment = createScompFragment<
-  DemoApiContract["users"]
->("users").implement({
+export const usersSignalsFragment = createScompFragment<DemoApiContract["users"]>("users").implement({
   signals: {
     notifyLogin: {
       parser: (payload): { userId: number; at: string } => {
@@ -106,16 +93,12 @@ export const usersSignalsFragment = createScompFragment<
   },
 });
 
-export const usersFeedsFragment = createScompFragment<DemoApiContract["users"]>(
-  "users",
-).implement({
+export const usersFeedsFragment = createScompFragment<DemoApiContract["users"]>("users").implement({
   feeds: {
     liveTicker: {
       strategy: "fanout",
       hashKey: (input: LiveTickerInput) => input.channel,
-      handler: async function* (
-        input: LiveTickerInput,
-      ): AsyncIterable<LiveTickerTick> {
+      handler: async function* (input: LiveTickerInput): AsyncIterable<LiveTickerTick> {
         let sequence = 0;
         try {
           while (true) {

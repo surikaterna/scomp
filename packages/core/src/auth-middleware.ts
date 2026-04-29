@@ -67,9 +67,7 @@ export function createAuthMiddleware(config: AuthMiddlewareConfig): ScompMiddlew
           principal: principal ?? undefined,
         });
         if (!allowed) {
-          throw new ScompAuthError(
-            `Not authorized for route: ${ctx.route}`,
-          );
+          throw new ScompAuthError(`Not authorized for route: ${ctx.route}`);
         }
       }
 
@@ -98,9 +96,7 @@ export function createAuthMiddleware(config: AuthMiddlewareConfig): ScompMiddlew
               principal: principal ?? undefined,
             });
             if (!allowed) {
-              throw new ScompAuthError(
-                `Not authorized for route: ${ctx.route}`,
-              );
+              throw new ScompAuthError(`Not authorized for route: ${ctx.route}`);
             }
           }
 

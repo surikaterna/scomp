@@ -1,18 +1,8 @@
 import type { ScompClientInvokeOptions } from "@scomp/core";
 import type { ScompTransportMessageMeta } from "@scomp/types";
-import type {
-  BrowserWindowsTransportHealthReasonCode,
-  BrowserWindowsTransportHealthStatus,
-} from "./types";
-import {
-  createPayloadHash,
-  createPayloadKey,
-  createRequestId,
-} from "./shared-worker-internal";
-import type {
-  BrowserWindowsInvokeFeedChunkMessage,
-  BrowserWindowsInvokeResponseMessage,
-} from "./protocol";
+import type { BrowserWindowsTransportHealthReasonCode, BrowserWindowsTransportHealthStatus } from "./types";
+import { createPayloadHash, createPayloadKey, createRequestId } from "./shared-worker-internal";
+import type { BrowserWindowsInvokeFeedChunkMessage, BrowserWindowsInvokeResponseMessage } from "./protocol";
 import type { BrowserWindowsRequestId } from "./types";
 import {
   type FeedQueueState,
@@ -37,10 +27,7 @@ export interface BrowserWindowsTransportClientContext {
     detail: string | undefined,
     status: BrowserWindowsTransportHealthStatus,
   ): void;
-  assertOutboundAllowed(
-    route: string,
-    operation: "request" | "signal" | "feed",
-  ): void;
+  assertOutboundAllowed(route: string, operation: "request" | "signal" | "feed"): void;
   composeMetaForOperation(
     route: string,
     operation: "request" | "signal" | "feed",
@@ -55,13 +42,8 @@ export async function requestWithContext(
   payload: unknown,
   options?: ScompClientInvokeOptions,
 ): Promise<unknown> {
-  if (
-    context.pendingRequests.size + context.getPreparingRequests() >=
-    context.maxPendingRequests
-  ) {
-    throw new Error(
-      `BrowserWindowsTransport max pending requests exceeded (${context.maxPendingRequests}).`,
-    );
+  if (context.pendingRequests.size + context.getPreparingRequests() >= context.maxPendingRequests) {
+    throw new Error(`BrowserWindowsTransport max pending requests exceeded (${context.maxPendingRequests}).`);
   }
 
   const requestId = createRequestId();
@@ -82,17 +64,11 @@ export async function requestWithContext(
       }
 
       context.pendingRequests.delete(requestId);
-      context.reportHealth(
-        "request-timeout",
-        `Request timed out for route: ${route}`,
-        "degraded",
-      );
+      context.reportHealth("request-timeout", `Request timed out for route: ${route}`, "degraded");
       rejectPendingRequest(
         requestId,
         pending,
-        new Error(
-          `BrowserWindowsTransport request timed out after ${context.requestTimeoutMs}ms for route ${route}.`,
-        ),
+        new Error(`BrowserWindowsTransport request timed out after ${context.requestTimeoutMs}ms for route ${route}.`),
       );
     }, context.requestTimeoutMs);
 
@@ -120,12 +96,7 @@ export async function signalWithContext(
   options?: ScompClientInvokeOptions,
 ): Promise<void> {
   context.assertOutboundAllowed(route, "signal");
-  const meta = await context.composeMetaForOperation(
-    route,
-    "signal",
-    payload,
-    options,
-  );
+  const meta = await context.composeMetaForOperation(route, "signal", payload, options);
 
   context.postMessage({
     type: "invoke_signal",
@@ -218,11 +189,11 @@ export function feedWithContext(
         if (feedStarted && !state.stopSent) {
           context.assertOutboundAllowed(route, "signal");
           const feedStopMeta = await context.composeMetaForOperation(
-              route,
-              "signal",
-              { payloadKey: state.payloadKey, payloadHash: state.payloadHash },
-              options,
-            );
+            route,
+            "signal",
+            { payloadKey: state.payloadKey, payloadHash: state.payloadHash },
+            options,
+          );
           state.meta = feedStopMeta;
 
           context.postMessage({
@@ -308,10 +279,7 @@ export function handleInvokeFeedChunkMessage(
 
     state.queue.push(message.payload);
   } else if (message.chunkType === "error") {
-    if (
-      typeof message.message === "string" &&
-      /host disconnected/i.test(message.message)
-    ) {
+    if (typeof message.message === "string" && /host disconnected/i.test(message.message)) {
       reportHealth("host-disconnected", message.message, "degraded");
     }
     terminateFeedState(
@@ -324,14 +292,7 @@ export function handleInvokeFeedChunkMessage(
     );
     return;
   } else {
-    terminateFeedState(
-      message.requestId,
-      state,
-      undefined,
-      false,
-      (payload) => postMessage(payload),
-      participantId,
-    );
+    terminateFeedState(message.requestId, state, undefined, false, (payload) => postMessage(payload), participantId);
     return;
   }
 
