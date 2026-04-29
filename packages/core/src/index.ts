@@ -115,6 +115,7 @@ export {
   // Legacy API retained for in-process transport compatibility.
   createScompClient,
   createScompService as createLegacyScompService,
+  createScompServiceFromDescriptor,
   ScompServiceBuilder,
   type ScompClientForService,
   type ScompServiceDefinition,

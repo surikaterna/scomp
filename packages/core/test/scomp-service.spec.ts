@@ -3,6 +3,7 @@ import {
   createScompClient,
   createScompFeed,
   createLegacyScompService,
+  createScompServiceFromDescriptor,
   type ScompTransport
 } from '../src';
 
@@ -78,5 +79,42 @@ describe('ScompServiceBuilder and createScompClient', () => {
     const client = createScompClient(service, transport);
     assert.equal(await client.ping(), 'pong');
     assert.equal(client.log('ok'), undefined);
+  });
+
+  it('exposes method kinds and supports service invocation', () => {
+    const feed = createScompFeed<number>();
+    const service = createLegacyScompService()
+      .request('sum', (left: number, right: number) => left + right)
+      .feed('watch', () => feed)
+      .command('log', (_value: string): void => {})
+      .build();
+
+    assert.deepEqual(service.kinds, {
+      sum: 'request',
+      watch: 'feed',
+      log: 'command',
+    });
+
+    assert.equal(service.invoke('sum', [4, 7]), 11);
+
+    assert.throws(
+      () => service.invoke('missing', []),
+      /Unknown service method: missing/,
+    );
+  });
+
+  it('rejects duplicate method names across descriptor sections', () => {
+    assert.throws(
+      () =>
+        createScompServiceFromDescriptor({
+          requests: {
+            duplicate: () => 'ok',
+          },
+          feeds: {
+            duplicate: () => createScompFeed<string>(),
+          },
+        }),
+      /Each method name must be unique/,
+    );
   });
 });
