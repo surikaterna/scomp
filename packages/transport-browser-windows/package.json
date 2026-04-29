@@ -17,7 +17,7 @@
   "scripts": {
     "build": "tsc -b tsconfig.json",
     "lint": "bunx tsc -b tsconfig.json --pretty false",
-    "test": "jest --config jest.config.cjs --passWithNoTests",
+    "test": "vitest run",
     "smoke:bundler": "bun ../../check-transport-browser-windows-bundler-smoke.mjs"
   },
   "dependencies": {

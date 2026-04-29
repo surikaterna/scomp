@@ -12,23 +12,17 @@
     "test": "bunx turbo run test --concurrency=2"
   },
   "devDependencies": {
-    "@babel/core": "^7.28.4",
-    "@babel/preset-env": "^7.28.3",
-    "@babel/preset-typescript": "^7.27.1",
     "@rollup/plugin-commonjs": "^29.0.0",
     "@rollup/plugin-json": "^6.1.0",
     "@rollup/plugin-node-resolve": "^16.0.3",
     "@types/amqplib": "^0.10.8",
     "@types/bluebird": "^3.5.42",
     "@types/chai": "^5.2.3",
-    "@types/jest": "^30.0.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "^25.5.0",
     "@types/sprintf-js": "^1.1.4",
-    "babel-jest": "^30.0.5",
     "chai": "^6.2.2",
     "eslint": "^10.1.0",
-    "jest": "^30.0.5",
     "lodash.camelcase": "^4.3.0",
     "mocha": "^11.7.5",
     "prettier": "^3.8.1",
@@ -41,7 +35,8 @@
     "ts-node": "^10.9.2",
     "turbo": "^2.8.20",
     "typedoc": "^0.28.18",
-    "typescript": "^6.0.2"
+    "typescript": "^6.0.2",
+    "vitest": "^3.2.1"
   },
   "workspaces": [
     "packages/*",

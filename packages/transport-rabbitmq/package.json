@@ -7,12 +7,16 @@
   "scripts": {
     "build": "tsc -b tsconfig.json",
     "lint": "echo \"No lint configured for @scomp/transport-rabbitmq\"",
-    "test": "jest --config jest.config.cjs"
+    "test": "vitest run"
   },
   "dependencies": {
     "@scomp/core": "workspace:*",
     "@scomp/transport-shared": "workspace:*",
     "@scomp/types": "workspace:*",
     "amqplib": "^0.10.9"
+  },
+  "devDependencies": {
+    "@scomp/client": "workspace:*",
+    "@scomp/transport-websocket-client": "workspace:*"
   }
 }

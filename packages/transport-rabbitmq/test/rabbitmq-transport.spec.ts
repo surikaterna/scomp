@@ -1,15 +1,18 @@
 import assert from "node:assert/strict";
+import { vi } from "vitest";
 import { composeScompFragments, createContractToken, createScompFragment, createScompService } from "@scomp/core";
 import { createJsonSerializer, RabbitMQTransport, StreamClosedError } from "../src";
 
-const mockConnect = jest.fn();
-const mockRandomUUID = jest.fn();
+const { mockConnect, mockRandomUUID } = vi.hoisted(() => ({
+  mockConnect: vi.fn(),
+  mockRandomUUID: vi.fn(),
+}));
 
-jest.mock("node:crypto", () => ({
+vi.mock("node:crypto", () => ({
   randomUUID: (...args: Array<unknown>) => mockRandomUUID(...args),
 }));
 
-jest.mock("amqplib", () => ({
+vi.mock("amqplib", () => ({
   __esModule: true,
   default: {
     connect: (...args: Array<unknown>) => mockConnect(...args),
@@ -37,9 +40,9 @@ function createFakeChannel() {
 
   const channel = {
     writable: true,
-    prefetch: jest.fn().mockResolvedValue(undefined),
-    assertExchange: jest.fn().mockResolvedValue(undefined),
-    assertQueue: jest.fn(async (name: string) => {
+    prefetch: vi.fn().mockResolvedValue(undefined),
+    assertExchange: vi.fn().mockResolvedValue(undefined),
+    assertQueue: vi.fn(async (name: string) => {
       if (name) {
         return { queue: name };
       }
@@ -47,26 +50,26 @@ function createFakeChannel() {
       generatedQueueCounter += 1;
       return { queue: `generated-${generatedQueueCounter}` };
     }),
-    bindQueue: jest.fn().mockResolvedValue(undefined),
-    unbindQueue: jest.fn().mockResolvedValue(undefined),
-    deleteQueue: jest.fn().mockResolvedValue(undefined),
-    consume: jest.fn(async (queue: string, handler: QueueConsumer) => {
+    bindQueue: vi.fn().mockResolvedValue(undefined),
+    unbindQueue: vi.fn().mockResolvedValue(undefined),
+    deleteQueue: vi.fn().mockResolvedValue(undefined),
+    consume: vi.fn(async (queue: string, handler: QueueConsumer) => {
       queueConsumers.set(queue, handler);
       return { consumerTag: `consumer-${queue}` };
     }),
-    cancel: jest.fn().mockResolvedValue(undefined),
-    sendToQueue: jest.fn(),
-    publish: jest.fn(),
-    ack: jest.fn(),
-    on: jest.fn((eventName: string, handler: (message: unknown) => void) => {
+    cancel: vi.fn().mockResolvedValue(undefined),
+    sendToQueue: vi.fn(),
+    publish: vi.fn(),
+    ack: vi.fn(),
+    on: vi.fn((eventName: string, handler: (message: unknown) => void) => {
       eventHandlers.set(eventName, handler);
       return channel;
     }),
   };
 
   const connection = {
-    createChannel: jest.fn().mockResolvedValue(channel),
-    on: jest.fn(),
+    createChannel: vi.fn().mockResolvedValue(channel),
+    on: vi.fn(),
   };
 
   return {
@@ -105,7 +108,7 @@ async function waitFor(predicate: () => boolean, attempts = 50): Promise<void> {
 
 describe("RabbitMQTransport NFR behavior", () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     let idCounter = 0;
     mockRandomUUID.mockImplementation(() => {
       idCounter += 1;

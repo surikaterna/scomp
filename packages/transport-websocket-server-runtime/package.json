@@ -7,7 +7,7 @@
   "scripts": {
     "build": "tsc -b tsconfig.json",
     "lint": "bunx tsc -b tsconfig.json --pretty false",
-    "test": "jest --config jest.config.cjs --forceExit"
+    "test": "vitest run"
   },
   "dependencies": {
     "@scomp/core": "workspace:*",

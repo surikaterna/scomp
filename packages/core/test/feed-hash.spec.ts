@@ -1,3 +1,4 @@
+import { vi } from "vitest";
 import { createFeedHash, createRuntimeNeutralFeedHasher, type FeedHashOptions } from "../src/feed-hash";
 
 describe("createFeedHash", () => {
@@ -62,7 +63,7 @@ describe("createFeedHash", () => {
   });
 
   it("hashKey receives the original payload", () => {
-    const spy = jest.fn(() => "fixed-key");
+    const spy = vi.fn(() => "fixed-key");
     const payload = { complex: true };
     createFeedHash("route", payload, { hashKey: spy });
     expect(spy).toHaveBeenCalledWith(payload);
@@ -70,7 +71,7 @@ describe("createFeedHash", () => {
 
   // ── Custom stringify option ──────────────────────────────────────────
   it("uses custom stringify when provided", () => {
-    const customStringify = jest.fn(() => "custom-serialized");
+    const customStringify = vi.fn(() => "custom-serialized");
     const hash = createFeedHash("route", { a: 1 }, { stringify: customStringify });
     expect(customStringify).toHaveBeenCalledWith({ a: 1 });
     expect(hash).toHaveLength(32);
@@ -90,7 +91,7 @@ describe("createFeedHash", () => {
 
   // ── Custom hash option ───────────────────────────────────────────────
   it("uses custom hash function when provided", () => {
-    const customHash = jest.fn(() => "abcdef1234567890abcdef1234567890");
+    const customHash = vi.fn(() => "abcdef1234567890abcdef1234567890");
     const result = createFeedHash("route", {}, { hash: customHash });
     expect(customHash).toHaveBeenCalled();
     expect(result).toBe("abcdef1234567890abcdef1234567890");
