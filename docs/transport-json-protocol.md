@@ -7,7 +7,7 @@ The same logical schema is used for both RabbitMQ and WebSocket transports.
 - RabbitMQ: JSON is carried in AMQP message bodies.
 - WebSocket: JSON is carried in text frames.
 
-Browser clients should use `@scomp/transport-websocket-browser`, which follows the same envelope schema as RabbitMQ and Node WebSocket transports.
+Browser clients should use `@scomp/transport-websocket-client` with `createBrowserSocketAdapterFactory()`, which follows the same envelope schema as RabbitMQ and Node WebSocket transports.
 
 ## Core Envelope Types
 
@@ -289,9 +289,9 @@ No schema changes are needed between RabbitMQ and WebSocket transports; only fra
 
 ### Browser WebSocket mapping
 
-- Browser/runtime clients use `@scomp/transport-websocket-browser`.
+- Browser/runtime clients use `@scomp/transport-websocket-client` with `createBrowserSocketAdapterFactory()`.
 - `request`, `signal`, `feed_start`, and `feed_stop` propagate invocation metadata and priority hints in `meta`.
-- Optional browser-side authenticate/authorize hooks run before outbound frames are sent.
+- Auth middleware (via `createAuthMiddleware`) can intercept outbound calls before frames are sent.
 
 ## Pluggable Serialization
 
@@ -307,20 +307,20 @@ Custom serializers can be used to preserve non-JSON-native values such as BigInt
 
 ## Cross-Transport Authentication and Authorization
 
-SCOMP security is transport-agnostic and should be enforced consistently:
+SCOMP security is transport-agnostic and enforced via the middleware system at the peer level:
 
-- Authenticate using transport request context (route, operation, payload, metadata).
-- Authorize per operation using the resolved principal.
-- Apply checks for inbound and outbound operations where transport supports both directions.
+- Inbound: middleware intercepts incoming requests before handlers execute.
+- Outbound: middleware can inject auth metadata or block unauthorized calls.
+- The `createAuthMiddleware` helper provides standard authenticate/authorize hooks.
 
-Recommended policy order:
+Recommended middleware configuration:
 
-1. `authenticate(context)`
-2. `authorize({ ...context, principal })`
+1. `authenticate(context)` — resolve identity from context (route, operation, payload, meta).
+2. `authorize({ ...context, principal })` — decide if the resolved principal may proceed.
 
-If no policy is configured, transports default to allow behavior for backward compatibility.
+If no middleware is configured, peers default to allow-all behavior for backward compatibility.
 
 ### Security caveats
 
-- Browser-side security hooks are a client policy layer, not a server trust boundary.
-- Always enforce final authentication/authorization on the receiving server transport.
+- Browser-side middleware is a client policy layer, not a server trust boundary.
+- Always enforce final authentication/authorization on the receiving server peer.

@@ -436,13 +436,77 @@ Default operation priorities: request=P2, signal=P3, feed=P1.
 
 ## 11) Security guidance
 
-- `meta.auth` is opaque. Validate identity on the server, not the client.
-- Browser-side security hooks are client policy, not a trust boundary.
-- Enforce authentication and authorization in server transports.
+- `meta.auth` is opaque. Validate identity on the server peer, not the client.
+- Browser-side auth middleware is client policy, not a trust boundary.
+- Enforce authentication and authorization in server peer middleware.
 - Control plane routes should be internal-only by default.
 - Same-origin browser transports are constrained by browser security model.
 
-## 12) Common mistakes
+## 12) Middleware
+
+Auth and cross-cutting concerns use transport-agnostic middleware at the peer level.
+This replaces the previous transport-level `ScompTransportSecurityPolicy`.
+
+### Auth middleware
+
+```ts
+import { createAuthMiddleware, createScompPeer } from "@scomp/core";
+import { createScompClient } from "@scomp/client";
+
+const authMw = createAuthMiddleware({
+  authenticate: (ctx) => {
+    // ctx: { route, operation, payload, meta }
+    // Return principal or throw
+    return { subject: "user-1", tenantId: "tenant-a", scopes: ["read"] };
+  },
+  authorize: ({ principal, route, operation }) => {
+    // Return true/false or throw
+    return principal.scopes.includes("read");
+  },
+});
+
+const peer = createScompPeer({
+  transports: [transport],
+  clientFactory: createScompClient,
+  middleware: [authMw],
+});
+```
+
+### Middleware interface
+
+Custom middleware implements `ScompMiddleware`:
+
+```ts
+import type { ScompMiddleware } from "@scomp/core";
+
+const loggingMw: ScompMiddleware = {
+  name: "logger",
+  inbound: async (ctx, next) => {
+    console.log("inbound", ctx.route, ctx.operation);
+    return next(ctx);
+  },
+  outbound: async (ctx, next) => {
+    console.log("outbound", ctx.route, ctx.operation);
+    return next(ctx);
+  },
+};
+```
+
+### Middleware behavior
+
+- **Inbound**: executes before route handlers on the server. Can authenticate, authorize, transform payloads, or short-circuit with an error.
+- **Outbound**: executes before transport sends. Can inject `meta.auth`, block unauthorized calls, or transform context.
+- Multiple middleware compose in order (first registered = outermost).
+- Middleware that only defines `inbound` is skipped for outbound operations (and vice versa).
+
+### Auth middleware specifics
+
+- `authenticate` resolves identity. If it returns a principal, that principal is attached to context.
+- `authorize` receives the principal and decides access. Returns `false` → throws `ScompAuthError`.
+- Outbound auth: injects principal into `meta.auth` so downstream services can verify identity.
+- If neither `authenticate` nor `authorize` is provided, middleware is a no-op for that direction.
+
+## 13) Common mistakes
 
 - **Using a string name instead of a contract token**: always use `createContractToken&lt;C&gt;("name")`.
 - **Importing Bun server factory from Node runtime**: use `createNodeWebSocketServerTransport` (not `createBunWebSocketServerTransport`) when running on Node.
@@ -454,13 +518,15 @@ Default operation priorities: request=P2, signal=P3, feed=P1.
 - **Nesting feeds in controller methods**: controller methods return `Promise&lt;T&gt;` or `Promise&lt;void&gt;` only. No `AsyncIterable`.
 - **Using `listen()` instead of `registerRoutes()`**: `listen()` is the v1 API. Use `registerRoutes()` or let the peer handle it.
 - **Using `createScompClient` directly instead of `peer.consumes(token)`**: the peer model handles transport wiring and proxy caching.
+- **Using transport-level security hooks instead of middleware**: `ScompTransportSecurityPolicy` was removed. Use `createAuthMiddleware` from `@scomp/core` and pass to `createScompPeer({ middleware: [...] })`.
+- **Referencing `@scomp/transport-websocket-browser` or `@scomp/transport-websocket-server-node`**: These packages do not exist. Use `@scomp/transport-websocket-client` (with socket adapter factories) and `@scomp/transport-websocket-server` (with runtime-specific factory functions).
 
-## 13) Packages
+## 14) Packages
 
-- `@scomp/core` — contract tokens, peer, service builder, feed primitives, control plane, priority model, contract validation
+- `@scomp/core` — contract tokens, peer, service builder, feed primitives, control plane, priority model, contract validation, middleware
 - `@scomp/types` — wire protocol types, contract type utilities, security types
 - `@scomp/client` — typed client proxy (provides `clientFactory` for peer model)
-- `@scomp/transport-shared` — cross-transport utilities (meta composition, security, parsing, feed detection)
+- `@scomp/transport-shared` — cross-transport utilities (meta composition, parsing, feed detection)
 - `@scomp/transport-websocket-shared` — WebSocket adapter abstraction (`ISocketAdapter`, `NodeSocketAdapter`, `BrowserSocketAdapter`)
 - `@scomp/transport-websocket-client` — unified WebSocket client (Node + Browser via socket adapters)
 - `@scomp/transport-websocket-server` — unified WebSocket server (Bun + Node entry points)
@@ -469,7 +535,7 @@ Default operation priorities: request=P2, signal=P3, feed=P1.
 - `@scomp/transport-browser-windows` — same-origin browser tab/window transport (SharedWorker primary, BroadcastChannel fallback)
 - `@scomp/transport-inprocess` — in-process transport
 
-## 14) Validation commands
+## 15) Validation commands
 
 ```bash
 bunx turbo run build    # build all packages

@@ -15,9 +15,14 @@ import {
   createContractToken,
   createScompPeer,
   createScompService,
+  createAuthMiddleware,
 } from "@scomp/core";
-import { createWebSocketServerTransport } from "@scomp/transport-websocket-server";
-import { createWebSocketBrowserTransport } from "@scomp/transport-websocket-browser";
+import { createScompClient } from "@scomp/client";
+import { createBunWebSocketServerTransport } from "@scomp/transport-websocket-server";
+import {
+  createWebSocketClientTransport,
+  createBrowserSocketAdapterFactory,
+} from "@scomp/transport-websocket-client";
 
 type Contract = {
   users: {
@@ -28,12 +33,22 @@ type Contract = {
 
 const Users = createContractToken<Contract["users"]>("users");
 
-// Server peer
-const serverTransport = createWebSocketServerTransport({
+// Optional auth middleware
+const authMw = createAuthMiddleware({
+  authenticate: (ctx) => ({ subject: "user-1" }),
+  authorize: (ctx) => true,
+});
+
+// Server peer (Bun runtime)
+const serverTransport = createBunWebSocketServerTransport({
   port: 3399,
   path: "/",
 });
-const server = createScompPeer({ transports: [serverTransport] });
+const server = createScompPeer({
+  transports: [serverTransport],
+  clientFactory: createScompClient,
+  middleware: [authMw],
+});
 
 server.provides(
   createScompService(Users).implement({
@@ -42,11 +57,15 @@ server.provides(
   }),
 );
 
-// Client peer
-const clientTransport = createWebSocketBrowserTransport({
+// Client peer (browser runtime)
+const clientTransport = createWebSocketClientTransport({
   url: "ws://127.0.0.1:3399",
+  socketAdapter: createBrowserSocketAdapterFactory(),
 });
-const client = createScompPeer({ transports: [clientTransport] });
+const client = createScompPeer({
+  transports: [clientTransport],
+  clientFactory: createScompClient,
+});
 
 const users = client.consumes(Users);
 await users.get({ id: 1 });
@@ -61,8 +80,12 @@ import {
   createScompPeer,
   createScompService,
 } from "@scomp/core";
-import { createWebSocketServerTransport } from "@scomp/transport-websocket-server-node";
-import { createWebSocketClientTransport } from "@scomp/transport-websocket-client";
+import { createScompClient } from "@scomp/client";
+import { createNodeWebSocketServerTransport } from "@scomp/transport-websocket-server";
+import {
+  createWebSocketClientTransport,
+  createNodeSocketAdapterFactory,
+} from "@scomp/transport-websocket-client";
 
 type Contract = {
   math: {
@@ -72,12 +95,15 @@ type Contract = {
 
 const Math = createContractToken<Contract["math"]>("math");
 
-// Server peer
-const serverTransport = createWebSocketServerTransport({
+// Server peer (Node runtime)
+const serverTransport = createNodeWebSocketServerTransport({
   port: 3399,
   path: "/",
 });
-const server = createScompPeer({ transports: [serverTransport] });
+const server = createScompPeer({
+  transports: [serverTransport],
+  clientFactory: createScompClient,
+});
 
 server.provides(
   createScompService(Math).implement({
@@ -85,11 +111,15 @@ server.provides(
   }),
 );
 
-// Client peer
+// Client peer (Node runtime)
 const clientTransport = createWebSocketClientTransport({
   url: "ws://127.0.0.1:3399",
+  socketAdapter: createNodeSocketAdapterFactory(),
 });
-const client = createScompPeer({ transports: [clientTransport] });
+const client = createScompPeer({
+  transports: [clientTransport],
+  clientFactory: createScompClient,
+});
 
 const math = client.consumes(Math);
 await math.add({ a: 1, b: 2 });
@@ -103,6 +133,7 @@ import {
   createScompPeer,
   createScompService,
 } from "@scomp/core";
+import { createScompClient } from "@scomp/client";
 import { createRabbitMqTransport } from "@scomp/transport-rabbitmq";
 
 type Contract = {
@@ -117,7 +148,10 @@ const Jobs = createContractToken<Contract["jobs"]>("jobs");
 const transport = createRabbitMqTransport({
   url: "amqp://guest:guest@localhost:5672",
 });
-const peer = createScompPeer({ transports: [transport] });
+const peer = createScompPeer({
+  transports: [transport],
+  clientFactory: createScompClient,
+});
 
 peer.provides(
   createScompService(Jobs).implement({
@@ -137,6 +171,7 @@ import {
   createScompPeer,
   createScompService,
 } from "@scomp/core";
+import { createScompClient } from "@scomp/client";
 import { createBrowserWindowsTransport } from "@scomp/transport-browser-windows";
 
 type Contract = {
@@ -153,7 +188,10 @@ const transport = createBrowserWindowsTransport({
 });
 
 // In hosting window(s)
-const server = createScompPeer({ transports: [transport] });
+const server = createScompPeer({
+  transports: [transport],
+  clientFactory: createScompClient,
+});
 server.provides(
   createScompService(Counter).implement({
     requests: { get: async () => ({ value: 1 }) },
@@ -161,7 +199,10 @@ server.provides(
 );
 
 // In invoking window(s)
-const client = createScompPeer({ transports: [transport] });
+const client = createScompPeer({
+  transports: [transport],
+  clientFactory: createScompClient,
+});
 const counter = client.consumes(Counter);
 await counter.get({ id: "a" });
 ```
@@ -176,8 +217,12 @@ import {
   createScompService,
 } from "@scomp/core";
 import type { ControlledAsyncIterable } from "@scomp/core";
-import { createWebSocketServerTransport } from "@scomp/transport-websocket-server";
-import { createWebSocketBrowserTransport } from "@scomp/transport-websocket-browser";
+import { createScompClient } from "@scomp/client";
+import { createBunWebSocketServerTransport } from "@scomp/transport-websocket-server";
+import {
+  createWebSocketClientTransport,
+  createBrowserSocketAdapterFactory,
+} from "@scomp/transport-websocket-client";
 
 type PriceTick = { symbol: string; price: number };
 
@@ -193,12 +238,15 @@ type PricingContract = {
 
 const Pricing = createContractToken<PricingContract>("pricing");
 
-// Server
-const serverTransport = createWebSocketServerTransport({
+// Server (Bun runtime)
+const serverTransport = createBunWebSocketServerTransport({
   port: 3399,
   path: "/",
 });
-const server = createScompPeer({ transports: [serverTransport] });
+const server = createScompPeer({
+  transports: [serverTransport],
+  clientFactory: createScompClient,
+});
 
 server.provides(
   createScompService(Pricing).implement({
@@ -230,11 +278,15 @@ server.provides(
   }),
 );
 
-// Client
-const clientTransport = createWebSocketBrowserTransport({
+// Client (browser runtime)
+const clientTransport = createWebSocketClientTransport({
   url: "ws://127.0.0.1:3399",
+  socketAdapter: createBrowserSocketAdapterFactory(),
 });
-const client = createScompPeer({ transports: [clientTransport] });
+const client = createScompPeer({
+  transports: [clientTransport],
+  clientFactory: createScompClient,
+});
 
 const pricing = client.consumes(Pricing);
 const feed = pricing.prices({ symbols: ["AAPL"] });

@@ -13,32 +13,43 @@ It lets tabs/windows in the same origin exchange SCOMP `request`, `signal`, and 
 ## Basic usage
 
 ```ts
+import { createContractToken, createScompPeer, createScompService } from "@scomp/core";
 import { createScompClient } from "@scomp/client";
-import { createScompService } from "@scomp/core";
 import { createBrowserWindowsTransport } from "@scomp/transport-browser-windows";
 
-type CounterApi = {
-  counter: {
-    get(input: { id: string }): Promise<{ id: string; value: number }>;
-  };
+type CounterContract = {
+  get(input: { id: string }): Promise<{ id: string; value: number }>;
 };
+
+const Counter = createContractToken<CounterContract>("counter");
 
 const transport = createBrowserWindowsTransport({
   channelName: "scomp-app",
-  mode: "auto", // default: try SharedWorker first, fallback to BroadcastChannel
+  mode: "auto",
 });
 
-// In one or more windows that host routes:
-const counterService = createScompService<CounterApi["counter"]>("counter").implement({
-  requests: {
-    get: async ({ id }) => ({ id, value: 1 }),
-  },
+// In host windows:
+const hostPeer = createScompPeer({
+  transports: [transport],
+  clientFactory: createScompClient,
 });
-transport.listen(counterService.router);
+
+hostPeer.provides(
+  createScompService(Counter).implement({
+    requests: {
+      get: async ({ id }) => ({ id, value: 1 }),
+    },
+  }),
+);
 
 // In invoking windows:
-const client = createScompClient<CounterApi>({ transport });
-const result = await client.counter.get({ id: "a" });
+const invokePeer = createScompPeer({
+  transports: [transport],
+  clientFactory: createScompClient,
+});
+
+const counter = invokePeer.consumes(Counter);
+const result = await counter.get({ id: "a" });
 console.log(result.value);
 ```
 
@@ -218,8 +229,8 @@ This transport is designed for **same-origin trust domains**.
 
 - Treat same-origin windows as the trust boundary for transport-level messaging.
 - Do not treat browser transport controls as a server-grade security boundary.
-- If identity/authorization is needed, provide `security.authenticate` and `security.authorize` hooks.
-- Validate and enforce sensitive auth decisions in trusted backend/server transports.
+- If identity/authorization is needed, use `createAuthMiddleware` from `@scomp/core` and pass it to `createScompPeer({ middleware: [...] })`.
+- Validate and enforce sensitive auth decisions in the server peer's middleware stack.
 
 ## Metadata policy for teardown/disconnect cleanup
 

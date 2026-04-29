@@ -31,5 +31,5 @@ Requires RabbitMQ at `SCOMP_RABBITMQ_URL` (defaults to `amqp://localhost:5672`).
 
 When adapting this demo pattern to websocket server transport:
 
-- Use `@scomp/transport-websocket-server` for **Bun** (`Bun.serve`) hosts.
-- Use `@scomp/transport-websocket-server-node` for **Node** (`ws` + `http`) hosts.
+- Use `createBunWebSocketServerTransport` from `@scomp/transport-websocket-server` for **Bun** (`Bun.serve`) hosts.
+- Use `createNodeWebSocketServerTransport` from `@scomp/transport-websocket-server` for **Node** (`ws` + `http`) hosts.

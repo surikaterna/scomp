@@ -1,6 +1,6 @@
 # Migration: browser transport parity
 
-This guide captures behavior that is now aligned across transports when using `@scomp/transport-websocket-browser`.
+This guide captures behavior that is now aligned across transports when using `@scomp/transport-websocket-client`.
 
 ## Who should migrate
 
@@ -18,13 +18,13 @@ Use this guidance if your browser client already uses SCOMP WebSocket transport 
 
 ## Recommended migration steps
 
-1. Ensure browser clients depend on `@scomp/transport-websocket-browser`.
+1. Ensure browser clients depend on `@scomp/transport-websocket-client` and use `createBrowserSocketAdapterFactory()`.
 2. Update client call sites to pass invocation options where needed.
 3. If using browser-side security hooks, treat them as client policy checks only.
 4. Keep authoritative authN/authZ checks on the server transport.
 
 ## Caveats
 
-- Browser-side `authenticate`/`authorize` hooks can improve consistency but do not create a trust boundary.
+- Browser-side auth middleware can improve consistency but does not create a trust boundary.
 - `meta.auth` is intentionally opaque and must be validated server-side.
 - Priority hints are advisory metadata unless your transport/policy layer enforces scheduling.

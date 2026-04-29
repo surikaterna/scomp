@@ -1,63 +1,69 @@
-# Migration: websocket server package split
+# Migration: WebSocket Server Runtime-Specific Factories
 
-SCOMP websocket server transport has been split by runtime target.
+The WebSocket server transport now provides explicit runtime-specific factory functions
+instead of a single generic `createWebSocketServerTransport`.
 
 ## What changed
 
-- `@scomp/transport-websocket-server` is now **Bun-first** (`Bun.serve`).
-- Node (`ws` + `http`) server transport now lives in `@scomp/transport-websocket-server-node`.
+- Both Bun and Node server transports live in the **same package**: `@scomp/transport-websocket-server`.
+- `createBunWebSocketServerTransport` — uses `Bun.serve`.
+- `createNodeWebSocketServerTransport` — uses `ws` + `node:http`.
+- The old `createWebSocketServerTransport` is a **deprecated alias** for the Bun factory.
 
-## Breaking change (Node imports)
+There is NO separate `@scomp/transport-websocket-server-node` package.
 
-If you run websocket server transport on Node, update imports:
+## Migration
+
+### Bun
 
 ```ts
 // Before
-import { createWebSocketServerTransport } from '@scomp/transport-websocket-server';
+import { createWebSocketServerTransport } from "@scomp/transport-websocket-server";
 
-// After
-import { createWebSocketServerTransport } from '@scomp/transport-websocket-server-node';
-```
+// After (explicit)
+import { createBunWebSocketServerTransport } from "@scomp/transport-websocket-server";
 
-The same rename applies to `WebSocketServerTransport` and related server-side types.
-
-## Bun usage
-
-Bun usage remains on `@scomp/transport-websocket-server`:
-
-```ts
-import { createWebSocketServerTransport } from '@scomp/transport-websocket-server';
-
-const transport = createWebSocketServerTransport({
+const transport = createBunWebSocketServerTransport({
   port: 3000,
-  outbound: { url: 'ws://127.0.0.1:3000' }
+  host: "127.0.0.1", // optional
+  path: "/ws",        // optional
 });
 ```
 
-## Node usage
-
-Node usage must import from `@scomp/transport-websocket-server-node`:
+### Node
 
 ```ts
-import { createServer } from 'node:http';
-import { createWebSocketServerTransport } from '@scomp/transport-websocket-server-node';
+// Before
+import { createWebSocketServerTransport } from "@scomp/transport-websocket-server";
 
-const httpServer = createServer();
-const transport = createWebSocketServerTransport({
-  server: httpServer,
-  outbound: { url: 'ws://127.0.0.1:3000' }
+// After (explicit)
+import { createNodeWebSocketServerTransport } from "@scomp/transport-websocket-server";
+
+const transport = createNodeWebSocketServerTransport({
+  port: 3000,
+  // or provide your own server:
+  // server: httpServer,
 });
 ```
 
-## Guardrail
+## Config reference
 
-Repository lint now includes an automated guardrail that fails when Node-oriented files
-import `@scomp/transport-websocket-server` instead of
-`@scomp/transport-websocket-server-node`.
+| Field      | Bun                | Node                          |
+|------------|--------------------|-------------------------------|
+| `port`     | **required**       | optional (if `server` given)  |
+| `host`     | optional           | optional                      |
+| `path`     | optional           | optional                      |
+| `server`   | —                  | optional `http`/`https` server|
+| `outbound` | optional client    | optional client               |
 
-Valid Bun imports from `@scomp/transport-websocket-server` remain allowed.
+## Deprecated aliases
+
+The following are re-exported for backward compatibility but will be removed in a future release:
+
+- `createWebSocketServerTransport` → `createBunWebSocketServerTransport`
+- `WebSocketServerTransport` → `BunWebSocketServerTransport`
 
 ## Protocol semantics
 
-No wire-protocol semantics changed as part of this split. Request/signal/feed behavior and
-transport JSON protocol remain as documented in `docs/transport-json-protocol.md`.
+No wire-protocol semantics changed. Request/signal/feed behavior and the transport JSON
+protocol remain as documented in `docs/transport-json-protocol.md`.

@@ -114,6 +114,33 @@ for await (const tick of feed) {
 await feed.controller.addSymbol({ symbol: "GOOG" });
 ```
 
+### Middleware
+
+Auth and cross-cutting concerns are handled by transport-agnostic middleware at the peer level:
+
+```ts
+import { createAuthMiddleware, createScompPeer } from "@scomp/core";
+import { createScompClient } from "@scomp/client";
+
+const authMw = createAuthMiddleware({
+  authenticate: (ctx) => ({ subject: "user-1", tenantId: "tenant-a" }),
+  authorize: ({ principal, route, operation }) => true,
+});
+
+const peer = createScompPeer({
+  transports: [transport],
+  clientFactory: createScompClient,
+  middleware: [authMw],
+});
+```
+
+Middleware intercepts both inbound (server-side) and outbound (client-side) operations:
+
+- **Inbound**: authenticate caller identity, authorize access, transform payloads
+- **Outbound**: inject auth metadata into `meta.auth`, block unauthorized calls before transport
+
+If no middleware is configured, peers allow all operations (backward compatible).
+
 ### Fragment composition
 
 Split service implementations across modules, then compose:
@@ -148,10 +175,10 @@ Fragment composition rejects duplicate methods across fragments.
 
 ## Packages
 
-- `@scomp/core` — contract tokens, peer, service builder, feed primitives, control plane, priority model, contract validation
+- `@scomp/core` — contract tokens, peer, service builder, feed primitives, control plane, priority model, contract validation, middleware
 - `@scomp/types` — wire protocol types, contract type utilities, security types
 - `@scomp/client` — typed client proxy (provides `clientFactory` for peer model)
-- `@scomp/transport-shared` — cross-transport utilities (meta composition, security, parsing, feed detection)
+- `@scomp/transport-shared` — cross-transport utilities (meta composition, parsing, feed detection)
 - `@scomp/transport-websocket-shared` — WebSocket adapter abstraction (`ISocketAdapter`, `NodeSocketAdapter`, `BrowserSocketAdapter`)
 - `@scomp/transport-websocket-client` — unified WebSocket client (Node + Browser via socket adapters)
 - `@scomp/transport-websocket-server` — unified WebSocket server (Bun + Node entry points)
@@ -169,8 +196,10 @@ The websocket server package supports both runtimes from a single package:
 
 ## Security
 
-- `meta.auth` is opaque and transport-agnostic; validate identity on the server.
-- Browser-side security hooks are client policy, not a trust boundary.
+Security is enforced via middleware at the peer level (see Middleware section above).
+
+- `meta.auth` is opaque and transport-agnostic; validate identity on the server peer.
+- Browser-side middleware is client policy, not a trust boundary.
 - Control plane routes (`__scomp.*`) should be internal-only by default.
 - Priority hints are advisory metadata unless enforced by transport/policy.
 
