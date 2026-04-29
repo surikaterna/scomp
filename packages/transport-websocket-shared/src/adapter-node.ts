@@ -31,6 +31,10 @@ export class NodeSocketAdapter implements ISocketAdapter {
     this.socket.close();
   }
 
+  terminate(): void {
+    this.socket.terminate();
+  }
+
   onOpen(handler: () => void): void {
     this.socket.on("open", handler);
   }

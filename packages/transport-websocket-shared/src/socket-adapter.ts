@@ -12,6 +12,7 @@ export interface ISocketAdapter {
   readonly readyState: number;
   send(data: string): void;
   close(): void;
+  terminate?(): void;
   onOpen(handler: () => void): void;
   onMessage(handler: (text: string) => void): void;
   onClose(handler: () => void): void;

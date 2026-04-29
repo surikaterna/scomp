@@ -7,8 +7,7 @@
   "scripts": {
     "build": "tsc -b tsconfig.json",
     "lint": "bunx tsc -b tsconfig.json --pretty false",
-    "test": "bun test ./test",
-    "test:node": "jest --config jest.config.cjs"
+    "test": "vitest run && bun test ./test/websocket-transport.bun.spec.ts"
   },
   "dependencies": {
     "@scomp/core": "workspace:*",

@@ -56,7 +56,11 @@ export class WebSocketClientTransport implements ITransport {
     if (!socket) return;
     if (socket.readyState >= 2) return;
     try {
-      socket.close();
+      if (socket.terminate) {
+        socket.terminate();
+      } else {
+        socket.close();
+      }
     } catch {
       /* no-op */
     }
