@@ -4,26 +4,21 @@ import type {
   ScompFeedChunkEnvelope,
   ScompSerializer,
   ScompTransportMessageMeta,
-  ScompTransportPrincipal,
   ScompTransportRequestEnvelope,
   ScompTransportResponseEnvelope,
 } from "@scomp/types";
 import type { Channel } from "amqplib";
 import {
   toPriorityMeta,
-  toPrincipalMeta,
   mergeMeta,
 } from "@scomp/transport-shared";
 import {
-  checkTransportSecurity,
   type RabbitMQTransportEvent,
-  type RabbitMQTransportSecurityConfig,
   toServiceName,
   toRpcQueue,
 } from "./types";
 
 export interface ClientContext {
-  security?: RabbitMQTransportSecurityConfig;
   serializer: ScompSerializer;
   contentType: string;
   configMeta?:
@@ -70,23 +65,6 @@ export async function sendRpc(
     priorityMeta,
   );
   ctx.emitPriorityDecision("outbound", route, op, baseMeta);
-  const { allowed, principal } = await checkTransportSecurity(ctx.security, {
-    direction: "outbound",
-    transport: "rabbitmq",
-    route,
-    operation: op,
-    payload,
-    meta: baseMeta,
-  });
-  if (!allowed) {
-    ctx.emitEvent({
-      type: "security_denied",
-      route,
-      operation: op,
-      direction: "outbound",
-    });
-    throw new Error(`${op} not authorized for route: ${route}`);
-  }
 
   if (ctx.requestResolvers.size >= ctx.getMaxInFlightRequests()) {
     throw new Error(
@@ -110,7 +88,7 @@ export async function sendRpc(
     route,
     payload,
     op,
-    meta: mergeMeta(baseMeta, toPrincipalMeta(principal)),
+    meta: baseMeta,
   } satisfies ScompTransportRequestEnvelope);
   ctx.assertPayloadSize(body);
 

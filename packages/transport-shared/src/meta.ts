@@ -1,7 +1,6 @@
 import type {
   ScompClientInvokeOptions,
   ScompTransportMessageMeta,
-  ScompTransportPrincipal,
 } from "@scomp/types";
 
 export function toPriorityMeta(
@@ -36,27 +35,6 @@ export function toPriorityMeta(
   }
 
   return meta;
-}
-
-export function toPrincipalMeta(
-  principal: ScompTransportPrincipal | undefined,
-): ScompTransportMessageMeta | undefined {
-  if (!principal) {
-    return undefined;
-  }
-
-  return {
-    auth: {
-      subject: principal.subject,
-      tenantId: principal.tenantId,
-      scopes: principal.scopes,
-      claims: principal.claims,
-      issuedAt: principal.issuedAt,
-      expiresAt: principal.expiresAt,
-      authType: principal.authType,
-    },
-    tenantId: principal.tenantId,
-  };
 }
 
 export function mergeMeta(

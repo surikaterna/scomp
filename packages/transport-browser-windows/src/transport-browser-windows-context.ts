@@ -19,12 +19,6 @@ export interface BrowserWindowsHostContextInput {
   getRouter(): Record<string, RuntimeRoute>;
   hostedFeeds: Map<string, HostedFeedState>;
   postMessage(message: unknown): void;
-  assertInboundAllowed(
-    route: string,
-    operation: "request" | "signal" | "feed",
-    payload: unknown,
-    meta: unknown,
-  ): Promise<void>;
 }
 
 export function createHostContext(input: BrowserWindowsHostContextInput) {
@@ -35,7 +29,6 @@ export function createHostContext(input: BrowserWindowsHostContextInput) {
     },
     hostedFeeds: input.hostedFeeds,
     postMessage: input.postMessage,
-    assertInboundAllowed: input.assertInboundAllowed,
   };
 }
 
@@ -64,7 +57,7 @@ export interface BrowserWindowsClientContextInput {
     operation: "request" | "signal" | "feed",
     payload: unknown,
     options?: ScompClientInvokeOptions,
-  ): Promise<{ meta: ScompTransportMessageMeta | undefined }>;
+  ): Promise<ScompTransportMessageMeta | undefined>;
 }
 
 export function createClientContext(input: BrowserWindowsClientContextInput) {
@@ -108,18 +101,12 @@ export interface BrowserWindowsTransportContextInput {
     route: string,
     operation: ScompTransportOperation,
   ): void;
-  assertInboundAllowed(
-    route: string,
-    operation: "request" | "signal" | "feed",
-    payload: unknown,
-    meta: unknown,
-  ): Promise<void>;
   composeMetaForOperation(
     route: string,
     operation: "request" | "signal" | "feed",
     payload: unknown,
     options?: ScompClientInvokeOptions,
-  ): Promise<{ meta: ScompTransportMessageMeta | undefined }>;
+  ): Promise<ScompTransportMessageMeta | undefined>;
 }
 
 export function createTransportContexts(
@@ -134,7 +121,6 @@ export function createTransportContexts(
       getRouter: input.getRouter,
       hostedFeeds: input.hostedFeeds,
       postMessage: input.postMessage,
-      assertInboundAllowed: input.assertInboundAllowed,
     }),
     clientContext: createClientContext({
       participantId: input.participantId,

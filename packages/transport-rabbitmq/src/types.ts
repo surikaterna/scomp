@@ -2,10 +2,7 @@ import type { CompiledRoute, ScompPriorityDecision } from "@scomp/core";
 import { resolveScompPriority } from "@scomp/core";
 import type {
   ScompTransportMessageMeta,
-  ScompTransportPrincipal,
   ScompTransportRequestEnvelope,
-  ScompTransportSecurityContext,
-  ScompTransportSecurityPolicy,
 } from "@scomp/types";
 
 export const SIGNAL_EXCHANGE = "scomp.signals";
@@ -33,13 +30,6 @@ export interface RabbitMQTransportRetryConfig {
 export interface RabbitMQTransportSecurityConfig {
   requireTls?: boolean;
   maxPayloadBytes?: number;
-  policy?: ScompTransportSecurityPolicy;
-  authorize?: (ctx: {
-    direction: "inbound" | "outbound";
-    route: string;
-    operation: string;
-    payload: unknown;
-  }) => boolean | Promise<boolean>;
 }
 
 export interface RabbitMQTransportPerformanceConfig {
@@ -78,12 +68,6 @@ export type RabbitMQTransportEvent =
   | { type: "feed_stopped"; route: string; hash: string }
   | { type: "feed_aborted"; hash: string }
   | { type: "publish_return"; exchange: string }
-  | {
-      type: "security_denied";
-      route: string;
-      operation: string;
-      direction: "inbound" | "outbound";
-    }
   | {
       type: "priority_decision";
       direction: "inbound" | "outbound";
@@ -126,39 +110,6 @@ export function toRpcQueue(serviceName: string): string {
 
 export function toFeedExchange(hash: string): string {
   return `scomp.live.${hash}`;
-}
-
-export async function checkTransportSecurity(
-  security: RabbitMQTransportSecurityConfig | undefined,
-  ctx: Omit<ScompTransportSecurityContext, "principal">,
-): Promise<{ allowed: boolean; principal?: ScompTransportPrincipal }> {
-  const policy = security?.policy;
-
-  const principal = policy?.authenticate
-    ? await policy.authenticate(ctx)
-    : undefined;
-
-  if (policy?.authorize) {
-    const allowed = Boolean(
-      await policy.authorize({ ...ctx, principal: principal ?? undefined }),
-    );
-    return { allowed, principal: principal ?? undefined };
-  }
-
-  const legacyAuthorize = security?.authorize;
-  if (legacyAuthorize) {
-    const allowed = Boolean(
-      await legacyAuthorize({
-        direction: ctx.direction,
-        route: ctx.route,
-        operation: ctx.operation,
-        payload: ctx.payload,
-      }),
-    );
-    return { allowed, principal: principal ?? undefined };
-  }
-
-  return { allowed: true, principal: principal ?? undefined };
 }
 
 export function buildPriorityDecisionEvent(

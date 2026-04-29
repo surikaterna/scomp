@@ -26,7 +26,7 @@ export interface HostedFeedState {
 
 export interface RuntimeRoute {
   parser?: (payload: unknown) => unknown;
-  handler: (payload: unknown) => unknown;
+  handler: (payload: unknown, ctx?: unknown) => unknown;
   kind?: "request" | "signal" | "feed";
 }
 

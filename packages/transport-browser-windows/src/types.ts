@@ -1,6 +1,5 @@
 import type {
   ScompTransportMessageMeta,
-  ScompTransportSecurityPolicy,
 } from "@scomp/types";
 
 export type BrowserWindowsTransportMode = "shared-worker" | "broadcast-channel";
@@ -84,7 +83,6 @@ export interface BrowserWindowsTransportConfig {
   meta?:
     | ScompTransportMessageMeta
     | (() => ScompTransportMessageMeta | Promise<ScompTransportMessageMeta>);
-  security?: ScompTransportSecurityPolicy;
   health?: BrowserWindowsTransportHealthConfig;
 }
 

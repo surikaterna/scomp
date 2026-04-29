@@ -46,7 +46,7 @@ export interface BrowserWindowsTransportClientContext {
     operation: "request" | "signal" | "feed",
     payload: unknown,
     options?: ScompClientInvokeOptions,
-  ): Promise<{ meta: ScompTransportMessageMeta | undefined }>;
+  ): Promise<ScompTransportMessageMeta | undefined>;
 }
 
 export async function requestWithContext(
@@ -69,9 +69,7 @@ export async function requestWithContext(
   let meta: ScompTransportMessageMeta | undefined;
   try {
     context.assertOutboundAllowed(route, "request");
-    meta = (
-      await context.composeMetaForOperation(route, "request", payload, options)
-    ).meta;
+    meta = await context.composeMetaForOperation(route, "request", payload, options);
   } finally {
     context.decrementPreparingRequests();
   }
@@ -122,7 +120,7 @@ export async function signalWithContext(
   options?: ScompClientInvokeOptions,
 ): Promise<void> {
   context.assertOutboundAllowed(route, "signal");
-  const { meta } = await context.composeMetaForOperation(
+  const meta = await context.composeMetaForOperation(
     route,
     "signal",
     payload,
@@ -170,9 +168,7 @@ export function feedWithContext(
 
       try {
         context.assertOutboundAllowed(route, "feed");
-        const feedStartMeta = (
-          await context.composeMetaForOperation(route, "feed", payload, options)
-        ).meta;
+        const feedStartMeta = await context.composeMetaForOperation(route, "feed", payload, options);
         state.meta = feedStartMeta;
 
         context.postMessage({
@@ -221,14 +217,12 @@ export function feedWithContext(
         context.feedStates.delete(requestId);
         if (feedStarted && !state.stopSent) {
           context.assertOutboundAllowed(route, "signal");
-          const feedStopMeta = (
-            await context.composeMetaForOperation(
+          const feedStopMeta = await context.composeMetaForOperation(
               route,
               "signal",
               { payloadKey: state.payloadKey, payloadHash: state.payloadHash },
               options,
-            )
-          ).meta;
+            );
           state.meta = feedStopMeta;
 
           context.postMessage({

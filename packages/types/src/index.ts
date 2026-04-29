@@ -35,8 +35,6 @@ export {
   type ScompControlPlaneSuccessResponseEnvelope,
   type ScompTransportMessageMeta,
   type ScompTransportPrincipal,
-  type ScompTransportSecurityContext,
-  type ScompTransportSecurityPolicy,
   type ScompFeedChunk,
   type ScompFeedChunkEnvelope,
   type ScompFeedChunkType,

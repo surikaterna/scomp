@@ -1,4 +1,8 @@
-import { type CompiledRoute, createFeedHash } from "@scomp/core";
+import {
+  type CompiledRoute,
+  createFeedHash,
+  type ScompHandlerContext,
+} from "@scomp/core";
 import {
   type ScompErrorCode,
   type ScompTransportRequestEnvelope,
@@ -6,9 +10,7 @@ import {
 } from "@scomp/types";
 import type { Channel, ConsumeMessage } from "amqplib";
 import {
-  checkTransportSecurity,
   type RabbitMQTransportEvent,
-  type RabbitMQTransportSecurityConfig,
   type RunningFeed,
   type RouterTable,
   toFeedExchange,
@@ -17,7 +19,6 @@ import { publishFeed } from "./rabbitmq-feed";
 
 export interface RpcContext {
   router?: RouterTable;
-  security?: RabbitMQTransportSecurityConfig;
   getChannel: () => Promise<Channel>;
   serializeToBuffer: (value: unknown) => Buffer;
   deserializeFromBuffer: <T = unknown>(value: Buffer) => T;
@@ -45,30 +46,6 @@ export async function handleRpcMessage(
   );
   const route = String(body.route ?? "");
   ctx.emitPriorityDecision("inbound", route, body.op, body.meta);
-  const { allowed } = await checkTransportSecurity(ctx.security, {
-    direction: "inbound",
-    transport: "rabbitmq",
-    route,
-    operation: body.op,
-    payload: body.payload,
-    meta: body.meta,
-  });
-  if (!allowed) {
-    channel.ack(message);
-    ctx.emitEvent({
-      type: "security_denied",
-      route,
-      operation: body.op,
-      direction: "inbound",
-    });
-    replyWithError(
-      ctx,
-      message,
-      `Inbound operation not authorized for route: ${route}`,
-      "UNAUTHORIZED",
-    );
-    return;
-  }
 
   const routeEntry = ctx.router?.[route];
 
@@ -84,16 +61,30 @@ export async function handleRpcMessage(
   }
 
   if (routeEntry.kind === "feed") {
-    await handleFeedRpc(ctx, routeEntry, message, body);
+    const handlerCtx: ScompHandlerContext = {
+      route,
+      operation: "feed",
+      meta: body.meta,
+    };
+    await handleFeedRpc(ctx, routeEntry, message, body, handlerCtx);
     channel.ack(message);
     return;
   }
 
   try {
-    const output = await invokeRoute(routeEntry, body);
+    const handlerCtx: ScompHandlerContext = {
+      route,
+      operation: body.op as ScompHandlerContext["operation"],
+      meta: body.meta,
+    };
+    const output = await invokeRoute(routeEntry, body, handlerCtx);
     replyWithPayload(ctx, message, output);
   } catch (error) {
-    replyWithError(ctx, message, error);
+    const code =
+      (error as any)?.code === "UNAUTHORIZED"
+        ? ("UNAUTHORIZED" as ScompErrorCode)
+        : undefined;
+    replyWithError(ctx, message, error, code);
   } finally {
     channel.ack(message);
   }
@@ -104,6 +95,7 @@ async function handleFeedRpc(
   route: CompiledRoute,
   message: ConsumeMessage,
   body: ScompTransportRequestEnvelope,
+  handlerCtx: ScompHandlerContext,
 ): Promise<void> {
   const rawPayload = body.payload;
   const parsedPayload = route.parser ? route.parser(rawPayload) : rawPayload;
@@ -140,7 +132,7 @@ async function handleFeedRpc(
   ctx.exchangeToFeedKey.set(exchange, hash);
   ctx.emitEvent({ type: "feed_started", route: route.route, hash });
 
-  const iterable = route.handler(parsedPayload) as AsyncIterable<unknown>;
+  const iterable = route.handler(parsedPayload, handlerCtx) as AsyncIterable<unknown>;
   void publishFeed(
     channel,
     runningFeed,
@@ -159,9 +151,10 @@ async function handleFeedRpc(
 function invokeRoute(
   route: CompiledRoute,
   body: ScompTransportRequestEnvelope,
+  ctx?: ScompHandlerContext,
 ): Promise<unknown> {
   const payload = route.parser ? route.parser(body.payload) : body.payload;
-  return route.handler(payload) as Promise<unknown>;
+  return route.handler(payload, ctx) as Promise<unknown>;
 }
 
 export function replyWithPayload(
