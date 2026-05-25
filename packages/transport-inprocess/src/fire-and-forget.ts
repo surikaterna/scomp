@@ -1,5 +1,5 @@
-import type { AnyServiceDefinition, FireAndForgetErrorHandler } from "./types";
 import { invokeServiceMethod } from "./service-invoker";
+import type { AnyServiceDefinition, FireAndForgetErrorHandler } from "./types";
 
 function reportFireAndForgetError(
   error: unknown,

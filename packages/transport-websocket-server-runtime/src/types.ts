@@ -1,10 +1,10 @@
 import type { CompiledRoute, ControlledAsyncIterable, ScompHandlerContext } from "@scomp/core";
+import { safeJsonParse } from "@scomp/transport-shared";
 import type {
   ScompFeedChunkEnvelope,
   ScompTransportRequestEnvelope,
   ScompTransportResponseEnvelope,
 } from "@scomp/types";
-import { safeJsonParse } from "@scomp/transport-shared";
 
 export class StreamClosedError extends Error {
   constructor(streamHash: string) {

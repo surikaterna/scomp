@@ -1,11 +1,11 @@
 import type { BrowserWindowsInvokeFeedChunkMessage, BrowserWindowsInvokeResponseMessage } from "./protocol";
 import { handleInvokeFeedChunkMessage, handleInvokeResponseMessage } from "./transport-browser-windows-client";
+import type { FeedQueueState, PendingRequestState } from "./transport-browser-windows-state";
 import type {
   BrowserWindowsRequestId,
   BrowserWindowsTransportHealthReasonCode,
   BrowserWindowsTransportHealthStatus,
 } from "./types";
-import type { FeedQueueState, PendingRequestState } from "./transport-browser-windows-state";
 
 type HealthReporter = (
   code: BrowserWindowsTransportHealthReasonCode,

@@ -1,5 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { type ITransport, type ScompClientInvokeOptions, ScompFrameworkMethods } from "@scomp/core";
+import {
+  isFeedChunkEnvelope,
+  mergeMeta,
+  safeJsonParse,
+  type TransportMessage,
+  toPriorityMeta,
+} from "@scomp/transport-shared";
+import { type ISocketAdapter, SOCKET_OPEN } from "@scomp/transport-websocket-shared";
 import type {
   ScompFeedChunkEnvelope,
   ScompTransportMessageMeta,
@@ -8,25 +16,17 @@ import type {
   ScompTransportResponseEnvelope,
 } from "@scomp/types";
 import {
-  toPriorityMeta,
-  mergeMeta,
-  safeJsonParse,
-  isFeedChunkEnvelope,
-  type TransportMessage,
-} from "@scomp/transport-shared";
-import { type ISocketAdapter, SOCKET_OPEN } from "@scomp/transport-websocket-shared";
-import {
-  SocketDisconnectedError,
-  RequestTimeoutError,
-  InFlightLimitError,
-  enqueueFeedChunk,
-  drainPendingFeedChunks,
-  handleDisconnect,
   createSocketConnection,
+  drainPendingFeedChunks,
+  enqueueFeedChunk,
+  type FeedState,
+  handleDisconnect,
+  InFlightLimitError,
+  type PendingRequest,
+  RequestTimeoutError,
+  SocketDisconnectedError,
   type WebSocketClientTransportConfig,
   type WebSocketTransportEvent,
-  type PendingRequest,
-  type FeedState,
 } from "./client-types";
 import { runReconnectLoop } from "./reconnect";
 

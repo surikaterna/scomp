@@ -1,17 +1,36 @@
 {
   "name": "@scomp/transport-websocket-shared",
-  "version": "0.0.1",
-  "private": true,
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "version": "0.1.0-pre",
+  "description": "Shared WebSocket utilities for scomp transports",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/surikaterna/scomp.git", "directory": "packages/transport-websocket-shared" },
+  "keywords": ["scomp", "service-composition", "microservices", "rpc"],
+  "engines": { "node": ">=18" },
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "tsc -b tsconfig.json",
+    "build": "tsup",
+    "lint": "bunx @biomejs/biome check src/",
     "test": "echo \"No tests configured for @scomp/transport-websocket-shared\""
   },
   "dependencies": {
     "ws": "^8.18.3"
   },
+  "peerDependencies": {
+    "@scomp/core": "workspace:*"
+  },
   "devDependencies": {
+    "@scomp/core": "workspace:*",
+    "@scomp/types": "workspace:*",
     "@types/ws": "^8.18.1"
   }
 }

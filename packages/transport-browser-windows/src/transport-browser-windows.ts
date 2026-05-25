@@ -5,8 +5,31 @@ import type {
   BrowserWindowsInvokeResponseMessage,
   BrowserWindowsProtocolMessage,
 } from "./protocol";
+import type { BrowserWindowsRuntimeEvent } from "./shared-worker-connector";
 import { createRuntimeConnector } from "./shared-worker-connector";
 import { createParticipantId } from "./shared-worker-internal";
+import { feedWithContext, requestWithContext, signalWithContext } from "./transport-browser-windows-client";
+import { createTransportContexts } from "./transport-browser-windows-context";
+import { dispatchIncomingMessage } from "./transport-browser-windows-dispatch";
+import { createTransportHealthStore } from "./transport-browser-windows-health";
+import { reportRuntimeHealthEvent, reportUnavailableConnectorError } from "./transport-browser-windows-health-events";
+import {
+  handleHostFeedStart,
+  handleHostFeedStop,
+  handleHostRequest,
+  handleHostSignal,
+} from "./transport-browser-windows-host";
+import { processInvokeFeedChunk, processInvokeResponse } from "./transport-browser-windows-invoke";
+import { sendHello, shutdownTransport, syncRoutes } from "./transport-browser-windows-lifecycle";
+import { composeOutboundMeta } from "./transport-browser-windows-meta";
+import { publishMessageWithHealth } from "./transport-browser-windows-publish";
+import { assertStrictRouteIntentAllowed } from "./transport-browser-windows-route-intents";
+import type {
+  FeedQueueState,
+  HostedFeedState,
+  PendingRequestState,
+  RuntimeRoute,
+} from "./transport-browser-windows-state";
 import type {
   BrowserWindowsParticipantId,
   BrowserWindowsRequestId,
@@ -15,29 +38,6 @@ import type {
   BrowserWindowsTransportHealthSnapshot,
   BrowserWindowsTransportMode,
 } from "./types";
-import type {
-  HostedFeedState,
-  FeedQueueState,
-  PendingRequestState,
-  RuntimeRoute,
-} from "./transport-browser-windows-state";
-import {
-  handleHostFeedStart,
-  handleHostFeedStop,
-  handleHostRequest,
-  handleHostSignal,
-} from "./transport-browser-windows-host";
-import { feedWithContext, requestWithContext, signalWithContext } from "./transport-browser-windows-client";
-import { createTransportHealthStore } from "./transport-browser-windows-health";
-import type { BrowserWindowsRuntimeEvent } from "./shared-worker-connector";
-import { createTransportContexts } from "./transport-browser-windows-context";
-import { dispatchIncomingMessage } from "./transport-browser-windows-dispatch";
-import { reportRuntimeHealthEvent, reportUnavailableConnectorError } from "./transport-browser-windows-health-events";
-import { processInvokeFeedChunk, processInvokeResponse } from "./transport-browser-windows-invoke";
-import { publishMessageWithHealth } from "./transport-browser-windows-publish";
-import { composeOutboundMeta } from "./transport-browser-windows-meta";
-import { sendHello, shutdownTransport, syncRoutes } from "./transport-browser-windows-lifecycle";
-import { assertStrictRouteIntentAllowed } from "./transport-browser-windows-route-intents";
 
 export class BrowserWindowsTransport implements ITransport {
   private static readonly DEFAULT_REQUEST_TIMEOUT_MS = 30_000;

@@ -1,11 +1,11 @@
 import type {
-  BrowserWindowsProtocolMessage,
-  BrowserWindowsInvokeFeedChunkMessage,
-  BrowserWindowsInvokeResponseMessage,
   BrowserWindowsHostFeedStartMessage,
   BrowserWindowsHostFeedStopMessage,
   BrowserWindowsHostRequestMessage,
   BrowserWindowsHostSignalMessage,
+  BrowserWindowsInvokeFeedChunkMessage,
+  BrowserWindowsInvokeResponseMessage,
+  BrowserWindowsProtocolMessage,
 } from "./protocol";
 
 export interface BrowserWindowsMessageHandlers {

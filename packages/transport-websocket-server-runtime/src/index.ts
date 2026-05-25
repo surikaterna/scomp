@@ -1,28 +1,28 @@
 import {
+  type CompiledRoute,
+  createFeedHash,
   SCOMP_FRAMEWORK_PREFIX,
   SCOMP_SCOPE,
   ScompFrameworkMethods,
-  createFeedHash,
-  type CompiledRoute,
   type ScompHandlerContext,
 } from "@scomp/core";
 import type { ScompErrorCode, ScompFeedChunkEnvelope, ScompTransportMessageMeta } from "@scomp/types";
 import {
-  StreamClosedError,
   ensureFeedIterable,
   isControlledAsyncIterable,
   type RunningFeed,
   type RuntimeSocket,
+  StreamClosedError,
   type TransportMessage,
   type WebSocketServerRuntimeConfig,
 } from "./types";
 
-export { StreamClosedError, parseTransportMessage } from "./types";
 export type {
   RuntimeSocket,
   TransportMessage,
   WebSocketServerRuntimeConfig,
 } from "./types";
+export { parseTransportMessage, StreamClosedError } from "./types";
 
 type FeedChunkData = {
   feed: string;

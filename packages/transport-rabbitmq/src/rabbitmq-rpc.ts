@@ -1,8 +1,8 @@
 import { type CompiledRoute, createFeedHash, type ScompHandlerContext } from "@scomp/core";
 import type { ScompErrorCode, ScompTransportRequestEnvelope, ScompTransportResponseEnvelope } from "@scomp/types";
 import type { Channel, ConsumeMessage } from "amqplib";
-import { type RabbitMQTransportEvent, type RunningFeed, type RouterTable, toFeedExchange } from "./types";
 import { publishFeed } from "./rabbitmq-feed";
+import { type RabbitMQTransportEvent, type RouterTable, type RunningFeed, toFeedExchange } from "./types";
 
 export interface RpcContext {
   router?: RouterTable;

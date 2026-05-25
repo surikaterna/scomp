@@ -1,16 +1,16 @@
-import type { ContractToken } from "./contract-token";
-import type { CompiledRouter, CompiledRoute, ServiceDefinition } from "./builder";
+import type { CompiledRoute, CompiledRouter, ServiceDefinition } from "./builder";
 import { createScompService } from "./builder";
-import type { ITransport } from "./transport";
-import type { ScompMiddleware, ScompHandlerContext, ScompMiddlewareContext, ScompMiddlewareFn } from "./middleware";
-import { createMiddlewareTransport } from "./middleware-transport";
-import { getMiddlewareFns, runMiddlewareChain } from "./middleware";
-import { ScompControlPlane } from "./control-plane-contract";
+import type { ContractToken } from "./contract-token";
 import {
   createNodeLocalDiscoverHandler,
   createNodeLocalHealthHandler,
   createNodeLocalResolveHandler,
 } from "./control-plane";
+import { ScompControlPlane } from "./control-plane-contract";
+import type { ScompHandlerContext, ScompMiddleware, ScompMiddlewareContext, ScompMiddlewareFn } from "./middleware";
+import { getMiddlewareFns, runMiddlewareChain } from "./middleware";
+import { createMiddlewareTransport } from "./middleware-transport";
+import type { ITransport } from "./transport";
 
 /**
  * Factory that creates a typed client proxy from a transport and contract token.

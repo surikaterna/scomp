@@ -1,6 +1,6 @@
-import type { SocketAdapterFactory } from "@scomp/transport-websocket-shared";
-import { WebSocketClientTransport, type WebSocketClientTransportConfig } from "@scomp/transport-websocket-client";
 import type { ITransport } from "@scomp/core";
+import { WebSocketClientTransport, type WebSocketClientTransportConfig } from "@scomp/transport-websocket-client";
+import type { SocketAdapterFactory } from "@scomp/transport-websocket-shared";
 
 /**
  * Outbound client config with an optional socketAdapter.

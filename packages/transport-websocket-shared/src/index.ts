@@ -1,7 +1,7 @@
-export { SOCKET_OPEN, type ISocketAdapter, type SocketAdapterFactory } from "./socket-adapter";
-export { NodeSocketAdapter, createNodeSocketAdapterFactory } from "./adapter-node";
 export {
   BrowserSocketAdapter,
-  createBrowserSocketAdapterFactory,
   type BrowserWebSocketCtor,
+  createBrowserSocketAdapterFactory,
 } from "./adapter-browser";
+export { createNodeSocketAdapterFactory, NodeSocketAdapter } from "./adapter-node";
+export { type ISocketAdapter, SOCKET_OPEN, type SocketAdapterFactory } from "./socket-adapter";

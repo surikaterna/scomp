@@ -1,6 +1,5 @@
 import type { BrowserWindowsProtocolMessage } from "./protocol";
-import type { BrowserWindowsParticipantId } from "./types";
-import { createBrokerState, type BrokerContext } from "./shared-worker-broker-context";
+import { type BrokerContext, createBrokerState } from "./shared-worker-broker-context";
 import { cleanupDisconnectedParticipant } from "./shared-worker-broker-disconnect";
 import {
   handleHostFeedChunk,
@@ -12,6 +11,7 @@ import {
   handleInvokeSignal,
 } from "./shared-worker-broker-dispatch";
 import { registerRoutes, unregisterRoutes } from "./shared-worker-broker-routes";
+import type { BrowserWindowsParticipantId } from "./types";
 
 export interface BrowserWindowsMessagePortLike {
   postMessage(message: BrowserWindowsProtocolMessage): void;

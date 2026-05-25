@@ -1,15 +1,31 @@
 {
   "name": "@scomp/core",
-  "version": "0.1.0",
-  "private": true,
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "version": "0.1.0-pre",
+  "description": "Core runtime for the scomp service composition framework",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/surikaterna/scomp.git", "directory": "packages/core" },
+  "keywords": ["scomp", "service-composition", "microservices", "rpc"],
+  "engines": { "node": ">=18" },
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "tsc -b tsconfig.json",
-    "lint": "echo \"No lint configured for @scomp/core\"",
+    "build": "tsup",
+    "lint": "bunx @biomejs/biome check src/",
     "test": "vitest run"
   },
-  "dependencies": {
+  "peerDependencies": {
+    "@scomp/types": "workspace:*"
+  },
+  "devDependencies": {
     "@scomp/types": "workspace:*"
   }
 }

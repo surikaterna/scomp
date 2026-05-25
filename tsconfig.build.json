@@ -11,6 +11,7 @@
     { "path": "./packages/transport-websocket-client" },
     { "path": "./packages/transport-websocket-server-runtime" },
     { "path": "./packages/transport-websocket-server" },
+    { "path": "./packages/transport-websocket-shared" },
     { "path": "./apps/demo" }
   ]
 }

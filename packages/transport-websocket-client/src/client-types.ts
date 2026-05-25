@@ -1,5 +1,5 @@
-import type { ScompFeedChunkEnvelope, ScompTransportMessageMeta } from "@scomp/types";
 import type { ISocketAdapter, SocketAdapterFactory } from "@scomp/transport-websocket-shared";
+import type { ScompFeedChunkEnvelope, ScompTransportMessageMeta } from "@scomp/types";
 
 // ---------------------------------------------------------------------------
 // Errors

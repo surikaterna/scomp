@@ -1,29 +1,29 @@
-export { WebSocketClientTransport } from "./transport";
 export {
-  SocketDisconnectedError,
-  RequestTimeoutError,
-  InFlightLimitError,
-  FeedBackpressureError,
+  BrowserSocketAdapter,
+  type BrowserWebSocketCtor,
+  createBrowserSocketAdapterFactory,
+  createNodeSocketAdapterFactory,
+  type ISocketAdapter,
+  NodeSocketAdapter,
+  SOCKET_OPEN,
+  type SocketAdapterFactory,
+} from "@scomp/transport-websocket-shared";
+export {
   ConnectionTimeoutError,
+  FeedBackpressureError,
+  type FeedState,
+  InFlightLimitError,
+  RequestTimeoutError,
+  SocketDisconnectedError,
   type WebSocketClientTransportConfig,
   type WebSocketReconnectConfig,
   type WebSocketTransportEvent,
-  type FeedState,
 } from "./client-types";
-export { reconnectWithBackoff, type ReconnectOptions } from "./reconnect";
-export {
-  createBrowserSocketAdapterFactory,
-  type BrowserWebSocketCtor,
-  createNodeSocketAdapterFactory,
-  NodeSocketAdapter,
-  BrowserSocketAdapter,
-  type ISocketAdapter,
-  type SocketAdapterFactory,
-  SOCKET_OPEN,
-} from "@scomp/transport-websocket-shared";
+export { type ReconnectOptions, reconnectWithBackoff } from "./reconnect";
+export { WebSocketClientTransport } from "./transport";
 
-import { WebSocketClientTransport } from "./transport";
 import type { WebSocketClientTransportConfig } from "./client-types";
+import { WebSocketClientTransport } from "./transport";
 
 export function createWebSocketClientTransport(config: WebSocketClientTransportConfig): WebSocketClientTransport {
   return new WebSocketClientTransport(config);

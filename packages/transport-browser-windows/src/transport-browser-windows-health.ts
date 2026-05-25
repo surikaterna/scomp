@@ -1,10 +1,10 @@
 import type {
-  BrowserWindowsTransportMode,
   BrowserWindowsTransportHealthListener,
   BrowserWindowsTransportHealthReason,
   BrowserWindowsTransportHealthReasonCode,
   BrowserWindowsTransportHealthSnapshot,
   BrowserWindowsTransportHealthStatus,
+  BrowserWindowsTransportMode,
 } from "./types";
 
 export interface BrowserWindowsTransportHealthStore {

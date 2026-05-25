@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { ScompClientInvokeOptions } from "@scomp/core";
+import { mergeMeta, toPriorityMeta } from "@scomp/transport-shared";
 import type {
   ScompFeedChunkEnvelope,
   ScompSerializer,
@@ -8,8 +9,7 @@ import type {
   ScompTransportResponseEnvelope,
 } from "@scomp/types";
 import type { Channel } from "amqplib";
-import { toPriorityMeta, mergeMeta } from "@scomp/transport-shared";
-import { type RabbitMQTransportEvent, toServiceName, toRpcQueue } from "./types";
+import { type RabbitMQTransportEvent, toRpcQueue, toServiceName } from "./types";
 
 export interface ClientContext {
   serializer: ScompSerializer;

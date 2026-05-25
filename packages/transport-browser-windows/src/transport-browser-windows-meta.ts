@@ -1,6 +1,6 @@
 import type { ScompClientInvokeOptions } from "@scomp/core";
-import type { ScompTransportMessageMeta } from "@scomp/types";
 import { mergeMeta, toPriorityMeta } from "@scomp/transport-shared";
+import type { ScompTransportMessageMeta } from "@scomp/types";
 
 export async function composeOutboundMeta(
   configMeta:

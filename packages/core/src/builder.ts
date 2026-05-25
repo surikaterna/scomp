@@ -1,9 +1,9 @@
 import type { ContractNetworkIntent } from "@scomp/types";
-import type { ContractToken } from "./contract-token";
 import type {
   CombinedFragmentMethodNames,
   CompiledRoute,
   CompiledRouter,
+  DiagnoseContract,
   EnsureNoDuplicateFragmentMethods,
   FragmentDefinition,
   FragmentMethodImplementations,
@@ -11,12 +11,12 @@ import type {
   GroupedMethodImplementationsInput,
   GroupedServiceMethodImplementations,
   IsValidContract,
-  DiagnoseContract,
   ProvidedMethodKeys,
   ServiceDefinition,
   ServiceMethodImplementationsInput,
   StrictServiceImplementationChecks,
 } from "./builder-types";
+import type { ContractToken } from "./contract-token";
 
 export type {
   CompiledRoute,

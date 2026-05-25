@@ -1,9 +1,9 @@
 import {
-  ScompFeed,
-  createFeedHash,
   type ControlledAsyncIterable,
+  createFeedHash,
   type ITransport,
   type ScompClientInvokeOptions,
+  ScompFeed,
 } from "@scomp/core";
 import type {
   ContractRouteIntents,

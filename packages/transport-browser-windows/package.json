@@ -1,26 +1,38 @@
 {
   "name": "@scomp/transport-browser-windows",
-  "version": "0.1.0",
-  "private": true,
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "version": "0.1.0-pre",
+  "description": "Browser window messaging transport for scomp",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/surikaterna/scomp.git", "directory": "packages/transport-browser-windows" },
+  "keywords": ["scomp", "service-composition", "microservices", "rpc"],
+  "engines": { "node": ">=18" },
+  "sideEffects": false,
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
     },
     "./worker-entry": {
       "types": "./dist/worker-entry.d.ts",
-      "default": "./dist/worker-entry.js"
+      "import": "./dist/worker-entry.mjs",
+      "require": "./dist/worker-entry.js"
     }
   },
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "tsc -b tsconfig.json",
-    "lint": "bunx tsc -b tsconfig.json --pretty false",
+    "build": "tsup",
+    "lint": "bunx @biomejs/biome check src/",
     "test": "vitest run",
     "smoke:bundler": "bun ../../check-transport-browser-windows-bundler-smoke.mjs"
   },
-  "dependencies": {
+  "peerDependencies": {
+    "@scomp/core": "workspace:*",
+    "@scomp/transport-shared": "workspace:*"
+  },
+  "devDependencies": {
     "@scomp/core": "workspace:*",
     "@scomp/transport-shared": "workspace:*",
     "@scomp/types": "workspace:*"

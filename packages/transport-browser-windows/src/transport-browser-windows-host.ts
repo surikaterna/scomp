@@ -6,9 +6,9 @@ import type {
   BrowserWindowsHostRequestMessage,
   BrowserWindowsHostSignalMessage,
 } from "./protocol";
+import { toAsyncIterable, toError } from "./transport-browser-windows-runtime";
 import type { HostedFeedState, RuntimeRoute } from "./transport-browser-windows-state";
 import { routeOperation } from "./transport-browser-windows-state";
-import { toAsyncIterable, toError } from "./transport-browser-windows-runtime";
 
 interface HostContext {
   readonly participantId: string;

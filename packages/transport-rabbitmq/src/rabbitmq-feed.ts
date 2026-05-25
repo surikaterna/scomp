@@ -1,6 +1,6 @@
 import { once } from "node:events";
-import type { Channel } from "amqplib";
 import type { ScompFeedChunkEnvelope, ScompSerializer } from "@scomp/types";
+import type { Channel } from "amqplib";
 import type { RunningFeed } from "./types";
 
 export async function waitForChannelDrainIfNeeded(channel: Channel): Promise<void> {

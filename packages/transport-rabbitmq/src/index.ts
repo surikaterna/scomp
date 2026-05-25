@@ -1,23 +1,23 @@
 import { randomUUID } from "node:crypto";
 import type { ITransport, ScompClientInvokeOptions, ScompHandlerContext } from "@scomp/core";
-import type { ScompTransportMessageMeta, ScompSerializer, ScompTransportRequestEnvelope } from "@scomp/types";
+import { mergeMeta, toPriorityMeta } from "@scomp/transport-shared";
+import type { ScompSerializer, ScompTransportMessageMeta, ScompTransportRequestEnvelope } from "@scomp/types";
 import type { Channel, ChannelModel } from "amqplib";
-import { toPriorityMeta, mergeMeta } from "@scomp/transport-shared";
+import { type ClientContext, createFeedConsumer, sendRpc } from "./rabbitmq-client";
+import { connectWithRetry } from "./rabbitmq-connection";
+import { handleRpcMessage } from "./rabbitmq-rpc";
 import { defaultJsonSerializer } from "./serialization";
 import {
-  SIGNAL_EXCHANGE,
-  StreamClosedError,
   buildPriorityDecisionEvent,
-  type RunningFeed,
   type RabbitMQTransportConfig,
   type RabbitMQTransportEvent,
   type RouterTable,
-  toServiceName,
+  type RunningFeed,
+  SIGNAL_EXCHANGE,
+  StreamClosedError,
   toRpcQueue,
+  toServiceName,
 } from "./types";
-import { connectWithRetry } from "./rabbitmq-connection";
-import { handleRpcMessage } from "./rabbitmq-rpc";
-import { sendRpc, createFeedConsumer, type ClientContext } from "./rabbitmq-client";
 
 export class RabbitMQTransport implements ITransport {
   private readonly config: RabbitMQTransportConfig;
@@ -302,17 +302,16 @@ export function createRabbitMqTransport(config: RabbitMQTransportConfig): Rabbit
 }
 
 export {
-  StreamClosedError,
-  type RabbitMQTransportRetryConfig,
-  type RabbitMQTransportSecurityConfig,
-  type RabbitMQTransportPerformanceConfig,
-  type RabbitMQTransportEvent,
-  type RabbitMQTransportObservabilityConfig,
-  type RabbitMQTransportConfig,
-} from "./types";
-
-export {
   createJsonSerializer,
   defaultJsonSerializer,
   type ExtendedJsonSerializerOptions,
 } from "./serialization";
+export {
+  type RabbitMQTransportConfig,
+  type RabbitMQTransportEvent,
+  type RabbitMQTransportObservabilityConfig,
+  type RabbitMQTransportPerformanceConfig,
+  type RabbitMQTransportRetryConfig,
+  type RabbitMQTransportSecurityConfig,
+  StreamClosedError,
+} from "./types";

@@ -1,5 +1,5 @@
-import type { BrowserWindowsTransportMode } from "./types";
 import type { BrowserWindowsProtocolMessage } from "./protocol";
+import type { BrowserWindowsTransportMode } from "./types";
 
 export interface BrowserWindowsFallbackConnector {
   readonly activeMode: BrowserWindowsTransportMode;

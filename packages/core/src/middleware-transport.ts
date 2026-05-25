@@ -1,6 +1,6 @@
-import type { ITransport, ScompClientInvokeOptions } from "./transport";
 import type { ScompMiddleware, ScompMiddlewareContext } from "./middleware";
-import { runMiddlewareChain, getMiddlewareFns } from "./middleware";
+import { getMiddlewareFns, runMiddlewareChain } from "./middleware";
+import type { ITransport, ScompClientInvokeOptions } from "./transport";
 
 /**
  * Wraps an ITransport, intercepting outbound request/signal/feed calls

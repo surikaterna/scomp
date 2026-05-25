@@ -1,8 +1,8 @@
 import type {
-  ScompPriorityClass as TransportPriorityClass,
   ScompPriorityHint,
   ScompTransportMessageMeta,
   ScompTransportOperation,
+  ScompPriorityClass as TransportPriorityClass,
 } from "@scomp/types";
 
 export type ScompPriorityClass = TransportPriorityClass;

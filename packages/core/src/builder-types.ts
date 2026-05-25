@@ -1,4 +1,4 @@
-import type { AnyContractMethod, ContractNetworkIntent, ContractMethodInput } from "@scomp/types";
+import type { AnyContractMethod, ContractMethodInput, ContractNetworkIntent } from "@scomp/types";
 
 // ---------------------------------------------------------------------------
 // Contract validation types (compile-time only, zero runtime cost)
