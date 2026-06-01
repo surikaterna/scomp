@@ -19,7 +19,7 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsup",
-    "lint": "bunx @biomejs/biome check src/",
+    "lint": "biome check src/",
     "test": "vitest run && bun test ./test/websocket-transport.bun.spec.ts"
   },
   "dependencies": {

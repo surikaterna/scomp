@@ -19,7 +19,7 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsup",
-    "lint": "bunx @biomejs/biome check src/",
+    "lint": "biome check src/",
     "test": "echo \"No tests configured for @scompr/transport-websocket-shared\""
   },
   "dependencies": {
