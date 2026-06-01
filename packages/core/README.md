@@ -1,4 +1,6 @@
-# @scomp/core
+# @scompr/core
+
+> Part of the sComPR framework (formerly "scomp")
 
 Core runtime for the scomp service composition framework.
 
@@ -7,15 +9,15 @@ Provides service registration, discovery, and invocation primitives that all tra
 ## Installation
 
 ```bash
-npm install @scomp/core
+npm install @scompr/core
 # or
-bun add @scomp/core
+bun add @scompr/core
 ```
 
 ## Usage
 
 ```ts
-import { createServiceHost } from "@scomp/core";
+import { createServiceHost } from "@scompr/core";
 ```
 
 ## License

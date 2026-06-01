@@ -1,7 +1,7 @@
 {
-  "name": "@scomp/transport-rabbitmq",
+  "name": "@scompr/transport-rabbitmq",
   "version": "0.0.0",
-  "description": "RabbitMQ transport for scomp",
+  "description": "RabbitMQ transport for sComPR",
   "license": "MIT",
   "repository": { "type": "git", "url": "https://github.com/surikaterna/scomp.git", "directory": "packages/transport-rabbitmq" },
   "keywords": ["scomp", "service-composition", "microservices", "rpc"],
@@ -26,14 +26,14 @@
     "amqplib": "^0.10.9"
   },
   "peerDependencies": {
-    "@scomp/core": "workspace:*",
-    "@scomp/transport-shared": "workspace:*"
+    "@scompr/core": "workspace:*",
+    "@scompr/transport-shared": "workspace:*"
   },
   "devDependencies": {
-    "@scomp/client": "workspace:*",
-    "@scomp/core": "workspace:*",
-    "@scomp/transport-shared": "workspace:*",
-    "@scomp/transport-websocket-client": "workspace:*",
-    "@scomp/types": "workspace:*"
+    "@scompr/client": "workspace:*",
+    "@scompr/core": "workspace:*",
+    "@scompr/transport-shared": "workspace:*",
+    "@scompr/transport-websocket-client": "workspace:*",
+    "@scompr/types": "workspace:*"
   }
 }

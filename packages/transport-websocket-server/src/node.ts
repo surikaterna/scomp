@@ -1,11 +1,11 @@
-import type { CompiledRoute, ITransport, ScompClientInvokeOptions } from "@scomp/core";
-import { parseTransportMessage, WebSocketServerRuntime } from "@scomp/transport-websocket-server-runtime";
-import { createNodeSocketAdapterFactory } from "@scomp/transport-websocket-shared";
+import type { CompiledRoute, ITransport, ScompClientInvokeOptions } from "@scompr/core";
+import { parseTransportMessage, WebSocketServerRuntime } from "@scompr/transport-websocket-server-runtime";
+import { createNodeSocketAdapterFactory } from "@scompr/transport-websocket-shared";
 import type {
   ScompFeedChunkEnvelope,
   ScompTransportRequestEnvelope,
   ScompTransportResponseEnvelope,
-} from "@scomp/types";
+} from "@scompr/types";
 import WebSocket, { type RawData, WebSocketServer } from "ws";
 import { type NodeWebSocketServerTransportConfig, resolveOutboundTransport } from "./shared";
 

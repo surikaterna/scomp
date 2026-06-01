@@ -4,13 +4,13 @@ import {
   type ITransport,
   type ScompClientInvokeOptions,
   ScompFeed,
-} from "@scomp/core";
+} from "@scompr/core";
 import type {
   ContractRouteIntents,
   ScompPriorityClass,
   ScompPriorityHint,
   ScompTransportMessageMeta,
-} from "@scomp/types";
+} from "@scompr/types";
 
 type UnknownFunction = (...args: Array<unknown>) => unknown;
 

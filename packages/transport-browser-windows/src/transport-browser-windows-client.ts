@@ -1,5 +1,5 @@
-import type { ScompClientInvokeOptions } from "@scomp/core";
-import type { ScompTransportMessageMeta } from "@scomp/types";
+import type { ScompClientInvokeOptions } from "@scompr/core";
+import type { ScompTransportMessageMeta } from "@scompr/types";
 import type { BrowserWindowsInvokeFeedChunkMessage, BrowserWindowsInvokeResponseMessage } from "./protocol";
 import { createPayloadHash, createPayloadKey, createRequestId } from "./shared-worker-internal";
 import {

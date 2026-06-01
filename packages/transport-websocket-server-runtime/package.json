@@ -1,7 +1,7 @@
 {
-  "name": "@scomp/transport-websocket-server-runtime",
+  "name": "@scompr/transport-websocket-server-runtime",
   "version": "0.0.0",
-  "description": "WebSocket server runtime transport for scomp",
+  "description": "WebSocket server runtime transport for sComPR",
   "license": "MIT",
   "repository": { "type": "git", "url": "https://github.com/surikaterna/scomp.git", "directory": "packages/transport-websocket-server-runtime" },
   "keywords": ["scomp", "service-composition", "microservices", "rpc"],
@@ -23,12 +23,12 @@
     "test": "vitest run"
   },
   "peerDependencies": {
-    "@scomp/core": "workspace:*",
-    "@scomp/transport-shared": "workspace:*"
+    "@scompr/core": "workspace:*",
+    "@scompr/transport-shared": "workspace:*"
   },
   "devDependencies": {
-    "@scomp/core": "workspace:*",
-    "@scomp/transport-shared": "workspace:*",
-    "@scomp/types": "workspace:*"
+    "@scompr/core": "workspace:*",
+    "@scompr/transport-shared": "workspace:*",
+    "@scompr/types": "workspace:*"
   }
 }

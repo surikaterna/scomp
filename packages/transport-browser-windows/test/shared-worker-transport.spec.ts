@@ -1,4 +1,4 @@
-import { createScompService, createContractToken } from "@scomp/core";
+import { createScompService, createContractToken } from "@scompr/core";
 import { BrowserWindowsSharedWorkerBroker } from "../src/shared-worker-broker";
 import { BrowserWindowsTransport } from "../src/transport-browser-windows";
 import { createRouteIntentsFromCompiledRouter } from "../src";

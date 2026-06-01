@@ -1,6 +1,6 @@
-import type { ScompClientInvokeOptions } from "@scomp/types";
+import type { ScompClientInvokeOptions } from "@scompr/types";
 
-export type { ScompClientInvokeOptions } from "@scomp/types";
+export type { ScompClientInvokeOptions } from "@scompr/types";
 
 export interface ITransport {
   registerRoutes(router: Record<string, unknown>): Promise<void> | void;

@@ -1,4 +1,4 @@
-import type { ScompTransportOperation } from "@scomp/types";
+import type { ScompTransportOperation } from "@scompr/types";
 import type { BrowserWindowsRouteIntent, BrowserWindowsRouteIntentKind, BrowserWindowsRouteIntentMap } from "./types";
 
 type BrowserWindowsCompiledRouteLike = {

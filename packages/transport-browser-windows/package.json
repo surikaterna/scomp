@@ -1,7 +1,7 @@
 {
-  "name": "@scomp/transport-browser-windows",
+  "name": "@scompr/transport-browser-windows",
   "version": "0.0.0",
-  "description": "Browser window messaging transport for scomp",
+  "description": "Browser window messaging transport for sComPR",
   "license": "MIT",
   "repository": { "type": "git", "url": "https://github.com/surikaterna/scomp.git", "directory": "packages/transport-browser-windows" },
   "keywords": ["scomp", "service-composition", "microservices", "rpc"],
@@ -29,12 +29,12 @@
     "smoke:bundler": "bun ../../check-transport-browser-windows-bundler-smoke.mjs"
   },
   "peerDependencies": {
-    "@scomp/core": "workspace:*",
-    "@scomp/transport-shared": "workspace:*"
+    "@scompr/core": "workspace:*",
+    "@scompr/transport-shared": "workspace:*"
   },
   "devDependencies": {
-    "@scomp/core": "workspace:*",
-    "@scomp/transport-shared": "workspace:*",
-    "@scomp/types": "workspace:*"
+    "@scompr/core": "workspace:*",
+    "@scompr/transport-shared": "workspace:*",
+    "@scompr/types": "workspace:*"
   }
 }

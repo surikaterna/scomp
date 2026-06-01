@@ -1,21 +1,23 @@
-# @scomp/transport-inprocess
+# @scompr/transport-inprocess
+
+> Part of the sComPR framework (formerly "scomp")
 
 In-process transport for scomp.
 
-Requires `@scomp/core` and `@scomp/transport-shared` as peer dependencies.
+Requires `@scompr/core` and `@scompr/transport-shared` as peer dependencies.
 
 ## Installation
 
 ```bash
-npm install @scomp/transport-inprocess
+npm install @scompr/transport-inprocess
 # or
-bun add @scomp/transport-inprocess
+bun add @scompr/transport-inprocess
 ```
 
 ## Usage
 
 ```ts
-import { InProcessTransport } from "@scomp/transport-inprocess";
+import { InProcessTransport } from "@scompr/transport-inprocess";
 ```
 
 ## License

@@ -1,4 +1,4 @@
-export { StreamClosedError } from "@scomp/transport-websocket-server-runtime";
+export { StreamClosedError } from "@scompr/transport-websocket-server-runtime";
 // Backward-compat aliases (re-exported from bun.ts and node.ts)
 export {
   BunWebSocketServerTransport,

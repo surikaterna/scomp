@@ -1,7 +1,7 @@
 {
-  "name": "@scomp/core",
+  "name": "@scompr/core",
   "version": "0.0.0",
-  "description": "Core runtime for the scomp service composition framework",
+  "description": "Core runtime for the sComPR service composition framework",
   "license": "MIT",
   "repository": { "type": "git", "url": "https://github.com/surikaterna/scomp.git", "directory": "packages/core" },
   "keywords": ["scomp", "service-composition", "microservices", "rpc"],
@@ -23,9 +23,9 @@
     "test": "vitest run"
   },
   "peerDependencies": {
-    "@scomp/types": "workspace:*"
+    "@scompr/types": "workspace:*"
   },
   "devDependencies": {
-    "@scomp/types": "workspace:*"
+    "@scompr/types": "workspace:*"
   }
 }

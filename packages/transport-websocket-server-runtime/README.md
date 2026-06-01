@@ -1,21 +1,23 @@
-# @scomp/transport-websocket-server-runtime
+# @scompr/transport-websocket-server-runtime
+
+> Part of the sComPR framework (formerly "scomp")
 
 WebSocket server runtime transport for scomp.
 
-Requires `@scomp/core` and `@scomp/transport-shared` as peer dependencies.
+Requires `@scompr/core` and `@scompr/transport-shared` as peer dependencies.
 
 ## Installation
 
 ```bash
-npm install @scomp/transport-websocket-server-runtime
+npm install @scompr/transport-websocket-server-runtime
 # or
-bun add @scomp/transport-websocket-server-runtime
+bun add @scompr/transport-websocket-server-runtime
 ```
 
 ## Usage
 
 ```ts
-import { WebSocketServerRuntime } from "@scomp/transport-websocket-server-runtime";
+import { WebSocketServerRuntime } from "@scompr/transport-websocket-server-runtime";
 ```
 
 ## License

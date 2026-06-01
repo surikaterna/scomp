@@ -1,6 +1,8 @@
-# SCOMP
+# sComPR
 
-SCOMP is a transport-agnostic RPC toolkit with first-class `request`, `signal`, and `feed` semantics.
+> Formerly known as "scomp"
+
+sComPR is a transport-agnostic RPC toolkit with first-class `request`, `signal`, and `feed` semantics.
 
 Typed service contracts bound to runtime tokens. Symmetric peer model. Controlled feeds with typed controllers.
 
@@ -24,7 +26,7 @@ bunx turbo run lint     # lint all packages
 A contract token binds a TypeScript contract type to a service name at runtime:
 
 ```ts
-import { createContractToken } from "@scomp/core";
+import { createContractToken } from "@scompr/core";
 
 type UsersContract = {
   getUser(input: { id: number }): Promise<{ id: number; name: string }>;
@@ -43,8 +45,8 @@ Invalid return types produce compile-time errors at the `createScompService` cal
 A peer is a symmetric node that can host services and/or call remote services:
 
 ```ts
-import { createScompPeer, createScompService } from "@scomp/core";
-import { createScompClient } from "@scomp/client";
+import { createScompPeer, createScompService } from "@scompr/core";
+import { createScompClient } from "@scompr/client";
 
 const peer = createScompPeer({
   transports: [transport],
@@ -89,7 +91,7 @@ Rules:
 Feeds can expose a typed controller for client-to-server messages scoped to an active subscription:
 
 ```ts
-import type { ControlledAsyncIterable } from "@scomp/core";
+import type { ControlledAsyncIterable } from "@scompr/core";
 
 type PricingContract = {
   prices(input: { symbols: string[] }): ControlledAsyncIterable<
@@ -119,8 +121,8 @@ await feed.controller.addSymbol({ symbol: "GOOG" });
 Auth and cross-cutting concerns are handled by transport-agnostic middleware at the peer level:
 
 ```ts
-import { createAuthMiddleware, createScompPeer } from "@scomp/core";
-import { createScompClient } from "@scomp/client";
+import { createAuthMiddleware, createScompPeer } from "@scompr/core";
+import { createScompClient } from "@scompr/client";
 
 const authMw = createAuthMiddleware({
   authenticate: (ctx) => ({ subject: "user-1", tenantId: "tenant-a" }),
@@ -146,7 +148,7 @@ If no middleware is configured, peers allow all operations (backward compatible)
 Split service implementations across modules, then compose:
 
 ```ts
-import { createScompFragment, composeScompFragments } from "@scomp/core";
+import { createScompFragment, composeScompFragments } from "@scompr/core";
 
 const usersRequests = createScompFragment(Users).implement({
   requests: { getUser: async ({ id }) => ({ id, name: `user-${id}` }) },
@@ -175,24 +177,24 @@ Fragment composition rejects duplicate methods across fragments.
 
 ## Packages
 
-- `@scomp/core` — contract tokens, peer, service builder, feed primitives, control plane, priority model, contract validation, middleware
-- `@scomp/types` — wire protocol types, contract type utilities, security types
-- `@scomp/client` — typed client proxy (provides `clientFactory` for peer model)
-- `@scomp/transport-shared` — cross-transport utilities (meta composition, parsing, feed detection)
-- `@scomp/transport-websocket-shared` — WebSocket adapter abstraction (`ISocketAdapter`, `NodeSocketAdapter`, `BrowserSocketAdapter`)
-- `@scomp/transport-websocket-client` — unified WebSocket client (Node + Browser via socket adapters)
-- `@scomp/transport-websocket-server` — unified WebSocket server (Bun + Node entry points)
-- `@scomp/transport-websocket-server-runtime` — internal shared server runtime (do not import directly)
-- `@scomp/transport-rabbitmq` — RabbitMQ transport
-- `@scomp/transport-browser-windows` — same-origin browser tab/window transport (SharedWorker primary, BroadcastChannel fallback)
-- `@scomp/transport-inprocess` — in-process transport
+- `@scompr/core` — contract tokens, peer, service builder, feed primitives, control plane, priority model, contract validation, middleware
+- `@scompr/types` — wire protocol types, contract type utilities, security types
+- `@scompr/client` — typed client proxy (provides `clientFactory` for peer model)
+- `@scompr/transport-shared` — cross-transport utilities (meta composition, parsing, feed detection)
+- `@scompr/transport-websocket-shared` — WebSocket adapter abstraction (`ISocketAdapter`, `NodeSocketAdapter`, `BrowserSocketAdapter`)
+- `@scompr/transport-websocket-client` — unified WebSocket client (Node + Browser via socket adapters)
+- `@scompr/transport-websocket-server` — unified WebSocket server (Bun + Node entry points)
+- `@scompr/transport-websocket-server-runtime` — internal shared server runtime (do not import directly)
+- `@scompr/transport-rabbitmq` — RabbitMQ transport
+- `@scompr/transport-browser-windows` — same-origin browser tab/window transport (SharedWorker primary, BroadcastChannel fallback)
+- `@scompr/transport-inprocess` — in-process transport
 
 ## WebSocket server runtimes
 
 The websocket server package supports both runtimes from a single package:
 
-- **Bun**: `import { createBunWebSocketServerTransport } from "@scomp/transport-websocket-server"`
-- **Node**: `import { createNodeWebSocketServerTransport } from "@scomp/transport-websocket-server"`
+- **Bun**: `import { createBunWebSocketServerTransport } from "@scompr/transport-websocket-server"`
+- **Node**: `import { createNodeWebSocketServerTransport } from "@scompr/transport-websocket-server"`
 
 ## Security
 

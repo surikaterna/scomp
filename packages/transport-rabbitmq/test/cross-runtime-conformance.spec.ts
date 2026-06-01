@@ -6,7 +6,7 @@ import {
   createBrowserSocketAdapterFactory,
   createNodeSocketAdapterFactory,
   SOCKET_OPEN,
-} from "@scomp/transport-websocket-client";
+} from "@scompr/transport-websocket-client";
 
 const { mockConnect, mockRandomUUID } = vi.hoisted(() => ({
   mockConnect: vi.fn(),

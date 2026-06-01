@@ -1,4 +1,4 @@
-import type { ITransport, ScompClientInvokeOptions } from "@scomp/core";
+import type { ITransport, ScompClientInvokeOptions } from "@scompr/core";
 import type {
   BrowserWindowsHostFeedStopMessage,
   BrowserWindowsInvokeFeedChunkMessage,

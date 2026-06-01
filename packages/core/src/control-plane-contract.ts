@@ -5,7 +5,7 @@ import type {
   ScompControlPlaneHealthResponse,
   ScompControlPlaneResolveRequest,
   ScompControlPlaneResolveResponse,
-} from "@scomp/types";
+} from "@scompr/types";
 import { type ContractToken, createContractToken } from "./contract-token";
 
 /**

@@ -1,6 +1,6 @@
 # Migration: browser transport parity
 
-This guide captures behavior that is now aligned across transports when using `@scomp/transport-websocket-client`.
+This guide captures behavior that is now aligned across transports when using `@scompr/transport-websocket-client`.
 
 ## Who should migrate
 
@@ -18,7 +18,7 @@ Use this guidance if your browser client already uses SCOMP WebSocket transport 
 
 ## Recommended migration steps
 
-1. Ensure browser clients depend on `@scomp/transport-websocket-client` and use `createBrowserSocketAdapterFactory()`.
+1. Ensure browser clients depend on `@scompr/transport-websocket-client` and use `createBrowserSocketAdapterFactory()`.
 2. Update client call sites to pass invocation options where needed.
 3. If using browser-side security hooks, treat them as client policy checks only.
 4. Keep authoritative authN/authZ checks on the server transport.

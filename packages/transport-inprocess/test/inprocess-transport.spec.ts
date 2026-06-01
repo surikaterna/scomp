@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createContractToken, createScompService, createScompFeed, type CompiledRouter } from "@scomp/core";
+import { createContractToken, createScompService, createScompFeed, type CompiledRouter } from "@scompr/core";
 import { createInprocessTransport } from "../src";
 
 /* ---------- contract definitions ---------- */

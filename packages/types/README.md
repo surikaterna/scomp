@@ -1,4 +1,6 @@
-# @scomp/types
+# @scompr/types
+
+> Part of the sComPR framework (formerly "scomp")
 
 Type definitions for the scomp service composition framework.
 
@@ -7,15 +9,15 @@ Provides the core TypeScript interfaces and types used across all scomp packages
 ## Installation
 
 ```bash
-npm install @scomp/types
+npm install @scompr/types
 # or
-bun add @scomp/types
+bun add @scompr/types
 ```
 
 ## Usage
 
 ```ts
-import { ServiceDefinition, TransportOptions } from "@scomp/types";
+import { ServiceDefinition, TransportOptions } from "@scompr/types";
 ```
 
 ## License

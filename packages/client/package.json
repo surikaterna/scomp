@@ -1,7 +1,7 @@
 {
-  "name": "@scomp/client",
+  "name": "@scompr/client",
   "version": "0.0.0",
-  "description": "Client library for scomp service composition",
+  "description": "Client library for the sComPR service composition framework",
   "license": "MIT",
   "repository": { "type": "git", "url": "https://github.com/surikaterna/scomp.git", "directory": "packages/client" },
   "keywords": ["scomp", "service-composition", "microservices", "rpc"],
@@ -23,10 +23,10 @@
     "test": "vitest run"
   },
   "peerDependencies": {
-    "@scomp/core": "workspace:*"
+    "@scompr/core": "workspace:*"
   },
   "devDependencies": {
-    "@scomp/core": "workspace:*",
-    "@scomp/types": "workspace:*"
+    "@scompr/core": "workspace:*",
+    "@scompr/types": "workspace:*"
   }
 }

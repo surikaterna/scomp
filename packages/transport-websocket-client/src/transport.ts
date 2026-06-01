@@ -1,20 +1,20 @@
 import { randomUUID } from "node:crypto";
-import { type ITransport, type ScompClientInvokeOptions, ScompFrameworkMethods } from "@scomp/core";
+import { type ITransport, type ScompClientInvokeOptions, ScompFrameworkMethods } from "@scompr/core";
 import {
   isFeedChunkEnvelope,
   mergeMeta,
   safeJsonParse,
   type TransportMessage,
   toPriorityMeta,
-} from "@scomp/transport-shared";
-import { type ISocketAdapter, SOCKET_OPEN } from "@scomp/transport-websocket-shared";
+} from "@scompr/transport-shared";
+import { type ISocketAdapter, SOCKET_OPEN } from "@scompr/transport-websocket-shared";
 import type {
   ScompFeedChunkEnvelope,
   ScompTransportMessageMeta,
   ScompTransportOperation,
   ScompTransportRequestEnvelope,
   ScompTransportResponseEnvelope,
-} from "@scomp/types";
+} from "@scompr/types";
 import {
   createSocketConnection,
   drainPendingFeedChunks,

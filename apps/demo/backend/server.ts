@@ -4,8 +4,8 @@ import {
   createScompFragment,
   createScompService,
   type CompiledRouter,
-} from "@scomp/core";
-import { createRabbitMqTransport, type RabbitMQTransportConfig } from "@scomp/transport-rabbitmq";
+} from "@scompr/core";
+import { createRabbitMqTransport, type RabbitMQTransportConfig } from "@scompr/transport-rabbitmq";
 import type { DemoApiContract, LiveTickerInput, LiveTickerTick } from "../shared/api.contract";
 
 const usersToken = createContractToken<DemoApiContract["users"]>("users");

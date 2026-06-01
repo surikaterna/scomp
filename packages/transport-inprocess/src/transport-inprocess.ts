@@ -1,4 +1,4 @@
-import type { ScompTransport } from "@scomp/core";
+import type { ScompTransport } from "@scompr/core";
 import { executeFireAndForget } from "./fire-and-forget";
 import { toFeedResponse, toRequestResponse } from "./result-adapters";
 import { invokeServiceMethod } from "./service-invoker";

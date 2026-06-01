@@ -1,4 +1,6 @@
-# @scomp/client
+# @scompr/client
+
+> Part of the sComPR framework (formerly "scomp")
 
 Client library for scomp service composition.
 
@@ -7,15 +9,15 @@ Provides a high-level API for consuming scomp services over any configured trans
 ## Installation
 
 ```bash
-npm install @scomp/client
+npm install @scompr/client
 # or
-bun add @scomp/client
+bun add @scompr/client
 ```
 
 ## Usage
 
 ```ts
-import { createClient } from "@scomp/client";
+import { createClient } from "@scompr/client";
 ```
 
 ## License

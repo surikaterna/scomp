@@ -5,8 +5,8 @@ import {
   SCOMP_SCOPE,
   ScompFrameworkMethods,
   type ScompHandlerContext,
-} from "@scomp/core";
-import type { ScompErrorCode, ScompFeedChunkEnvelope, ScompTransportMessageMeta } from "@scomp/types";
+} from "@scompr/core";
+import type { ScompErrorCode, ScompFeedChunkEnvelope, ScompTransportMessageMeta } from "@scompr/types";
 import {
   ensureFeedIterable,
   isControlledAsyncIterable,
@@ -268,7 +268,7 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
       id,
       payload,
       meta,
-    } satisfies import("@scomp/types").ScompTransportResponseEnvelope);
+    } satisfies import("@scompr/types").ScompTransportResponseEnvelope);
   }
 
   private replyWithError(
@@ -284,6 +284,6 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
       error: error instanceof Error ? error.message : String(error),
       code,
       meta,
-    } satisfies import("@scomp/types").ScompTransportResponseEnvelope);
+    } satisfies import("@scompr/types").ScompTransportResponseEnvelope);
   }
 }

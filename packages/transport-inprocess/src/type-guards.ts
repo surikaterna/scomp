@@ -1,4 +1,4 @@
-import type { ScompFeed } from "@scomp/core";
+import type { ScompFeed } from "@scompr/core";
 
 export function isScompFeed(value: unknown): value is ScompFeed<unknown, unknown> {
   if (!value || typeof value !== "object") {

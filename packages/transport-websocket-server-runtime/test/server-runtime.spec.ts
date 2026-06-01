@@ -1,5 +1,5 @@
-import { ScompFrameworkMethods } from "@scomp/core";
-import type { ScompFeedChunkEnvelope, ScompTransportResponseEnvelope } from "@scomp/types";
+import { ScompFrameworkMethods } from "@scompr/core";
+import type { ScompFeedChunkEnvelope, ScompTransportResponseEnvelope } from "@scompr/types";
 import {
   WebSocketServerRuntime,
   type RuntimeSocket,

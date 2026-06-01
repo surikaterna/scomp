@@ -1,13 +1,13 @@
 import { randomUUID } from "node:crypto";
-import type { ScompClientInvokeOptions } from "@scomp/core";
-import { mergeMeta, toPriorityMeta } from "@scomp/transport-shared";
+import type { ScompClientInvokeOptions } from "@scompr/core";
+import { mergeMeta, toPriorityMeta } from "@scompr/transport-shared";
 import type {
   ScompFeedChunkEnvelope,
   ScompSerializer,
   ScompTransportMessageMeta,
   ScompTransportRequestEnvelope,
   ScompTransportResponseEnvelope,
-} from "@scomp/types";
+} from "@scompr/types";
 import type { Channel } from "amqplib";
 import { type RabbitMQTransportEvent, toRpcQueue, toServiceName } from "./types";
 

@@ -1,5 +1,5 @@
-import type { ScompClientInvokeOptions } from "@scomp/core";
-import type { ScompTransportMessageMeta, ScompTransportOperation } from "@scomp/types";
+import type { ScompClientInvokeOptions } from "@scompr/core";
+import type { ScompTransportMessageMeta, ScompTransportOperation } from "@scompr/types";
 import type {
   FeedQueueState,
   HostedFeedState,

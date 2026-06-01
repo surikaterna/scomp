@@ -1,4 +1,4 @@
-import type { ScompTransportMessageMeta } from "@scomp/types";
+import type { ScompTransportMessageMeta } from "@scompr/types";
 
 export type BrowserWindowsTransportMode = "shared-worker" | "broadcast-channel";
 

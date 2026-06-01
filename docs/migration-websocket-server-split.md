@@ -5,12 +5,12 @@ instead of a single generic `createWebSocketServerTransport`.
 
 ## What changed
 
-- Both Bun and Node server transports live in the **same package**: `@scomp/transport-websocket-server`.
+- Both Bun and Node server transports live in the **same package**: `@scompr/transport-websocket-server`.
 - `createBunWebSocketServerTransport` — uses `Bun.serve`.
 - `createNodeWebSocketServerTransport` — uses `ws` + `node:http`.
 - The old `createWebSocketServerTransport` is a **deprecated alias** for the Bun factory.
 
-There is NO separate `@scomp/transport-websocket-server-node` package.
+There is NO separate `@scompr/transport-websocket-server-node` package.
 
 ## Migration
 
@@ -18,10 +18,10 @@ There is NO separate `@scomp/transport-websocket-server-node` package.
 
 ```ts
 // Before
-import { createWebSocketServerTransport } from "@scomp/transport-websocket-server";
+import { createWebSocketServerTransport } from "@scompr/transport-websocket-server";
 
 // After (explicit)
-import { createBunWebSocketServerTransport } from "@scomp/transport-websocket-server";
+import { createBunWebSocketServerTransport } from "@scompr/transport-websocket-server";
 
 const transport = createBunWebSocketServerTransport({
   port: 3000,
@@ -34,10 +34,10 @@ const transport = createBunWebSocketServerTransport({
 
 ```ts
 // Before
-import { createWebSocketServerTransport } from "@scomp/transport-websocket-server";
+import { createWebSocketServerTransport } from "@scompr/transport-websocket-server";
 
 // After (explicit)
-import { createNodeWebSocketServerTransport } from "@scomp/transport-websocket-server";
+import { createNodeWebSocketServerTransport } from "@scompr/transport-websocket-server";
 
 const transport = createNodeWebSocketServerTransport({
   port: 3000,

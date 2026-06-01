@@ -7,7 +7,7 @@ The same logical schema is used for both RabbitMQ and WebSocket transports.
 - RabbitMQ: JSON is carried in AMQP message bodies.
 - WebSocket: JSON is carried in text frames.
 
-Browser clients should use `@scomp/transport-websocket-client` with `createBrowserSocketAdapterFactory()`, which follows the same envelope schema as RabbitMQ and Node WebSocket transports.
+Browser clients should use `@scompr/transport-websocket-client` with `createBrowserSocketAdapterFactory()`, which follows the same envelope schema as RabbitMQ and Node WebSocket transports.
 
 ## Core Envelope Types
 
@@ -289,7 +289,7 @@ No schema changes are needed between RabbitMQ and WebSocket transports; only fra
 
 ### Browser WebSocket mapping
 
-- Browser/runtime clients use `@scomp/transport-websocket-client` with `createBrowserSocketAdapterFactory()`.
+- Browser/runtime clients use `@scompr/transport-websocket-client` with `createBrowserSocketAdapterFactory()`.
 - `request`, `signal`, `feed_start`, and `feed_stop` propagate invocation metadata and priority hints in `meta`.
 - Auth middleware (via `createAuthMiddleware`) can intercept outbound calls before frames are sent.
 

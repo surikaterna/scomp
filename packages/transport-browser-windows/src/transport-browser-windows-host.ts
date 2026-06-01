@@ -1,5 +1,5 @@
-import type { ScompHandlerContext } from "@scomp/core";
-import type { ScompTransportMessageMeta } from "@scomp/types";
+import type { ScompHandlerContext } from "@scompr/core";
+import type { ScompTransportMessageMeta } from "@scompr/types";
 import type {
   BrowserWindowsHostFeedStartMessage,
   BrowserWindowsHostFeedStopMessage,

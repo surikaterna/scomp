@@ -1,21 +1,23 @@
-# @scomp/transport-websocket-shared
+# @scompr/transport-websocket-shared
+
+> Part of the sComPR framework (formerly "scomp")
 
 Shared WebSocket utilities for scomp transports.
 
-Requires `@scomp/core` as a peer dependency.
+Requires `@scompr/core` as a peer dependency.
 
 ## Installation
 
 ```bash
-npm install @scomp/transport-websocket-shared
+npm install @scompr/transport-websocket-shared
 # or
-bun add @scomp/transport-websocket-shared
+bun add @scompr/transport-websocket-shared
 ```
 
 ## Usage
 
 ```ts
-import { ... } from "@scomp/transport-websocket-shared";
+import { ... } from "@scompr/transport-websocket-shared";
 ```
 
 ## License

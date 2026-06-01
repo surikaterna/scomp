@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { vi } from "vitest";
-import { composeScompFragments, createContractToken, createScompFragment, createScompService } from "@scomp/core";
+import { composeScompFragments, createContractToken, createScompFragment, createScompService } from "@scompr/core";
 import { createJsonSerializer, RabbitMQTransport, StreamClosedError } from "../src";
 
 const { mockConnect, mockRandomUUID } = vi.hoisted(() => ({

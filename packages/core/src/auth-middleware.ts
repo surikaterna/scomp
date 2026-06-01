@@ -1,4 +1,4 @@
-import type { ScompTransportMessageMeta, ScompTransportPrincipal } from "@scomp/types";
+import type { ScompTransportMessageMeta, ScompTransportPrincipal } from "@scompr/types";
 import type { ScompMiddleware, ScompMiddlewareContext } from "./middleware";
 
 export interface AuthMiddlewareConfig {

@@ -3,7 +3,7 @@ import type {
   ScompTransportMessageMeta,
   ScompTransportOperation,
   ScompPriorityClass as TransportPriorityClass,
-} from "@scomp/types";
+} from "@scompr/types";
 
 export type ScompPriorityClass = TransportPriorityClass;
 

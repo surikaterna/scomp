@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import type { ITransport, ScompClientInvokeOptions, ScompHandlerContext } from "@scomp/core";
-import { mergeMeta, toPriorityMeta } from "@scomp/transport-shared";
-import type { ScompSerializer, ScompTransportMessageMeta, ScompTransportRequestEnvelope } from "@scomp/types";
+import type { ITransport, ScompClientInvokeOptions, ScompHandlerContext } from "@scompr/core";
+import { mergeMeta, toPriorityMeta } from "@scompr/transport-shared";
+import type { ScompSerializer, ScompTransportMessageMeta, ScompTransportRequestEnvelope } from "@scompr/types";
 import type { Channel, ChannelModel } from "amqplib";
 import { type ClientContext, createFeedConsumer, sendRpc } from "./rabbitmq-client";
 import { connectWithRetry } from "./rabbitmq-connection";

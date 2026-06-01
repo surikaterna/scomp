@@ -1,4 +1,4 @@
-import type { ContractNetworkIntent } from "@scomp/types";
+import type { ContractNetworkIntent } from "@scompr/types";
 import type {
   CombinedFragmentMethodNames,
   CompiledRoute,

@@ -1,21 +1,23 @@
-# @scomp/transport-websocket-server
+# @scompr/transport-websocket-server
+
+> Part of the sComPR framework (formerly "scomp")
 
 WebSocket server transport for scomp.
 
-Requires `@scomp/core` and `@scomp/transport-shared` as peer dependencies.
+Requires `@scompr/core` and `@scompr/transport-shared` as peer dependencies.
 
 ## Installation
 
 ```bash
-npm install @scomp/transport-websocket-server
+npm install @scompr/transport-websocket-server
 # or
-bun add @scomp/transport-websocket-server
+bun add @scompr/transport-websocket-server
 ```
 
 ## Usage
 
 ```ts
-import { WebSocketServerTransport } from "@scomp/transport-websocket-server";
+import { WebSocketServerTransport } from "@scompr/transport-websocket-server";
 ```
 
 ## License

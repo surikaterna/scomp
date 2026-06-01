@@ -14,7 +14,7 @@ import type { ITransport } from "./transport";
 
 /**
  * Factory that creates a typed client proxy from a transport and contract token.
- * Injected to avoid a circular dependency between @scomp/core and @scomp/client.
+ * Injected to avoid a circular dependency between @scompr/core and @scompr/client.
  */
 export type ClientFactory = <C extends object>(transport: ITransport, token: ContractToken<C>) => C;
 

@@ -1,7 +1,7 @@
 {
-  "name": "@scomp/types",
+  "name": "@scompr/types",
   "version": "0.0.0",
-  "description": "Type definitions for the scomp service composition framework",
+  "description": "Type definitions for the sComPR service composition framework",
   "license": "MIT",
   "repository": { "type": "git", "url": "https://github.com/surikaterna/scomp.git", "directory": "packages/types" },
   "keywords": ["scomp", "service-composition", "microservices", "rpc"],
@@ -20,6 +20,6 @@
   "scripts": {
     "build": "tsup",
     "lint": "bunx @biomejs/biome check src/",
-    "test": "echo \"No tests configured for @scomp/types\""
+    "test": "echo \"No tests configured for @scompr/types\""
   }
 }

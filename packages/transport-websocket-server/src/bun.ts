@@ -1,7 +1,7 @@
-import type { CompiledRoute, ITransport, ScompClientInvokeOptions } from "@scomp/core";
-import { parseTransportMessage, WebSocketServerRuntime } from "@scomp/transport-websocket-server-runtime";
-import { createBrowserSocketAdapterFactory } from "@scomp/transport-websocket-shared";
-import type { ScompTransportResponseEnvelope } from "@scomp/types";
+import type { CompiledRoute, ITransport, ScompClientInvokeOptions } from "@scompr/core";
+import { parseTransportMessage, WebSocketServerRuntime } from "@scompr/transport-websocket-server-runtime";
+import { createBrowserSocketAdapterFactory } from "@scompr/transport-websocket-shared";
+import type { ScompTransportResponseEnvelope } from "@scompr/types";
 import { type BunWebSocketServerTransportConfig, resolveOutboundTransport } from "./shared";
 
 /**

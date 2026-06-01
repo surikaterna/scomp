@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
 import { createServer } from "node:net";
-import { WebSocketClientTransport, createBrowserSocketAdapterFactory } from "@scomp/transport-websocket-client";
+import { WebSocketClientTransport, createBrowserSocketAdapterFactory } from "@scompr/transport-websocket-client";
 import { BunWebSocketServerTransport } from "../src/bun";
 
 const bunSocketAdapter = createBrowserSocketAdapterFactory();

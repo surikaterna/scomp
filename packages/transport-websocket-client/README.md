@@ -1,21 +1,23 @@
-# @scomp/transport-websocket-client
+# @scompr/transport-websocket-client
+
+> Part of the sComPR framework (formerly "scomp")
 
 WebSocket client transport for scomp.
 
-Requires `@scomp/core` and `@scomp/transport-shared` as peer dependencies.
+Requires `@scompr/core` and `@scompr/transport-shared` as peer dependencies.
 
 ## Installation
 
 ```bash
-npm install @scomp/transport-websocket-client
+npm install @scompr/transport-websocket-client
 # or
-bun add @scomp/transport-websocket-client
+bun add @scompr/transport-websocket-client
 ```
 
 ## Usage
 
 ```ts
-import { WebSocketClientTransport } from "@scomp/transport-websocket-client";
+import { WebSocketClientTransport } from "@scompr/transport-websocket-client";
 ```
 
 ## License

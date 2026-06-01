@@ -7,7 +7,7 @@ export {
   NodeSocketAdapter,
   SOCKET_OPEN,
   type SocketAdapterFactory,
-} from "@scomp/transport-websocket-shared";
+} from "@scompr/transport-websocket-shared";
 export {
   ConnectionTimeoutError,
   FeedBackpressureError,

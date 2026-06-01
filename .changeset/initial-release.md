@@ -1,18 +1,18 @@
 ---
-"@scomp/types": minor
-"@scomp/core": minor
-"@scomp/client": minor
-"@scomp/transport-shared": minor
-"@scomp/transport-rabbitmq": minor
-"@scomp/transport-browser-windows": minor
-"@scomp/transport-inprocess": minor
-"@scomp/transport-websocket-client": minor
-"@scomp/transport-websocket-server-runtime": minor
-"@scomp/transport-websocket-server": minor
-"@scomp/transport-websocket-shared": minor
+"@scompr/types": minor
+"@scompr/core": minor
+"@scompr/client": minor
+"@scompr/transport-shared": minor
+"@scompr/transport-rabbitmq": minor
+"@scompr/transport-browser-windows": minor
+"@scompr/transport-inprocess": minor
+"@scompr/transport-websocket-client": minor
+"@scompr/transport-websocket-server-runtime": minor
+"@scompr/transport-websocket-server": minor
+"@scompr/transport-websocket-shared": minor
 ---
 
-Initial public release of the scomp service composition framework.
+Initial public release of the sComPR service composition framework.
 
 - Dual ESM/CJS packaging with full TypeScript declarations
 - Strict TypeScript throughout (no `any` escape hatches)

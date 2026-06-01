@@ -1,21 +1,23 @@
-# @scomp/transport-shared
+# @scompr/transport-shared
+
+> Part of the sComPR framework (formerly "scomp")
 
 Shared transport utilities for scomp.
 
-Requires `@scomp/core` as a peer dependency.
+Requires `@scompr/core` as a peer dependency.
 
 ## Installation
 
 ```bash
-npm install @scomp/transport-shared
+npm install @scompr/transport-shared
 # or
-bun add @scomp/transport-shared
+bun add @scompr/transport-shared
 ```
 
 ## Usage
 
 ```ts
-import { ... } from "@scomp/transport-shared";
+import { ... } from "@scompr/transport-shared";
 ```
 
 ## License
