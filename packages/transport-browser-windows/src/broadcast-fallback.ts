@@ -209,15 +209,16 @@ export function createBroadcastFallbackConnector(
   };
 
   const onControlFrame = (frame: BroadcastControlFrame): void => {
-    knownParticipants.set(frame.sourceId, Date.now());
-
     if (isRetireFrame(frame)) {
+      knownParticipants.delete(frame.sourceId);
       if (leaderId === frame.leaderId) {
         leaderLeaseUntilMs = 0;
         maybeElectLeader();
       }
       return;
     }
+
+    knownParticipants.set(frame.sourceId, Date.now());
 
     const now = Date.now();
     if (shouldAdoptLeader({ leaderId, leaderLeaseUntilMs }, frame.leaderId, now)) {
