@@ -1,6 +1,5 @@
 # @scompr/transport-browser-windows
 
-> Part of the sComPR framework (formerly "scomp")
 
 Browser window messaging transport for scomp.
 

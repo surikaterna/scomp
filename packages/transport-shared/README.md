@@ -1,6 +1,5 @@
 # @scompr/transport-shared
 
-> Part of the sComPR framework (formerly "scomp")
 
 Shared transport utilities for scomp.
 

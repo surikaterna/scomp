@@ -1,6 +1,5 @@
 # @scompr/transport-websocket-server
 
-> Part of the sComPR framework (formerly "scomp")
 
 WebSocket server transport for scomp.
 

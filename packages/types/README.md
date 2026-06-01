@@ -1,6 +1,5 @@
 # @scompr/types
 
-> Part of the sComPR framework (formerly "scomp")
 
 Type definitions for the scomp service composition framework.
 

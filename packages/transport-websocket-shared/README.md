@@ -1,6 +1,5 @@
 # @scompr/transport-websocket-shared
 
-> Part of the sComPR framework (formerly "scomp")
 
 Shared WebSocket utilities for scomp transports.
 

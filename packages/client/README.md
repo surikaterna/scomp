@@ -1,6 +1,5 @@
 # @scompr/client
 
-> Part of the sComPR framework (formerly "scomp")
 
 Client library for scomp service composition.
 

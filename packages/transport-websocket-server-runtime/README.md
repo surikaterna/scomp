@@ -1,6 +1,5 @@
 # @scompr/transport-websocket-server-runtime
 
-> Part of the sComPR framework (formerly "scomp")
 
 WebSocket server runtime transport for scomp.
 

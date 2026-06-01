@@ -1,6 +1,5 @@
 # @scompr/transport-rabbitmq
 
-> Part of the sComPR framework (formerly "scomp")
 
 RabbitMQ transport for scomp.
 

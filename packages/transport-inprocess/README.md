@@ -1,6 +1,5 @@
 # @scompr/transport-inprocess
 
-> Part of the sComPR framework (formerly "scomp")
 
 In-process transport for scomp.
 

@@ -1,6 +1,5 @@
 # @scompr/core
 
-> Part of the sComPR framework (formerly "scomp")
 
 Core runtime for the scomp service composition framework.
 
