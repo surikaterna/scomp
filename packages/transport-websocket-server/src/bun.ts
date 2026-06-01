@@ -46,7 +46,7 @@ declare const Bun: {
   serve(options: BunLikeServeOptions): BunLikeServer;
 };
 
-type BunServerData = {};
+type BunServerData = Record<string, never>;
 
 type BunSocketWithState = BunLikeServerWebSocket & { data: BunServerData };
 
