@@ -32,7 +32,7 @@
     },
     "apps/demo": {
       "name": "@scompr/demo",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@scompr/client": "workspace:*",
         "@scompr/core": "workspace:*",
@@ -47,7 +47,7 @@
     },
     "packages/client": {
       "name": "@scompr/client",
-      "version": "0.0.0",
+      "version": "1.0.0",
       "devDependencies": {
         "@scompr/core": "workspace:*",
         "@scompr/types": "workspace:*",
@@ -58,7 +58,7 @@
     },
     "packages/core": {
       "name": "@scompr/core",
-      "version": "0.0.0",
+      "version": "1.0.0",
       "devDependencies": {
         "@scompr/types": "workspace:*",
       },
@@ -68,7 +68,7 @@
     },
     "packages/transport-browser-windows": {
       "name": "@scompr/transport-browser-windows",
-      "version": "0.0.0",
+      "version": "1.0.0",
       "devDependencies": {
         "@scompr/core": "workspace:*",
         "@scompr/transport-shared": "workspace:*",
@@ -81,7 +81,7 @@
     },
     "packages/transport-inprocess": {
       "name": "@scompr/transport-inprocess",
-      "version": "0.0.0",
+      "version": "1.0.0",
       "devDependencies": {
         "@scompr/core": "workspace:*",
         "@scompr/transport-shared": "workspace:*",
@@ -94,7 +94,7 @@
     },
     "packages/transport-rabbitmq": {
       "name": "@scompr/transport-rabbitmq",
-      "version": "0.0.0",
+      "version": "1.0.0",
       "dependencies": {
         "amqplib": "^0.10.9",
       },
@@ -112,7 +112,7 @@
     },
     "packages/transport-shared": {
       "name": "@scompr/transport-shared",
-      "version": "0.0.0",
+      "version": "1.0.0",
       "devDependencies": {
         "@scompr/core": "workspace:*",
         "@scompr/types": "workspace:*",
@@ -123,7 +123,7 @@
     },
     "packages/transport-websocket-client": {
       "name": "@scompr/transport-websocket-client",
-      "version": "0.0.0",
+      "version": "1.0.0",
       "devDependencies": {
         "@scompr/core": "workspace:*",
         "@scompr/transport-shared": "workspace:*",
@@ -137,7 +137,7 @@
     },
     "packages/transport-websocket-server": {
       "name": "@scompr/transport-websocket-server",
-      "version": "0.0.0",
+      "version": "1.0.0",
       "dependencies": {
         "ws": "^8.18.3",
       },
@@ -157,7 +157,7 @@
     },
     "packages/transport-websocket-server-runtime": {
       "name": "@scompr/transport-websocket-server-runtime",
-      "version": "0.0.0",
+      "version": "1.0.0",
       "devDependencies": {
         "@scompr/core": "workspace:*",
         "@scompr/transport-shared": "workspace:*",
@@ -170,7 +170,7 @@
     },
     "packages/transport-websocket-shared": {
       "name": "@scompr/transport-websocket-shared",
-      "version": "0.0.0",
+      "version": "1.0.0",
       "dependencies": {
         "ws": "^8.18.3",
       },
@@ -185,7 +185,7 @@
     },
     "packages/types": {
       "name": "@scompr/types",
-      "version": "0.0.0",
+      "version": "0.1.0",
     },
   },
   "packages": {

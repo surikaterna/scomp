@@ -1,6 +1,6 @@
 {
   "name": "@scompr/transport-websocket-server-runtime",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "WebSocket server runtime transport for sComPR",
   "license": "MIT",
   "repository": {

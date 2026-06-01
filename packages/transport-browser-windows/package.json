@@ -1,6 +1,6 @@
 {
   "name": "@scompr/transport-browser-windows",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Browser window messaging transport for sComPR",
   "license": "MIT",
   "repository": {
