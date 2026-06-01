@@ -1,6 +1,6 @@
 {
   "name": "@scomp/core",
-  "version": "0.1.0-pre",
+  "version": "0.0.0",
   "description": "Core runtime for the scomp service composition framework",
   "license": "MIT",
   "repository": { "type": "git", "url": "https://github.com/surikaterna/scomp.git", "directory": "packages/core" },

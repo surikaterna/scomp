@@ -1,6 +1,6 @@
 {
   "name": "@scomp/transport-rabbitmq",
-  "version": "0.1.0-pre",
+  "version": "0.0.0",
   "description": "RabbitMQ transport for scomp",
   "license": "MIT",
   "repository": { "type": "git", "url": "https://github.com/surikaterna/scomp.git", "directory": "packages/transport-rabbitmq" },

@@ -1,6 +1,6 @@
 {
   "name": "@scomp/transport-websocket-shared",
-  "version": "0.1.0-pre",
+  "version": "0.0.0",
   "description": "Shared WebSocket utilities for scomp transports",
   "license": "MIT",
   "repository": { "type": "git", "url": "https://github.com/surikaterna/scomp.git", "directory": "packages/transport-websocket-shared" },

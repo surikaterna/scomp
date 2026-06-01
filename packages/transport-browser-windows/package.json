@@ -1,6 +1,6 @@
 {
   "name": "@scomp/transport-browser-windows",
-  "version": "0.1.0-pre",
+  "version": "0.0.0",
   "description": "Browser window messaging transport for scomp",
   "license": "MIT",
   "repository": { "type": "git", "url": "https://github.com/surikaterna/scomp.git", "directory": "packages/transport-browser-windows" },
