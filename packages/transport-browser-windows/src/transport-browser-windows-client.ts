@@ -1,15 +1,18 @@
-import type { ScompClientInvokeOptions } from "@scomp/core";
-import type { ScompTransportMessageMeta } from "@scomp/types";
-import type { BrowserWindowsTransportHealthReasonCode, BrowserWindowsTransportHealthStatus } from "./types";
-import { createPayloadHash, createPayloadKey, createRequestId } from "./shared-worker-internal";
+import type { ScompClientInvokeOptions } from "@scompr/core";
+import type { ScompTransportMessageMeta } from "@scompr/types";
 import type { BrowserWindowsInvokeFeedChunkMessage, BrowserWindowsInvokeResponseMessage } from "./protocol";
-import type { BrowserWindowsRequestId } from "./types";
+import { createPayloadHash, createPayloadKey, createRequestId } from "./shared-worker-internal";
 import {
   type FeedQueueState,
   type PendingRequestState,
   rejectPendingRequest,
   terminateFeedState,
 } from "./transport-browser-windows-state";
+import type {
+  BrowserWindowsRequestId,
+  BrowserWindowsTransportHealthReasonCode,
+  BrowserWindowsTransportHealthStatus,
+} from "./types";
 
 export interface BrowserWindowsTransportClientContext {
   participantId: string;

@@ -1,4 +1,4 @@
-import type { ScompTransportMessageMeta } from "@scomp/types";
+import type { ScompTransportMessageMeta } from "@scompr/types";
 import type { BrowserWindowsRequestId } from "./types";
 
 export interface PendingRequestState {

@@ -1,7 +1,7 @@
 import type { BrowserWindowsBrokerState, BrowserWindowsFeedSubscriptionKey } from "./broker-state";
 import type { BrowserWindowsProtocolMessage } from "./protocol";
-import type { BrowserWindowsParticipantId } from "./types";
 import type { BrowserWindowsMessagePortLike } from "./shared-worker-broker";
+import type { BrowserWindowsParticipantId } from "./types";
 
 export interface BrokerContext {
   state: BrowserWindowsBrokerState;

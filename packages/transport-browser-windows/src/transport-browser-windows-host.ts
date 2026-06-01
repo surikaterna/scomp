@@ -1,14 +1,14 @@
-import type { ScompHandlerContext } from "@scomp/core";
-import type { ScompTransportMessageMeta } from "@scomp/types";
+import type { ScompHandlerContext } from "@scompr/core";
+import type { ScompTransportMessageMeta } from "@scompr/types";
 import type {
   BrowserWindowsHostFeedStartMessage,
   BrowserWindowsHostFeedStopMessage,
   BrowserWindowsHostRequestMessage,
   BrowserWindowsHostSignalMessage,
 } from "./protocol";
+import { toAsyncIterable, toError } from "./transport-browser-windows-runtime";
 import type { HostedFeedState, RuntimeRoute } from "./transport-browser-windows-state";
 import { routeOperation } from "./transport-browser-windows-state";
-import { toAsyncIterable, toError } from "./transport-browser-windows-runtime";
 
 interface HostContext {
   readonly participantId: string;

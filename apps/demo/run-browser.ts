@@ -1,7 +1,7 @@
-import { createScompClient, type ClientRouteHints } from "@scomp/client";
-import { createContractToken, createScompService } from "@scomp/core";
-import { createWebSocketClientTransport, createNodeSocketAdapterFactory } from "@scomp/transport-websocket-client";
-import { createNodeWebSocketServerTransport } from "@scomp/transport-websocket-server";
+import { createScompClient, type ClientRouteHints } from "@scompr/client";
+import { createContractToken, createScompService } from "@scompr/core";
+import { createWebSocketClientTransport, createNodeSocketAdapterFactory } from "@scompr/transport-websocket-client";
+import { createNodeWebSocketServerTransport } from "@scompr/transport-websocket-server";
 import type { DemoApiContract, LiveTickerInput, LiveTickerTick } from "./shared/api.contract";
 
 const routeHints: ClientRouteHints = {

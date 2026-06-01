@@ -1,4 +1,4 @@
-import type { ScompServiceDefinition } from "@scomp/core";
+import type { ScompServiceDefinition } from "@scompr/core";
 
 export type AnyServiceDefinition = ScompServiceDefinition<
   Record<string, (...args: Array<unknown>) => Promise<unknown>>,

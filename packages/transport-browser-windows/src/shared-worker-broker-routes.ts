@@ -1,5 +1,5 @@
+import { type BrokerContext, cloneSet } from "./shared-worker-broker-context";
 import type { BrowserWindowsParticipantId } from "./types";
-import { cloneSet, type BrokerContext } from "./shared-worker-broker-context";
 
 export function registerRoutes(
   context: BrokerContext,

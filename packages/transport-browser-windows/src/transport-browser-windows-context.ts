@@ -1,18 +1,17 @@
-import type { ScompClientInvokeOptions } from "@scomp/core";
-import type { ScompTransportMessageMeta } from "@scomp/types";
-import type { ScompTransportOperation } from "@scomp/types";
-import type {
-  BrowserWindowsParticipantId,
-  BrowserWindowsRequestId,
-  BrowserWindowsTransportHealthReasonCode,
-  BrowserWindowsTransportHealthStatus,
-} from "./types";
+import type { ScompClientInvokeOptions } from "@scompr/core";
+import type { ScompTransportMessageMeta, ScompTransportOperation } from "@scompr/types";
 import type {
   FeedQueueState,
   HostedFeedState,
   PendingRequestState,
   RuntimeRoute,
 } from "./transport-browser-windows-state";
+import type {
+  BrowserWindowsParticipantId,
+  BrowserWindowsRequestId,
+  BrowserWindowsTransportHealthReasonCode,
+  BrowserWindowsTransportHealthStatus,
+} from "./types";
 
 export interface BrowserWindowsHostContextInput {
   participantId: string;

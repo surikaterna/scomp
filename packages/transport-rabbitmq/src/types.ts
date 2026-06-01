@@ -1,6 +1,6 @@
-import type { CompiledRoute, ScompPriorityDecision } from "@scomp/core";
-import { resolveScompPriority } from "@scomp/core";
-import type { ScompTransportMessageMeta, ScompTransportRequestEnvelope } from "@scomp/types";
+import type { CompiledRoute, ScompPriorityDecision } from "@scompr/core";
+import { resolveScompPriority } from "@scompr/core";
+import type { ScompTransportMessageMeta, ScompTransportRequestEnvelope } from "@scompr/types";
 
 export const SIGNAL_EXCHANGE = "scomp.signals";
 
@@ -84,7 +84,7 @@ export interface RabbitMQTransportConfig {
   url: string;
   prefetch?: number;
   serviceName?: string;
-  serializer?: import("@scomp/types").ScompSerializer;
+  serializer?: import("@scompr/types").ScompSerializer;
   meta?: ScompTransportMessageMeta | (() => ScompTransportMessageMeta | Promise<ScompTransportMessageMeta>);
   retry?: RabbitMQTransportRetryConfig;
   security?: RabbitMQTransportSecurityConfig;

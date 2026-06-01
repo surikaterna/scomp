@@ -1,4 +1,4 @@
-import { composeScompFragments, createScompFragment, createScompService } from "@scomp/core";
+import { composeScompFragments, createScompFragment, createScompService } from "@scompr/core";
 
 interface LocalUsersContract {
   getUser(input: { id: number }): Promise<{ id: number; name: string }>;

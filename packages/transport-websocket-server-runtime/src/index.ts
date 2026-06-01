@@ -1,28 +1,28 @@
 import {
+  type CompiledRoute,
+  createFeedHash,
   SCOMP_FRAMEWORK_PREFIX,
   SCOMP_SCOPE,
   ScompFrameworkMethods,
-  createFeedHash,
-  type CompiledRoute,
   type ScompHandlerContext,
-} from "@scomp/core";
-import type { ScompErrorCode, ScompFeedChunkEnvelope, ScompTransportMessageMeta } from "@scomp/types";
+} from "@scompr/core";
+import type { ScompErrorCode, ScompFeedChunkEnvelope, ScompTransportMessageMeta } from "@scompr/types";
 import {
-  StreamClosedError,
   ensureFeedIterable,
   isControlledAsyncIterable,
   type RunningFeed,
   type RuntimeSocket,
+  StreamClosedError,
   type TransportMessage,
   type WebSocketServerRuntimeConfig,
 } from "./types";
 
-export { StreamClosedError, parseTransportMessage } from "./types";
 export type {
   RuntimeSocket,
   TransportMessage,
   WebSocketServerRuntimeConfig,
 } from "./types";
+export { parseTransportMessage, StreamClosedError } from "./types";
 
 type FeedChunkData = {
   feed: string;
@@ -268,7 +268,7 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
       id,
       payload,
       meta,
-    } satisfies import("@scomp/types").ScompTransportResponseEnvelope);
+    } satisfies import("@scompr/types").ScompTransportResponseEnvelope);
   }
 
   private replyWithError(
@@ -284,6 +284,6 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
       error: error instanceof Error ? error.message : String(error),
       code,
       meta,
-    } satisfies import("@scomp/types").ScompTransportResponseEnvelope);
+    } satisfies import("@scompr/types").ScompTransportResponseEnvelope);
   }
 }

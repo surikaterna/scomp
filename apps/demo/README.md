@@ -1,6 +1,6 @@
-# @scomp/demo
+# @scompr/demo
 
-This demo shows the default SCOMP authoring flow:
+This demo shows the default sComPR authoring flow:
 
 - strict grouped service implementation via `createScompService`
 - partial domain implementations via `createScompFragment`
@@ -22,7 +22,7 @@ Both produce equivalent route kinds for the same contract methods.
 ## Run
 
 ```bash
-bun turbo run start --filter=@scomp/demo
+bun turbo run start --filter=@scompr/demo
 ```
 
 Requires RabbitMQ at `SCOMP_RABBITMQ_URL` (defaults to `amqp://localhost:5672`).
@@ -31,5 +31,5 @@ Requires RabbitMQ at `SCOMP_RABBITMQ_URL` (defaults to `amqp://localhost:5672`).
 
 When adapting this demo pattern to websocket server transport:
 
-- Use `createBunWebSocketServerTransport` from `@scomp/transport-websocket-server` for **Bun** (`Bun.serve`) hosts.
-- Use `createNodeWebSocketServerTransport` from `@scomp/transport-websocket-server` for **Node** (`ws` + `http`) hosts.
+- Use `createBunWebSocketServerTransport` from `@scompr/transport-websocket-server` for **Bun** (`Bun.serve`) hosts.
+- Use `createNodeWebSocketServerTransport` from `@scompr/transport-websocket-server` for **Node** (`ws` + `http`) hosts.

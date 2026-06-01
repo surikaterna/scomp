@@ -1,4 +1,4 @@
-import type { ScompSerializer } from "@scomp/types";
+import type { ScompSerializer } from "@scompr/types";
 
 export const defaultJsonSerializer: ScompSerializer = {
   stringify(value: unknown): string {

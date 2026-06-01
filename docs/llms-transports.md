@@ -5,8 +5,8 @@ Companion to root `llms.txt`. This page focuses on concise setup patterns by run
 ## Validation gates for transport readiness
 
 - Run repository gates: `bunx turbo run lint` and `bunx turbo run test`.
-- Validate browser-windows resilience suite directly: `bun run --filter='@scomp/transport-browser-windows' test`.
-- Validate package-level lint gates directly: `bun run --filter='@scomp/transport-browser-windows' lint`.
+- Validate browser-windows resilience suite directly: `bun run --filter='@scompr/transport-browser-windows' test`.
+- Validate package-level lint gates directly: `bun run --filter='@scompr/transport-browser-windows' lint`.
 
 ## 1) Bun websocket server + browser client
 
@@ -16,13 +16,13 @@ import {
   createScompPeer,
   createScompService,
   createAuthMiddleware,
-} from "@scomp/core";
-import { createScompClient } from "@scomp/client";
-import { createBunWebSocketServerTransport } from "@scomp/transport-websocket-server";
+} from "@scompr/core";
+import { createScompClient } from "@scompr/client";
+import { createBunWebSocketServerTransport } from "@scompr/transport-websocket-server";
 import {
   createWebSocketClientTransport,
   createBrowserSocketAdapterFactory,
-} from "@scomp/transport-websocket-client";
+} from "@scompr/transport-websocket-client";
 
 type Contract = {
   users: {
@@ -79,13 +79,13 @@ import {
   createContractToken,
   createScompPeer,
   createScompService,
-} from "@scomp/core";
-import { createScompClient } from "@scomp/client";
-import { createNodeWebSocketServerTransport } from "@scomp/transport-websocket-server";
+} from "@scompr/core";
+import { createScompClient } from "@scompr/client";
+import { createNodeWebSocketServerTransport } from "@scompr/transport-websocket-server";
 import {
   createWebSocketClientTransport,
   createNodeSocketAdapterFactory,
-} from "@scomp/transport-websocket-client";
+} from "@scompr/transport-websocket-client";
 
 type Contract = {
   math: {
@@ -132,9 +132,9 @@ import {
   createContractToken,
   createScompPeer,
   createScompService,
-} from "@scomp/core";
-import { createScompClient } from "@scomp/client";
-import { createRabbitMqTransport } from "@scomp/transport-rabbitmq";
+} from "@scompr/core";
+import { createScompClient } from "@scompr/client";
+import { createRabbitMqTransport } from "@scompr/transport-rabbitmq";
 
 type Contract = {
   jobs: {
@@ -170,9 +170,9 @@ import {
   createContractToken,
   createScompPeer,
   createScompService,
-} from "@scomp/core";
-import { createScompClient } from "@scomp/client";
-import { createBrowserWindowsTransport } from "@scomp/transport-browser-windows";
+} from "@scompr/core";
+import { createScompClient } from "@scompr/client";
+import { createBrowserWindowsTransport } from "@scompr/transport-browser-windows";
 
 type Contract = {
   counter: {
@@ -215,14 +215,14 @@ import {
   createControlledFeed,
   createScompPeer,
   createScompService,
-} from "@scomp/core";
-import type { ControlledAsyncIterable } from "@scomp/core";
-import { createScompClient } from "@scomp/client";
-import { createBunWebSocketServerTransport } from "@scomp/transport-websocket-server";
+} from "@scompr/core";
+import type { ControlledAsyncIterable } from "@scompr/core";
+import { createScompClient } from "@scompr/client";
+import { createBunWebSocketServerTransport } from "@scompr/transport-websocket-server";
 import {
   createWebSocketClientTransport,
   createBrowserSocketAdapterFactory,
-} from "@scomp/transport-websocket-client";
+} from "@scompr/transport-websocket-client";
 
 type PriceTick = { symbol: string; price: number };
 

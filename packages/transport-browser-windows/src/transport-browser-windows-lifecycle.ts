@@ -1,6 +1,6 @@
-import type { BrowserWindowsParticipantId, BrowserWindowsRequestId } from "./types";
 import type { FeedQueueState, HostedFeedState, PendingRequestState } from "./transport-browser-windows-state";
 import { rejectPendingRequest } from "./transport-browser-windows-state";
+import type { BrowserWindowsParticipantId, BrowserWindowsRequestId } from "./types";
 
 export function sendHello(
   participantId: BrowserWindowsParticipantId,

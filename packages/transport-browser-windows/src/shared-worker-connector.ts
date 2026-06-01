@@ -1,12 +1,12 @@
+import { type BrowserWindowsFallbackRuntimeEvent, createBroadcastFallbackConnector } from "./broadcast-fallback";
+import { toErrorMessage, toUnavailableDetail } from "./shared-worker-connector-errors";
 import type {
   BrowserWindowsBroadcastChannelCtor,
   BrowserWindowsSharedWorkerCtor,
   BrowserWindowsTransportConfig,
   BrowserWindowsTransportMode,
 } from "./types";
-import { createBroadcastFallbackConnector, type BrowserWindowsFallbackRuntimeEvent } from "./broadcast-fallback";
 import { DEFAULT_BROWSER_WINDOWS_WORKER_URL } from "./worker-url";
-import { toErrorMessage, toUnavailableDetail } from "./shared-worker-connector-errors";
 
 export interface BrowserWindowsRuntimeConnector {
   readonly activeMode: BrowserWindowsTransportMode;

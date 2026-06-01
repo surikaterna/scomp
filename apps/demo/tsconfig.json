@@ -4,12 +4,12 @@
     "composite": true,
     "baseUrl": ".",
     "paths": {
-      "@scomp/types": ["../../packages/types/src"],
-      "@scomp/core": ["../../packages/core/src"],
-      "@scomp/client": ["../../packages/client/src"],
-      "@scomp/transport-rabbitmq": ["../../packages/transport-rabbitmq/src"],
-      "@scomp/transport-websocket-client": ["../../packages/transport-websocket-client/src"],
-      "@scomp/transport-websocket-server": ["../../packages/transport-websocket-server/src"]
+      "@scompr/types": ["../../packages/types/src"],
+      "@scompr/core": ["../../packages/core/src"],
+      "@scompr/client": ["../../packages/client/src"],
+      "@scompr/transport-rabbitmq": ["../../packages/transport-rabbitmq/src"],
+      "@scompr/transport-websocket-client": ["../../packages/transport-websocket-client/src"],
+      "@scompr/transport-websocket-server": ["../../packages/transport-websocket-server/src"]
     },
     "rootDir": ".",
     "outDir": "dist",

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { ScompTransportRequestEnvelope, ScompTransportResponseEnvelope } from "@scomp/types";
+import type { ScompTransportRequestEnvelope, ScompTransportResponseEnvelope } from "@scompr/types";
 import {
   SocketDisconnectedError,
   RequestTimeoutError,

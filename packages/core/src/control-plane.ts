@@ -7,7 +7,7 @@ import {
   type ScompControlPlaneResolveRequest,
   type ScompControlPlaneResolveResponse,
   type ScompControlPlaneRoute,
-} from "@scomp/types";
+} from "@scompr/types";
 import type { CompiledRoute, CompiledRouter } from "./builder";
 
 const CONTROL_PLANE_ROUTE_NAMES = {

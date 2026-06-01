@@ -1,8 +1,8 @@
+import type { BrokerContext } from "./shared-worker-broker-context";
 import { failFeedSubscription } from "./shared-worker-broker-feed";
 import { withBrokerSystemMeta } from "./shared-worker-broker-meta";
 import { unregisterAllRoutes } from "./shared-worker-broker-routes";
 import type { BrowserWindowsParticipantId } from "./types";
-import type { BrokerContext } from "./shared-worker-broker-context";
 
 function cleanupSubscriberEntries(context: BrokerContext, participantId: BrowserWindowsParticipantId): void {
   for (const [key, subscription] of context.state.feedSubscriptions.entries()) {

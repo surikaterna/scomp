@@ -1,5 +1,5 @@
 import amqp, { type ChannelModel } from "amqplib";
-import type { RabbitMQTransportRetryConfig, RabbitMQTransportEvent } from "./types";
+import type { RabbitMQTransportEvent, RabbitMQTransportRetryConfig } from "./types";
 
 export async function connectWithRetry(
   config: RabbitMQTransportRetryConfig & { url: string },

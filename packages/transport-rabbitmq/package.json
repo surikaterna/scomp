@@ -1,22 +1,39 @@
 {
-  "name": "@scomp/transport-rabbitmq",
-  "version": "0.1.0",
-  "private": true,
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "name": "@scompr/transport-rabbitmq",
+  "version": "0.0.0",
+  "description": "RabbitMQ transport for sComPR",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/surikaterna/scomp.git", "directory": "packages/transport-rabbitmq" },
+  "keywords": ["scomp", "service-composition", "microservices", "rpc"],
+  "engines": { "node": ">=18" },
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "tsc -b tsconfig.json",
-    "lint": "echo \"No lint configured for @scomp/transport-rabbitmq\"",
+    "build": "tsup",
+    "lint": "biome check src/",
     "test": "vitest run"
   },
   "dependencies": {
-    "@scomp/core": "workspace:*",
-    "@scomp/transport-shared": "workspace:*",
-    "@scomp/types": "workspace:*",
     "amqplib": "^0.10.9"
   },
+  "peerDependencies": {
+    "@scompr/core": "workspace:*",
+    "@scompr/transport-shared": "workspace:*"
+  },
   "devDependencies": {
-    "@scomp/client": "workspace:*",
-    "@scomp/transport-websocket-client": "workspace:*"
+    "@scompr/client": "workspace:*",
+    "@scompr/core": "workspace:*",
+    "@scompr/transport-shared": "workspace:*",
+    "@scompr/transport-websocket-client": "workspace:*",
+    "@scompr/types": "workspace:*"
   }
 }

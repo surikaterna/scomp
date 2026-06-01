@@ -1,16 +1,9 @@
-import { BrowserWindowsSharedWorkerBroker } from "./shared-worker-broker";
-import type { BrowserWindowsProtocolMessage } from "./protocol";
-import type {
-  BrowserWindowsBroadcastChannelCtor,
-  BrowserWindowsBroadcastChannelLike,
-  BrowserWindowsTransportConfig,
-} from "./types";
 import {
-  emitFallbackRuntimeEvent,
-  type BrowserWindowsFallbackConnector,
-  type BrowserWindowsFallbackRuntimeEvent,
-  isProtocolMessage,
-} from "./broadcast-fallback-runtime";
+  type BroadcastControlFrame,
+  type BroadcastFallbackFrame,
+  type BroadcastProtocolFrame,
+  isBroadcastFallbackFrame,
+} from "./broadcast-fallback-frames";
 import {
   createLeaderAnnounceFrame,
   createLeaderHeartbeatFrame,
@@ -19,13 +12,20 @@ import {
   isRetireFrame,
   shouldAdoptLeader,
 } from "./broadcast-fallback-leader";
-import {
-  type BroadcastControlFrame,
-  type BroadcastFallbackFrame,
-  type BroadcastProtocolFrame,
-  isBroadcastFallbackFrame,
-} from "./broadcast-fallback-frames";
 import { type BrokerPortLike, InMemoryBrokerPort } from "./broadcast-fallback-port";
+import {
+  type BrowserWindowsFallbackConnector,
+  type BrowserWindowsFallbackRuntimeEvent,
+  emitFallbackRuntimeEvent,
+  isProtocolMessage,
+} from "./broadcast-fallback-runtime";
+import type { BrowserWindowsProtocolMessage } from "./protocol";
+import { BrowserWindowsSharedWorkerBroker } from "./shared-worker-broker";
+import type {
+  BrowserWindowsBroadcastChannelCtor,
+  BrowserWindowsBroadcastChannelLike,
+  BrowserWindowsTransportConfig,
+} from "./types";
 
 export type {
   BrowserWindowsFallbackConnector,
@@ -209,15 +209,16 @@ export function createBroadcastFallbackConnector(
   };
 
   const onControlFrame = (frame: BroadcastControlFrame): void => {
-    knownParticipants.set(frame.sourceId, Date.now());
-
     if (isRetireFrame(frame)) {
+      knownParticipants.delete(frame.sourceId);
       if (leaderId === frame.leaderId) {
         leaderLeaseUntilMs = 0;
         maybeElectLeader();
       }
       return;
     }
+
+    knownParticipants.set(frame.sourceId, Date.now());
 
     const now = Date.now();
     if (shouldAdoptLeader({ leaderId, leaderLeaseUntilMs }, frame.leaderId, now)) {

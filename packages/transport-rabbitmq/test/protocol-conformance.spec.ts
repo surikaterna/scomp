@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { vi } from "vitest";
-import type { CompiledRoute } from "@scomp/core";
+import type { CompiledRoute } from "@scompr/core";
 import { RabbitMQTransport } from "../src";
-import { createScompClient } from "@scomp/client";
+import { createScompClient } from "@scompr/client";
 import {
   WebSocketClientTransport,
   createNodeSocketAdapterFactory,
   SOCKET_OPEN,
-} from "@scomp/transport-websocket-client";
+} from "@scompr/transport-websocket-client";
 
 const { mockConnect, mockRandomUUID } = vi.hoisted(() => ({
   mockConnect: vi.fn(),

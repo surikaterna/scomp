@@ -1,16 +1,32 @@
 {
-  "name": "@scomp/client",
-  "version": "0.1.0",
-  "private": true,
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "name": "@scompr/client",
+  "version": "0.0.0",
+  "description": "Client library for the sComPR service composition framework",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/surikaterna/scomp.git", "directory": "packages/client" },
+  "keywords": ["scomp", "service-composition", "microservices", "rpc"],
+  "engines": { "node": ">=18" },
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "tsc -b tsconfig.json",
-    "lint": "echo \"No lint configured for @scomp/client\"",
+    "build": "tsup",
+    "lint": "biome check src/",
     "test": "vitest run"
   },
-  "dependencies": {
-    "@scomp/core": "workspace:*",
-    "@scomp/types": "workspace:*"
+  "peerDependencies": {
+    "@scompr/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@scompr/core": "workspace:*",
+    "@scompr/types": "workspace:*"
   }
 }

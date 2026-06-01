@@ -1,6 +1,3 @@
-import { createFeedKey, type BrokerContext } from "./shared-worker-broker-context";
-import { findUpstreamKeyBySourceRequestId, removeFeedSubscription } from "./shared-worker-broker-feed";
-import { pickHost } from "./shared-worker-broker-routes";
 import type {
   BrowserWindowsHostFeedChunkMessage,
   BrowserWindowsHostFeedStartedMessage,
@@ -10,6 +7,9 @@ import type {
   BrowserWindowsInvokeRequestMessage,
   BrowserWindowsInvokeSignalMessage,
 } from "./protocol";
+import { type BrokerContext, createFeedKey } from "./shared-worker-broker-context";
+import { findUpstreamKeyBySourceRequestId, removeFeedSubscription } from "./shared-worker-broker-feed";
+import { pickHost } from "./shared-worker-broker-routes";
 
 export function handleInvokeRequest(context: BrokerContext, message: BrowserWindowsInvokeRequestMessage): void {
   const hostId = pickHost(context, message.route);

@@ -1,16 +1,34 @@
 {
-  "name": "@scomp/transport-inprocess",
-  "version": "0.1.0",
-  "private": true,
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "name": "@scompr/transport-inprocess",
+  "version": "0.0.0",
+  "description": "In-process transport for sComPR",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/surikaterna/scomp.git", "directory": "packages/transport-inprocess" },
+  "keywords": ["scomp", "service-composition", "microservices", "rpc"],
+  "engines": { "node": ">=18" },
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "tsc -b tsconfig.json",
-    "lint": "echo \"No lint configured for @scomp/transport-inprocess\"",
+    "build": "tsup",
+    "lint": "biome check src/",
     "test": "vitest run"
   },
-  "dependencies": {
-    "@scomp/core": "workspace:*",
-    "@scomp/types": "workspace:*"
+  "peerDependencies": {
+    "@scompr/core": "workspace:*",
+    "@scompr/transport-shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@scompr/core": "workspace:*",
+    "@scompr/transport-shared": "workspace:*",
+    "@scompr/types": "workspace:*"
   }
 }

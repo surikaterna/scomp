@@ -1,8 +1,8 @@
-import { type CompiledRoute, createFeedHash, type ScompHandlerContext } from "@scomp/core";
-import type { ScompErrorCode, ScompTransportRequestEnvelope, ScompTransportResponseEnvelope } from "@scomp/types";
+import { type CompiledRoute, createFeedHash, type ScompHandlerContext } from "@scompr/core";
+import type { ScompErrorCode, ScompTransportRequestEnvelope, ScompTransportResponseEnvelope } from "@scompr/types";
 import type { Channel, ConsumeMessage } from "amqplib";
-import { type RabbitMQTransportEvent, type RunningFeed, type RouterTable, toFeedExchange } from "./types";
 import { publishFeed } from "./rabbitmq-feed";
+import { type RabbitMQTransportEvent, type RouterTable, type RunningFeed, toFeedExchange } from "./types";
 
 export interface RpcContext {
   router?: RouterTable;
@@ -10,13 +10,13 @@ export interface RpcContext {
   serializeToBuffer: (value: unknown) => Buffer;
   deserializeFromBuffer: <T = unknown>(value: Buffer) => T;
   contentType: string;
-  serializer: import("@scomp/types").ScompSerializer;
+  serializer: import("@scompr/types").ScompSerializer;
   emitEvent: (event: RabbitMQTransportEvent) => void;
   emitPriorityDecision: (
     direction: "inbound" | "outbound",
     route: string,
     operation: ScompTransportRequestEnvelope["op"],
-    meta?: import("@scomp/types").ScompTransportMessageMeta,
+    meta?: import("@scompr/types").ScompTransportMessageMeta,
   ) => void;
   runningFeeds: Map<string, RunningFeed>;
   exchangeToFeedKey: Map<string, string>;

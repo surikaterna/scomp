@@ -1,4 +1,4 @@
-import type { ScompTransportMessageMeta } from "@scomp/types";
+import type { ScompTransportMessageMeta } from "@scompr/types";
 
 export const BROKER_SYSTEM_META_TAG = "scomp.broker.system";
 export const BROKER_REASON_META_TAG = "scomp.broker.reason";

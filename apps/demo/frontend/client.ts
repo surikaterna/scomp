@@ -1,5 +1,5 @@
-import { createScompClient, type ClientRouteHints } from "@scomp/client";
-import { createRabbitMqTransport, type RabbitMQTransportConfig } from "@scomp/transport-rabbitmq";
+import { createScompClient, type ClientRouteHints } from "@scompr/client";
+import { createRabbitMqTransport, type RabbitMQTransportConfig } from "@scompr/transport-rabbitmq";
 import type { DemoApiContract } from "../shared/api.contract";
 
 const routeHints: ClientRouteHints = {

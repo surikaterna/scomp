@@ -2,7 +2,7 @@ import type {
   ScompFeedChunkEnvelope,
   ScompTransportRequestEnvelope,
   ScompTransportResponseEnvelope,
-} from "@scomp/types";
+} from "@scompr/types";
 
 export type TransportMessage = ScompTransportRequestEnvelope | ScompTransportResponseEnvelope | ScompFeedChunkEnvelope;
 

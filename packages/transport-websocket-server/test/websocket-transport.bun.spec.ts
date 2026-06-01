@@ -1,10 +1,10 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
 import { createServer } from "node:net";
-import { WebSocketClientTransport, createNodeSocketAdapterFactory } from "@scomp/transport-websocket-client";
+import { WebSocketClientTransport, createBrowserSocketAdapterFactory } from "@scompr/transport-websocket-client";
 import { BunWebSocketServerTransport } from "../src/bun";
 
-const nodeSocketAdapter = createNodeSocketAdapterFactory();
+const bunSocketAdapter = createBrowserSocketAdapterFactory();
 
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -81,7 +81,7 @@ describe("BunWebSocketServerTransport Bun integration", () => {
 
     const client = new WebSocketClientTransport({
       url: `ws://127.0.0.1:${port}/ws`,
-      socketAdapter: nodeSocketAdapter,
+      socketAdapter: bunSocketAdapter,
     });
     transports.push(client);
 
@@ -124,7 +124,7 @@ describe("BunWebSocketServerTransport Bun integration", () => {
 
     const client = new WebSocketClientTransport({
       url: `ws://127.0.0.1:${port}/ws`,
-      socketAdapter: nodeSocketAdapter,
+      socketAdapter: bunSocketAdapter,
     });
     transports.push(client);
 

@@ -4,7 +4,7 @@ import type {
   ITransport,
   ScompClientInvokeOptions,
   ScompHandlerContext,
-} from "@scomp/core";
+} from "@scompr/core";
 
 /**
  * Configuration for {@link createInprocessTransport}.

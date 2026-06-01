@@ -1,21 +1,21 @@
 {
-  "name": "@scomp/demo",
+  "name": "@scompr/demo",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "build": "tsc -b tsconfig.json",
-    "lint": "echo \"No lint configured for @scomp/demo\"",
-    "test": "echo \"No tests configured for @scomp/demo\"",
+    "lint": "echo \"No lint configured for @scompr/demo\"",
+    "test": "echo \"No tests configured for @scompr/demo\"",
     "start": "ts-node run.ts",
     "run-browser": "bun run build && bun dist/run-browser.js"
   },
   "dependencies": {
-    "@scomp/client": "workspace:*",
-    "@scomp/core": "workspace:*",
-    "@scomp/transport-rabbitmq": "workspace:*",
-    "@scomp/transport-websocket-client": "workspace:*",
-    "@scomp/transport-websocket-server": "workspace:*",
-    "@scomp/types": "workspace:*"
+    "@scompr/client": "workspace:*",
+    "@scompr/core": "workspace:*",
+    "@scompr/transport-rabbitmq": "workspace:*",
+    "@scompr/transport-websocket-client": "workspace:*",
+    "@scompr/transport-websocket-server": "workspace:*",
+    "@scompr/types": "workspace:*"
   },
   "devDependencies": {
     "ws": "^8.18.3"

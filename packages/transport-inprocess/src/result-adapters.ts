@@ -1,4 +1,4 @@
-import { fromAsyncIterable, type ScompFeed } from "@scomp/core";
+import { fromAsyncIterable, type ScompFeed } from "@scompr/core";
 import { isIterableLike, isScompFeed } from "./type-guards";
 
 export function toRequestResponse<ResultType>(result: unknown, methodName: string): Promise<ResultType> {

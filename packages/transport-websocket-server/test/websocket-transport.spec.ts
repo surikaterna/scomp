@@ -8,8 +8,8 @@ import {
   createScompService,
   type CompiledRoute,
   type CompiledRouter,
-} from "@scomp/core";
-import { WebSocketClientTransport, createNodeSocketAdapterFactory } from "@scomp/transport-websocket-client";
+} from "@scompr/core";
+import { WebSocketClientTransport, createNodeSocketAdapterFactory } from "@scompr/transport-websocket-client";
 import { NodeWebSocketServerTransport } from "../src/node";
 
 const nodeSocketAdapter = createNodeSocketAdapterFactory();

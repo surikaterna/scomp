@@ -1,12 +1,12 @@
 import type {
   ScompControlPlaneDiscoverRequest,
   ScompControlPlaneDiscoverResponse,
-  ScompControlPlaneResolveRequest,
-  ScompControlPlaneResolveResponse,
   ScompControlPlaneHealthRequest,
   ScompControlPlaneHealthResponse,
-} from "@scomp/types";
-import { createContractToken, type ContractToken } from "./contract-token";
+  ScompControlPlaneResolveRequest,
+  ScompControlPlaneResolveResponse,
+} from "@scompr/types";
+import { type ContractToken, createContractToken } from "./contract-token";
 
 /**
  * Contract type for the scomp control plane.
