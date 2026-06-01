@@ -15,6 +15,6 @@ jobs:
         with:
           bun-version: latest
       - run: bun install
-      - run: bunx turbo run build --filter='!@scomp/demo'
+      - run: bun run build
       - run: bun run lint
       - run: bun run test
