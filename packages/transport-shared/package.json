@@ -1,11 +1,22 @@
 {
   "name": "@scompr/transport-shared",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "description": "Shared transport utilities for sComPR",
   "license": "MIT",
-  "repository": { "type": "git", "url": "https://github.com/surikaterna/scomp.git", "directory": "packages/transport-shared" },
-  "keywords": ["scomp", "service-composition", "microservices", "rpc"],
-  "engines": { "node": ">=18" },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/surikaterna/scomp.git",
+    "directory": "packages/transport-shared"
+  },
+  "keywords": [
+    "scomp",
+    "service-composition",
+    "microservices",
+    "rpc"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
   "sideEffects": false,
   "exports": {
     ".": {
