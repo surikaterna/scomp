@@ -103,10 +103,6 @@ export class BrowserWindowsSharedWorkerBroker {
       case "heartbeat":
       case "hello_ack":
       case "invoke_feed_chunk":
-        if (message.targetId) {
-          this.context.sendToParticipant(message.targetId, message);
-        }
-        return;
       case "host_request":
       case "host_signal":
       case "host_feed_start":
