@@ -108,6 +108,7 @@ async function waitFor(predicate: () => boolean, attempts = 50): Promise<void> {
 function stripId(payload: Record<string, unknown>) {
   const clone = { ...payload };
   delete clone.id;
+  delete clone.op;
   return clone;
 }
 
@@ -161,7 +162,7 @@ async function captureUnaryRequest(route: string, payload: unknown): Promise<Cap
   const websocket = createPatchedWebSocketClient();
 
   const rabbitPending = rabbit.request(route, payload);
-  const websocketPending = websocket.client.request(route, payload);
+  const websocketPending = websocket.client.invoke(route, payload);
 
   await waitFor(() => rabbitFake.channel.sendToQueue.mock.calls.length > 0);
   const rabbitRequestCall = rabbitFake.channel.sendToQueue.mock.calls[0];
@@ -235,13 +236,25 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
     const rabbit = new RabbitMQTransport({ url: "amqp://test" });
     const websocket = createPatchedWebSocketClient();
 
-    await Promise.all([rabbit.signal("users.notify", { id: 7 }), websocket.client.signal("users.notify", { id: 7 })]);
+    // WS invoke for signals hangs (server doesn't reply to signals), so don't await it
+    const wsInvoke = websocket.client.invoke("users.notify", { id: 7 });
+    await rabbit.signal("users.notify", { id: 7 });
+
+    await waitFor(() => websocket.sentPayloads.length > 0);
 
     const rabbitPublishCall = rabbitFake.channel.publish.mock.calls[0];
     const rabbitEnvelope = JSON.parse(Buffer.from(rabbitPublishCall[2]).toString("utf8"));
     const websocketEnvelope = JSON.parse(websocket.sentPayloads[0]);
 
-    assert.deepEqual(websocketEnvelope, rabbitEnvelope);
+    // Strip op and id since WS sends op:"invoke" with id, rabbit sends op:"signal" without id
+    assert.deepEqual(stripId(websocketEnvelope), stripId(rabbitEnvelope));
+
+    // Clean up the hanging promise
+    (websocket.client as unknown as { handleIncoming: (msg: unknown) => void }).handleIncoming({
+      id: websocketEnvelope.id,
+      payload: undefined,
+    });
+    await wsInvoke;
   });
 
   it("encodes identical signal envelope shape when metadata is present", async () => {
@@ -282,7 +295,11 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
       }
     ).getSocket = async () => wsSocket;
 
-    await Promise.all([rabbit.signal("users.notify", { id: 7 }), websocket.signal("users.notify", { id: 7 })]);
+    // WS invoke for signals hangs (server doesn't reply), so don't await it
+    const wsInvoke = websocket.invoke("users.notify", { id: 7 });
+    await rabbit.signal("users.notify", { id: 7 });
+
+    await waitFor(() => sentPayloads.length > 0);
 
     const rabbitPublishCall = rabbitFake.channel.publish.mock.calls[0];
     const rabbitEnvelope = JSON.parse(Buffer.from(rabbitPublishCall[2]).toString("utf8"));
@@ -290,12 +307,19 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
 
     assert.equal(rabbitEnvelope.meta.traceId, "trace-1");
     assert.equal(websocketEnvelope.meta.traceId, "trace-1");
+
+    // Clean up hanging promise
+    (websocket as unknown as { handleIncoming: (msg: unknown) => void }).handleIncoming({
+      id: websocketEnvelope.id,
+      payload: undefined,
+    });
+    await wsInvoke;
   });
 
   it("encodes request envelopes with equivalent shape after transport metadata normalization", async () => {
     const captured = await captureUnaryRequest("users.get", { id: 9 });
 
-    assert.deepEqual(stripId(captured.websocketRequest), captured.rabbitRequest);
+    assert.deepEqual(stripId(captured.websocketRequest), stripId(captured.rabbitRequest));
 
     const result = await resolveCapturedUnaryRequest(captured, { ok: true });
     assert.deepEqual(result.websocket, { ok: true });
@@ -308,7 +332,7 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
       includeRoutes: true,
     });
 
-    assert.deepEqual(stripId(captured.websocketRequest), captured.rabbitRequest);
+    assert.deepEqual(stripId(captured.websocketRequest), stripId(captured.rabbitRequest));
 
     const discoverResponse = {
       services: [
@@ -333,7 +357,7 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
       channel: "ws:alternate",
     });
 
-    assert.deepEqual(stripId(captured.websocketRequest), captured.rabbitRequest);
+    assert.deepEqual(stripId(captured.websocketRequest), stripId(captured.rabbitRequest));
 
     const resolveResponse = {
       resolved: true,
@@ -371,7 +395,7 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
       service: "users",
     });
 
-    assert.deepEqual(stripId(captured.websocketRequest), captured.rabbitRequest);
+    assert.deepEqual(stripId(captured.websocketRequest), stripId(captured.rabbitRequest));
 
     const healthResponse = {
       status: "ok",
@@ -432,7 +456,7 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
     ).getSocket = async () => wsSocket3;
 
     const rabbitPending = rabbit.request("users.get", { id: 11 });
-    const websocketPending = websocketClient.request("users.get", { id: 11 });
+    const websocketPending = websocketClient.invoke("users.get", { id: 11 });
 
     await waitFor(() => rabbitFake.channel.sendToQueue.mock.calls.length > 0);
     await waitFor(() => sentPayloads.length > 0);
@@ -493,7 +517,7 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
   it("keeps websocket request metadata absent when no hints are configured", async () => {
     const websocket = createPatchedWebSocketClient();
 
-    const pending = websocket.client.request("users.get", { id: 5 });
+    const pending = websocket.client.invoke("users.get", { id: 5 });
 
     await waitFor(() => websocket.sentPayloads.length > 0);
     const requestEnvelope = JSON.parse(websocket.sentPayloads[0]) as {
@@ -688,10 +712,12 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
     const websocket = createPatchedWebSocketClient();
 
     const rabbitIterator = rabbit.feed("users.live", { room: "alpha" })[Symbol.asyncIterator]();
-    const websocketIterator = websocket.client.feed("users.live", { room: "alpha" })[Symbol.asyncIterator]();
 
+    // Start websocket feed invoke (returns Promise that resolves after RPC response)
+    const websocketFeedPromise = websocket.client.invoke("users.live", { room: "alpha" });
+
+    // Start rabbit iteration to trigger the RPC
     const rabbitNext = rabbitIterator.next();
-    const websocketNext = websocketIterator.next();
 
     await waitFor(() => rabbitFake.channel.sendToQueue.mock.calls.length > 0);
     await waitFor(() => websocket.sentPayloads.length > 0);
@@ -703,7 +729,7 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
     >;
     const websocketFeedStartEnvelope = JSON.parse(websocket.sentPayloads[0]) as Record<string, unknown>;
 
-    assert.deepEqual(stripId(websocketFeedStartEnvelope), rabbitFeedStartEnvelope);
+    assert.deepEqual(stripId(websocketFeedStartEnvelope), stripId(rabbitFeedStartEnvelope));
 
     const rabbitFeedStartOptions = rabbitFeedStartCall[2] as {
       correlationId: string;
@@ -740,6 +766,12 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
         feed: feedHash,
       },
     });
+
+    // Now await the feed iterable from websocket invoke
+    const websocketIterable = await websocketFeedPromise as AsyncIterable<unknown>;
+    const websocketIterator = websocketIterable[Symbol.asyncIterator]();
+
+    const websocketNext = websocketIterator.next();
 
     await waitFor(() => rabbitFake.queueConsumers.has("generated-2"));
 
@@ -803,10 +835,12 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
     const websocket = createPatchedWebSocketClient();
 
     const rabbitIterator = rabbit.feed("users.live", { room: "alpha" })[Symbol.asyncIterator]();
-    const websocketIterator = websocket.client.feed("users.live", { room: "alpha" })[Symbol.asyncIterator]();
 
+    // Start websocket feed invoke
+    const websocketFeedPromise = websocket.client.invoke("users.live", { room: "alpha" });
+
+    // Start rabbit iteration to trigger the RPC
     const rabbitNext = rabbitIterator.next();
-    const websocketNext = websocketIterator.next();
 
     await waitFor(() => rabbitFake.channel.sendToQueue.mock.calls.length > 0);
     await waitFor(() => websocket.sentPayloads.length > 0);
@@ -851,6 +885,12 @@ describe("Protocol conformance across websocket and rabbitmq", () => {
         feed: feedHash,
       },
     });
+
+    // Await the feed iterable
+    const websocketIterable = await websocketFeedPromise as AsyncIterable<unknown>;
+    const websocketIterator = websocketIterable[Symbol.asyncIterator]();
+
+    const websocketNext = websocketIterator.next();
 
     await waitFor(() => rabbitFake.queueConsumers.has("generated-2"));
     const rabbitFeedConsumer = rabbitFake.queueConsumers.get("generated-2");

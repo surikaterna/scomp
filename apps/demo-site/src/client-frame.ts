@@ -32,6 +32,9 @@ async function init() {
     // Small delay to let host register first
     await new Promise((r) => setTimeout(r, 300));
 
+    // Cross-process consumer: routeHints are required here because the service
+    // is registered in a different frame/process and route metadata is not
+    // available locally. This is the legitimate use case for explicit hints.
     const client = createScompClient<DemoContract>({
       transport,
       routeHints: {

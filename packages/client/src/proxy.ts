@@ -1,8 +1,8 @@
-import {
-  type ControlledAsyncIterable,
-  createFeedHash,
-  type ITransport,
-  type ScompClientInvokeOptions,
+import type {
+  ControlledAsyncIterable,
+  ITransport,
+  RouteKindMap,
+  ScompClientInvokeOptions,
   ScompFeed,
 } from "@scompr/core";
 import type {
@@ -11,6 +11,7 @@ import type {
   ScompPriorityHint,
   ScompTransportMessageMeta,
 } from "@scompr/types";
+import { createScompResult } from "./scomp-result";
 
 type UnknownFunction = (...args: Array<unknown>) => unknown;
 
@@ -47,12 +48,9 @@ export type ScompClientProxy<Contract extends object> = {
             : never;
 };
 
-export interface ClientRouteHints {
-  [route: string]: "request" | "signal" | "feed";
-}
-
 export interface CreateScompClientConfig {
   transport: ITransport;
+  /** @deprecated Route hints are no longer needed — invoke() handles dispatch automatically. */
   routeHints?: ClientRouteHints;
   routeOptions?: ClientRouteOptions;
   routeOptionResolver?: ClientRouteOptionResolver;
@@ -81,8 +79,13 @@ export interface ClientRouteOptions {
 export type ClientRouteOptionResolver = (context: {
   route: string;
   payload: unknown;
-  operation: "request" | "signal" | "feed";
+  operation: "request" | "signal" | "feed" | "invoke";
 }) => ClientRouteOptionEntry | undefined;
+
+/** @deprecated Route hints are no longer needed — invoke() handles dispatch automatically. */
+export interface ClientRouteHints {
+  [route: string]: "request" | "signal" | "feed";
+}
 
 interface ResolvedInvocation {
   payload: unknown;
@@ -175,7 +178,6 @@ function resolveInvocation(
   route: string,
   payload: unknown,
   callOptionsRaw: unknown,
-  operation: "request" | "signal" | "feed",
   routeOptions: ClientRouteOptions | undefined,
   routeOptionResolver: ClientRouteOptionResolver | undefined,
 ): ResolvedInvocation {
@@ -185,7 +187,7 @@ function resolveInvocation(
     routeOptionResolver?.({
       route,
       payload,
-      operation,
+      operation: "invoke",
     }),
   );
 
@@ -195,60 +197,8 @@ function resolveInvocation(
   };
 }
 
-function getRouteType(route: string, routeHints?: ClientRouteHints): "request" | "signal" | "feed" {
-  return routeHints?.[route] ?? "request";
-}
-
-/**
- * Creates a JS Proxy that intercepts property access and dispatches
- * controller method calls as transport requests scoped to a feed.
- */
-function createControllerProxy(transport: ITransport, route: string, feedId: string): unknown {
-  return new Proxy(Object.create(null) as Record<string, unknown>, {
-    get(_target, prop) {
-      if (typeof prop !== "string") {
-        return undefined;
-      }
-
-      return (payload: unknown) => {
-        return transport.request(route, payload, {
-          feed: feedId,
-          method: prop,
-        });
-      };
-    },
-  });
-}
-
-/**
- * Wraps a transport feed async iterable with a controller proxy,
- * producing a {@link ScompControlledFeed}.
- */
-function createControlledScompFeed(
-  transport: ITransport,
-  route: string,
-  payload: unknown,
-  options: ScompClientInvokeOptions | undefined,
-): ScompControlledFeed<unknown, unknown> {
-  const feedId = createFeedHash(route, payload);
-  const feed = new ScompFeed(async function* feedGenerator() {
-    for await (const chunk of transport.feed(route, payload, options)) {
-      yield chunk;
-    }
-  });
-  const controller = createControllerProxy(transport, route, feedId);
-
-  return {
-    [Symbol.asyncIterator]() {
-      return feed[Symbol.asyncIterator]();
-    },
-    controller,
-  };
-}
-
 function createProxyNode(
   transport: ITransport,
-  routeHints: ClientRouteHints | undefined,
   routeOptions: ClientRouteOptions | undefined,
   routeOptionResolver: ClientRouteOptionResolver | undefined,
   segments: Array<string>,
@@ -263,29 +213,14 @@ function createProxyNode(
         return undefined;
       }
 
-      return createProxyNode(transport, routeHints, routeOptions, routeOptionResolver, [...segments, prop]);
+      return createProxyNode(transport, routeOptions, routeOptionResolver, [...segments, prop]);
     },
     apply(_target, _thisArg, argArray: Array<unknown>) {
       const route = segments.join(".");
-      const routeType = getRouteType(route, routeHints);
-      const invocation = resolveInvocation(
-        route,
-        argArray[0],
-        argArray[1],
-        routeType,
-        routeOptions,
-        routeOptionResolver,
-      );
+      const invocation = resolveInvocation(route, argArray[0], argArray[1], routeOptions, routeOptionResolver);
 
-      if (routeType === "signal") {
-        return transport.signal(route, invocation.payload, invocation.options);
-      }
-
-      if (routeType === "feed") {
-        return createControlledScompFeed(transport, route, invocation.payload, invocation.options);
-      }
-
-      return transport.request(route, invocation.payload, invocation.options);
+      const promise = transport.invoke(route, invocation.payload, invocation.options);
+      return createScompResult(promise);
     },
   });
 }
@@ -295,7 +230,6 @@ export function createScompClient<Contract extends object>(
 ): ScompClientProxy<Contract> {
   return createProxyNode(
     config.transport,
-    config.routeHints,
     config.routeOptions,
     config.routeOptionResolver,
     [],
@@ -303,3 +237,20 @@ export function createScompClient<Contract extends object>(
 }
 
 export type ClientRouteIntentMap<Contract extends object> = ContractRouteIntents<Contract>;
+
+/**
+ * Creates a {@link ClientFactory}-compatible function for use with `createScompPeer`.
+ *
+ * The returned factory uses the unified invoke() method on the transport,
+ * eliminating the need for route hints or kind mappings at the client level.
+ */
+export function createClientFactory(options?: {
+  routeOptions?: ClientRouteOptions;
+  routeOptionResolver?: ClientRouteOptionResolver;
+}): <C extends object>(transport: ITransport, token: { name: string }, routeKinds?: RouteKindMap) => C {
+  return <C extends object>(transport: ITransport, token: { name: string }, _routeKinds?: RouteKindMap): C => {
+    return createProxyNode(transport, options?.routeOptions, options?.routeOptionResolver, [
+      token.name,
+    ]) as unknown as C;
+  };
+}

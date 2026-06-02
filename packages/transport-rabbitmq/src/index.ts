@@ -168,6 +168,20 @@ export class RabbitMQTransport implements ITransport {
     return this.feedConsumer(route, payload, options);
   }
 
+  async invoke(route: string, payload: unknown, options?: ScompClientInvokeOptions): Promise<unknown> {
+    // RabbitMQ transport can look up the route kind from its own router
+    const routeEntry = this.router?.[route];
+    if (routeEntry?.kind === "signal") {
+      await this.signal(route, payload, options);
+      return undefined;
+    }
+    if (routeEntry?.kind === "feed") {
+      return this.feedConsumer(route, payload, options);
+    }
+    // Default to request
+    return sendRpc(this.clientContext(), route, "request", payload, options);
+  }
+
   private clientContext(): ClientContext {
     return {
       serializer: this.serializer,

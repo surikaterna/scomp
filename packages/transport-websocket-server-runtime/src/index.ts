@@ -69,8 +69,34 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
       return;
     }
 
-    if (routeEntry.kind === "feed") {
-      await this.handleFeedRpc(socket, routeEntry, body, handlerCtx);
+    // For "invoke" op, dispatch based on route kind
+    if (op === "invoke" || routeEntry.kind === "feed") {
+      if (routeEntry.kind === "feed") {
+        await this.handleFeedRpc(socket, routeEntry, body, handlerCtx);
+        return;
+      }
+
+      if (routeEntry.kind === "signal") {
+        try {
+          await this.config.invokeRoute(routeEntry, body, handlerCtx);
+        } catch {
+          /* fire-and-forget */
+        }
+        this.replyWithPayload(socket, body.id, undefined);
+        return;
+      }
+
+      // request kind
+      try {
+        const result = await this.config.invokeRoute(routeEntry, body, handlerCtx);
+        this.replyWithPayload(socket, body.id, result);
+      } catch (error) {
+        const code =
+          (error as unknown as { code?: string })?.code === "UNAUTHORIZED"
+            ? ("UNAUTHORIZED" as ScompErrorCode)
+            : undefined;
+        this.replyWithError(socket, body.id, error, undefined, code);
+      }
       return;
     }
 

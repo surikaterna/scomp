@@ -13,10 +13,20 @@ import { createMiddlewareTransport } from "./middleware-transport";
 import type { ITransport } from "./transport";
 
 /**
+ * Map of fully-qualified route names to their operation kind.
+ * Passed from the peer to the client factory so hints are automatic.
+ */
+export type RouteKindMap = Record<string, "request" | "signal" | "feed">;
+
+/**
  * Factory that creates a typed client proxy from a transport and contract token.
  * Injected to avoid a circular dependency between @scompr/core and @scompr/client.
  */
-export type ClientFactory = <C extends object>(transport: ITransport, token: ContractToken<C>) => C;
+export type ClientFactory = <C extends object>(
+  transport: ITransport,
+  token: ContractToken<C>,
+  routeKinds?: RouteKindMap,
+) => C;
 
 export interface IScompPeer {
   /** Register service definitions, merging their routers and pushing routes to all transports. */
@@ -142,7 +152,20 @@ export function createScompPeer(config: CreateScompPeerConfig): IScompPeer {
       return cached as C;
     }
 
-    const proxy = clientFactory(wrappedTransports[0], token);
+    // Extract route kinds for this token's namespace from the combinedRouter
+    const prefix = `${token.name}.`;
+    const routeKinds: RouteKindMap = {};
+    for (const routeName of Object.keys(combinedRouter)) {
+      if (routeName.startsWith(prefix)) {
+        routeKinds[routeName] = (combinedRouter[routeName] as CompiledRoute).kind;
+      }
+    }
+
+    const proxy = clientFactory(
+      wrappedTransports[0],
+      token,
+      Object.keys(routeKinds).length > 0 ? routeKinds : undefined,
+    );
     clientCache.set(token.name, proxy);
     return proxy;
   }

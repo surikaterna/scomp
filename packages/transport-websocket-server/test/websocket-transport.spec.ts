@@ -143,17 +143,17 @@ describe("WebSocket transports (Node)", () => {
       const client = new WebSocketClientTransport({ url: harness.url, socketAdapter: nodeSocketAdapter });
 
       try {
-        const requestResult = await client.request("users.getUser", { id: 7 });
+        const requestResult = await client.invoke("users.getUser", { id: 7 });
         assert.deepEqual(requestResult, { id: 7, name: "u-7" });
 
-        await client.signal("users.notifyLogin", { id: 7 });
+        await client.invoke("users.notifyLogin", { id: 7 });
         await wait(15);
         assert.deepEqual(signals, [{ id: 7 }]);
 
         const feedValues = await collect(
-          client.feed("users.liveUsers", {
+          (await client.invoke("users.liveUsers", {
             room: "general",
-          }),
+          })) as AsyncIterable<{ id: number }>,
         );
         assert.deepEqual(feedValues, [{ id: 1 }, { id: 2 }]);
       } finally {
@@ -195,14 +195,14 @@ describe("WebSocket transports (Node)", () => {
     const client = new WebSocketClientTransport({ url: harness.url, socketAdapter: nodeSocketAdapter });
 
     try {
-      const requestResult = await client.request("math.double", 21);
+      const requestResult = await client.invoke("math.double", 21);
       assert.equal(requestResult, 42);
 
-      await client.signal("math.notify", { id: 7 });
+      await client.invoke("math.notify", { id: 7 });
       await wait(15);
       assert.deepEqual(signals, [{ id: 7 }]);
 
-      const feedValues = await collect(client.feed("math.count", 3));
+      const feedValues = await collect((await client.invoke("math.count", 3)) as AsyncIterable<number>);
       assert.deepEqual(feedValues, [1, 2, 3]);
     } finally {
       await closeClientTransport(client);
@@ -237,8 +237,8 @@ describe("WebSocket transports (Node)", () => {
 
     try {
       const [valuesA, valuesB] = await Promise.all([
-        collect(clientA.feed("prices.live", { room: "alpha" })),
-        collect(clientB.feed("prices.live", { room: "alpha" })),
+        collect((await clientA.invoke("prices.live", { room: "alpha" })) as AsyncIterable<number>),
+        collect((await clientB.invoke("prices.live", { room: "alpha" })) as AsyncIterable<number>),
       ]);
 
       assert.deepEqual(valuesA, [1, 2, 3]);
@@ -282,16 +282,16 @@ describe("WebSocket transports (Node)", () => {
     const harness = await createHarness(router);
 
     try {
-      const requestResult = await harness.serverTransport.request("ops.echo", {
+      const requestResult = await harness.serverTransport.invoke("ops.echo", {
         id: 11,
       });
       assert.deepEqual(requestResult, { payload: { id: 11 } });
 
-      await harness.serverTransport.signal("ops.log", { line: "hello" });
+      await harness.serverTransport.invoke("ops.log", { line: "hello" });
       await wait(15);
       assert.deepEqual(signals, [{ line: "hello" }]);
 
-      const values = await collect(harness.serverTransport.feed("ops.range", 2));
+      const values = await collect((await harness.serverTransport.invoke("ops.range", 2)) as AsyncIterable<number>);
       assert.deepEqual(values, [1, 2]);
     } finally {
       await closeHarness(harness);

@@ -5,8 +5,11 @@ export {
   type ClientRouteOptionResolver,
   type ClientRouteOptions,
   type CreateScompClientConfig,
+  createClientFactory,
   createScompClient,
   type ScompClientCallOptions,
   type ScompClientProxy,
   type ScompControlledFeed,
 } from "./proxy";
+
+export { createScompResult, type ScompResult } from "./scomp-result";

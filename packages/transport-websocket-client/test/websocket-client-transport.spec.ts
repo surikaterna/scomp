@@ -156,7 +156,7 @@ describe("WebSocketClientTransport (unified)", () => {
       },
     });
 
-    const pending = harness.transport.request(
+    const pending = harness.transport.invoke(
       "users.get",
       { id: 1 },
       {
@@ -172,7 +172,7 @@ describe("WebSocketClientTransport (unified)", () => {
 
     const outbound = parseEnvelope(harness.sent[0]);
     assert.equal(outbound.route, "users.get");
-    assert.equal(outbound.op, "request");
+    assert.equal(outbound.op, "invoke");
     assert.equal(outbound.meta?.traceId, "trace-request");
     assert.equal(outbound.meta?.tenantId, "tenant-a");
     assert.equal(outbound.meta?.priority, "P0");
@@ -191,14 +191,14 @@ describe("WebSocketClientTransport (unified)", () => {
     assert.deepEqual(await pending, { ok: true });
   });
 
-  it("includes invocation options in signal envelopes", async () => {
+  it("includes invocation options in invoke envelopes", async () => {
     const harness = createHarness({
       meta: {
         traceId: "trace-signal",
       },
     });
 
-    await harness.transport.signal(
+    const pending = harness.transport.invoke(
       "users.notify",
       { id: 2 },
       {
@@ -210,14 +210,22 @@ describe("WebSocketClientTransport (unified)", () => {
       },
     );
 
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
     const outbound = parseEnvelope(harness.sent[0]);
-    assert.equal(outbound.op, "signal");
+    assert.equal(outbound.op, "invoke");
     assert.equal(outbound.meta?.traceId, "trace-signal");
     assert.equal(outbound.meta?.tenantId, "tenant-s");
     assert.equal(outbound.meta?.priority, "P2");
     assert.equal(outbound.meta?.priorityClass, "P3");
     assert.equal(outbound.meta?.deadlineAtMs, 1000);
     assert.equal(outbound.meta?.targetLatencyMs, 50);
+
+    // Respond to complete the invoke
+    harness.getSocket().emitMessage(
+      JSON.stringify({ id: outbound.id, payload: undefined } satisfies ScompTransportResponseEnvelope),
+    );
+    await pending;
   });
 
   it("uses identical metadata for feed start and sends unsubscribe signal", async () => {
@@ -227,25 +235,22 @@ describe("WebSocketClientTransport (unified)", () => {
       },
     });
 
-    const iterator = harness.transport
-      .feed(
-        "users.live",
-        { room: "alpha" },
-        {
-          meta: { tenantId: "tenant-f" },
-          priority: "P1",
-          priorityClass: "P2",
-          deadlineAtMs: 2500,
-          targetLatencyMs: 75,
-        },
-      )
-      [Symbol.asyncIterator]();
+    const feedPromise = harness.transport.invoke(
+      "users.live",
+      { room: "alpha" },
+      {
+        meta: { tenantId: "tenant-f" },
+        priority: "P1",
+        priorityClass: "P2",
+        deadlineAtMs: 2500,
+        targetLatencyMs: 75,
+      },
+    );
 
-    const pendingNext = iterator.next();
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     const feedStart = parseEnvelope(harness.sent[0]);
-    assert.equal(feedStart.op, "feed");
+    assert.equal(feedStart.op, "invoke");
     assert.equal(feedStart.meta?.traceId, "trace-feed");
     assert.equal(feedStart.meta?.tenantId, "tenant-f");
     assert.equal(feedStart.meta?.priority, "P1");
@@ -253,12 +258,16 @@ describe("WebSocketClientTransport (unified)", () => {
     assert.equal(feedStart.meta?.deadlineAtMs, 2500);
     assert.equal(feedStart.meta?.targetLatencyMs, 75);
 
+    // Server responds with feed hash — this triggers createFeedAsyncIterable
     harness.getSocket().emitMessage(
       JSON.stringify({
         id: feedStart.id,
         payload: { feed: "feed-1", exchange: "scomp.live.feed-1" },
       } satisfies ScompTransportResponseEnvelope),
     );
+
+    const feedIterable = (await feedPromise) as AsyncIterable<unknown>;
+    const iterator = feedIterable[Symbol.asyncIterator]();
 
     harness.getSocket().emitMessage(
       JSON.stringify({
@@ -269,7 +278,7 @@ describe("WebSocketClientTransport (unified)", () => {
       }),
     );
 
-    const first = await pendingNext;
+    const first = await iterator.next();
     assert.equal(first.done, false);
     assert.deepEqual(first.value, { seq: 1 });
 
@@ -290,9 +299,8 @@ describe("WebSocketClientTransport (unified)", () => {
   it("delivers queued feed chunks that arrive before feed start response", async () => {
     const harness = createHarness();
 
-    const iterator = harness.transport.feed("users.live", { room: "alpha" })[Symbol.asyncIterator]();
+    const feedPromise = harness.transport.invoke("users.live", { room: "alpha" });
 
-    const pendingFirst = iterator.next();
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     const feedStart = parseEnvelope(harness.sent[0]);
@@ -314,7 +322,10 @@ describe("WebSocketClientTransport (unified)", () => {
       } satisfies ScompTransportResponseEnvelope),
     );
 
-    const first = await pendingFirst;
+    const feedIterable = (await feedPromise) as AsyncIterable<unknown>;
+    const iterator = feedIterable[Symbol.asyncIterator]();
+
+    const first = await iterator.next();
     assert.equal(first.done, false);
     assert.deepEqual(first.value, { seq: 1 });
 
@@ -332,32 +343,15 @@ describe("WebSocketClientTransport (unified)", () => {
     assert.equal(stopResult.done, true);
   });
 
-  it("propagates disconnect to pending request and active feed", async () => {
+  it("propagates disconnect to pending invoke", async () => {
     const harness = createHarness();
 
-    const pendingRequest = harness.transport.request("users.get", { id: 1 });
-    const iterator = harness.transport.feed("users.live", { room: "alpha" })[Symbol.asyncIterator]();
-
-    const pendingFeedNext = iterator.next();
+    const pendingRequest = harness.transport.invoke("users.get", { id: 1 });
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    const feedStart = parseEnvelope(harness.sent[1]);
-    harness.getSocket().emitMessage(
-      JSON.stringify({
-        id: feedStart.id,
-        payload: {
-          feed: "feed-disconnect",
-          exchange: "scomp.live.feed-disconnect",
-        },
-      } satisfies ScompTransportResponseEnvelope),
-    );
-
-    await new Promise((resolve) => setTimeout(resolve, 0));
     harness.getSocket().emitClose();
 
     await assert.rejects(pendingRequest, SocketDisconnectedError);
-    const feedResult = await pendingFeedNext;
-    assert.equal(feedResult.done, true);
   });
 });
 
@@ -373,14 +367,14 @@ describe("WebSocketClientTransport — hardening", () => {
 
   it("rejects with RequestTimeoutError when no reply arrives", async () => {
     const harness = createHarness({ requestTimeoutMs: 50 });
-    const pending = harness.transport.request("slow.route", {});
+    const pending = harness.transport.invoke("slow.route", {});
     await tick();
     await assert.rejects(pending, RequestTimeoutError);
   });
 
   it("clears timeout when response arrives in time", async () => {
     const harness = createHarness({ requestTimeoutMs: 200 });
-    const pending = harness.transport.request("fast.route", { id: 1 });
+    const pending = harness.transport.invoke("fast.route", { id: 1 });
     await tick();
 
     const env = parseEnvelope(harness.sent[0]);
@@ -397,7 +391,7 @@ describe("WebSocketClientTransport — hardening", () => {
       connectionTimeoutMs: 50,
       manualOpen: true,
     });
-    await assert.rejects(harness.transport.request("any.route", {}), ConnectionTimeoutError);
+    await assert.rejects(harness.transport.invoke("any.route", {}), ConnectionTimeoutError);
   });
 
   // --- In-flight limit ---
@@ -406,12 +400,12 @@ describe("WebSocketClientTransport — hardening", () => {
     const harness = createHarness({ maxInFlightRequests: 2 });
 
     // Fire two requests (don't resolve them)
-    harness.transport.request("r1", {}).catch(() => {});
-    harness.transport.request("r2", {}).catch(() => {});
+    harness.transport.invoke("r1", {}).catch(() => {});
+    harness.transport.invoke("r2", {}).catch(() => {});
     await tick();
 
     // Third request should be rejected immediately
-    await assert.rejects(harness.transport.request("r3", {}), InFlightLimitError);
+    await assert.rejects(harness.transport.invoke("r3", {}), InFlightLimitError);
 
     // Close to clean up pending requests
     await harness.transport.close();
@@ -420,7 +414,7 @@ describe("WebSocketClientTransport — hardening", () => {
   it("allows requests after in-flight count drops below limit", async () => {
     const harness = createHarness({ maxInFlightRequests: 1 });
 
-    const p1 = harness.transport.request("r1", {});
+    const p1 = harness.transport.invoke("r1", {});
     await tick();
 
     // Resolve the first request
@@ -429,7 +423,7 @@ describe("WebSocketClientTransport — hardening", () => {
     await p1;
 
     // Now a second request should succeed
-    const p2 = harness.transport.request("r2", {});
+    const p2 = harness.transport.invoke("r2", {});
     await tick();
 
     const env2 = parseEnvelope(harness.sent[1]);
@@ -442,9 +436,8 @@ describe("WebSocketClientTransport — hardening", () => {
   it("closes feed when buffer exceeds high-water mark", async () => {
     const harness = createHarness({ feedBufferHighWaterMark: 3 });
 
-    const iterator = harness.transport.feed("live.data", {})[Symbol.asyncIterator]();
+    const feedPromise = harness.transport.invoke("live.data", {});
 
-    const pendingNext = iterator.next();
     await tick();
 
     const feedStart = parseEnvelope(harness.sent[0]);
@@ -454,6 +447,9 @@ describe("WebSocketClientTransport — hardening", () => {
         payload: { feed: "bp-feed", exchange: "scomp.live.bp-feed" },
       }),
     );
+
+    const feedIterable = (await feedPromise) as AsyncIterable<unknown>;
+    const iterator = feedIterable[Symbol.asyncIterator]();
 
     // Let the generator enter its while loop
     await tick();
@@ -471,14 +467,13 @@ describe("WebSocketClientTransport — hardening", () => {
     }
 
     // First chunk should be readable
-    const first = await pendingNext;
+    const first = await iterator.next();
     assert.deepEqual(first.value, { seq: 0 });
 
     // Read remaining items — should eventually hit the backpressure error
     const values: unknown[] = [];
     let hitError = false;
     try {
-      // Use manual next() calls to drain the queue
       while (true) {
         const result = await iterator.next();
         if (result.done) break;
@@ -521,7 +516,7 @@ describe("WebSocketClientTransport — hardening", () => {
     });
 
     // Initial connection
-    const p = transport.request("init", {});
+    const p = transport.invoke("init", {});
     await tick();
 
     // Respond to the request
@@ -571,7 +566,7 @@ describe("WebSocketClientTransport — hardening", () => {
     });
 
     // Initial connection
-    const p = transport.request("init", {});
+    const p = transport.invoke("init", {});
     await tick();
 
     const env = JSON.parse(sent[0]) as ScompTransportRequestEnvelope;
@@ -621,7 +616,7 @@ describe("WebSocketClientTransport — hardening", () => {
     });
 
     // Initial connect
-    const p = transport.request("init", {});
+    const p = transport.invoke("init", {});
     await tick();
 
     // Respond to the pending request
@@ -650,7 +645,7 @@ describe("WebSocketClientTransport — hardening", () => {
       onEvent: (e) => events.push(e),
     });
 
-    await harness.transport.request("timeout.route", {}).catch(() => {});
+    await harness.transport.invoke("timeout.route", {}).catch(() => {});
     await tick(100);
 
     const timeoutEvent = events.find((e) => e.type === "request_timeout");
@@ -669,10 +664,10 @@ describe("WebSocketClientTransport — hardening", () => {
       onEvent: (e) => events.push(e),
     });
 
-    harness.transport.request("r1", {}).catch(() => {});
+    harness.transport.invoke("r1", {}).catch(() => {});
     await tick();
 
-    await harness.transport.request("r2", {}).catch(() => {});
+    await harness.transport.invoke("r2", {}).catch(() => {});
 
     const limitEvent = events.find((e) => e.type === "in_flight_limit");
     assert.ok(limitEvent, "Expected in_flight_limit event");

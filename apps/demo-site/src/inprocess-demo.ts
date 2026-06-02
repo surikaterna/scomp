@@ -1,5 +1,5 @@
-import { createContractToken, createScompService } from "@scompr/core";
-import { createScompClient } from "@scompr/client";
+import { createContractToken, createScompPeer, createScompService } from "@scompr/core";
+import { createClientFactory } from "@scompr/client";
 import { createInprocessTransport } from "@scompr/transport-inprocess";
 import { log } from "./log";
 
@@ -57,18 +57,16 @@ const service = createScompService(UserService).implement({
   },
 });
 
-// --- Transport + Client ---
+// --- Transport + Peer (route kinds are extracted automatically) ---
 const transport = createInprocessTransport();
-transport.registerRoutes(service.router);
-
-const client = createScompClient<UserServiceContract>({
-  transport,
-  routeHints: {
-    "users.getUser": "request",
-    "users.notifyLogin": "signal",
-    "users.liveUsers": "feed",
-  },
+const peer = createScompPeer({
+  transports: [transport],
+  clientFactory: createClientFactory(),
+  controlPlane: false,
 });
+
+peer.provides(service);
+const client = peer.consumes(UserService);
 
 // --- Display the code ---
 const codeEl = document.getElementById("code-display");

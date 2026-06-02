@@ -6,7 +6,7 @@ import type { ScompTransportMessageMeta } from "@scompr/types";
  */
 export interface ScompHandlerContext {
   route: string;
-  operation: "request" | "signal" | "feed";
+  operation: "request" | "signal" | "feed" | "invoke";
   meta?: ScompTransportMessageMeta;
   [key: string]: unknown;
 }
@@ -17,7 +17,7 @@ export interface ScompHandlerContext {
  */
 export interface ScompMiddlewareContext {
   readonly route: string;
-  readonly operation: "request" | "signal" | "feed";
+  readonly operation: "request" | "signal" | "feed" | "invoke";
   readonly direction: "inbound" | "outbound";
   payload: unknown;
   meta?: ScompTransportMessageMeta;
