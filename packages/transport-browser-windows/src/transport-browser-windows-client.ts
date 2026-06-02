@@ -45,11 +45,20 @@ export async function requestWithContext(
   payload: unknown,
   options?: ScompClientInvokeOptions,
 ): Promise<unknown> {
+  return requestWithContextUsingId(context, createRequestId(), route, payload, options);
+}
+
+export async function requestWithContextUsingId(
+  context: BrowserWindowsTransportClientContext,
+  requestId: string,
+  route: string,
+  payload: unknown,
+  options?: ScompClientInvokeOptions,
+): Promise<unknown> {
   if (context.pendingRequests.size + context.getPreparingRequests() >= context.maxPendingRequests) {
     throw new Error(`BrowserWindowsTransport max pending requests exceeded (${context.maxPendingRequests}).`);
   }
 
-  const requestId = createRequestId();
   context.incrementPreparingRequests();
   let meta: ScompTransportMessageMeta | undefined;
   try {
@@ -61,21 +70,21 @@ export async function requestWithContext(
 
   const response = new Promise<unknown>((resolve, reject) => {
     const timeoutId = setTimeout(() => {
-      const pending = context.pendingRequests.get(requestId);
+      const pending = context.pendingRequests.get(requestId as BrowserWindowsRequestId);
       if (!pending) {
         return;
       }
 
-      context.pendingRequests.delete(requestId);
+      context.pendingRequests.delete(requestId as BrowserWindowsRequestId);
       context.reportHealth("request-timeout", `Request timed out for route: ${route}`, "degraded");
       rejectPendingRequest(
-        requestId,
+        requestId as BrowserWindowsRequestId,
         pending,
         new Error(`BrowserWindowsTransport request timed out after ${context.requestTimeoutMs}ms for route ${route}.`),
       );
     }, context.requestTimeoutMs);
 
-    context.pendingRequests.set(requestId, { resolve, reject, timeoutId });
+    context.pendingRequests.set(requestId as BrowserWindowsRequestId, { resolve, reject, timeoutId });
   });
 
   context.postMessage({

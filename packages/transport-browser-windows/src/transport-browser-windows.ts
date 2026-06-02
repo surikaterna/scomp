@@ -7,8 +7,13 @@ import type {
 } from "./protocol";
 import type { BrowserWindowsRuntimeEvent } from "./shared-worker-connector";
 import { createRuntimeConnector } from "./shared-worker-connector";
-import { createParticipantId } from "./shared-worker-internal";
-import { feedWithContext, requestWithContext, signalWithContext } from "./transport-browser-windows-client";
+import { createParticipantId, createRequestId } from "./shared-worker-internal";
+import {
+  feedWithContext,
+  requestWithContext,
+  requestWithContextUsingId,
+  signalWithContext,
+} from "./transport-browser-windows-client";
 import { createTransportContexts } from "./transport-browser-windows-context";
 import { dispatchIncomingMessage } from "./transport-browser-windows-dispatch";
 import { createTransportHealthStore } from "./transport-browser-windows-health";
@@ -196,8 +201,45 @@ export class BrowserWindowsTransport implements ITransport {
     if (routeIntent === "feed") {
       return feedWithContext(this.clientContext, route, payload, options);
     }
-    // Default to request behavior
-    return requestWithContext(this.clientContext, route, payload, options);
+    if (routeIntent === "request") {
+      return requestWithContext(this.clientContext, route, payload, options);
+    }
+    // No routeIntents: server-determines-behavior pattern
+    return this.invokeServerDetermines(route, payload, options);
+  }
+
+  private async invokeServerDetermines(
+    route: string,
+    payload: unknown,
+    options?: ScompClientInvokeOptions,
+  ): Promise<unknown> {
+    const requestId = createRequestId();
+
+    // Pre-register feed state so chunks arriving are buffered
+    const feedState: FeedQueueState = {
+      queue: [],
+      waiters: [],
+      closed: false,
+      stopSent: false,
+      terminalError: undefined,
+      route,
+      payloadKey: "",
+      payloadHash: "",
+      meta: undefined,
+    };
+    this.feedStates.set(requestId, feedState);
+
+    // Send as request and await response
+    const result = await requestWithContextUsingId(this.clientContext, requestId, route, payload, options);
+
+    // Check if host indicated this is a feed
+    if (isFeedMarker(result)) {
+      return createFeedIterableFromState(this, feedState, requestId, route, options);
+    }
+
+    // Normal request — clean up preemptive feed state
+    this.feedStates.delete(requestId);
+    return result;
   }
   private handleIncoming(message: BrowserWindowsProtocolMessage): void {
     dispatchIncomingMessage(this.participantId, message, {
@@ -269,4 +311,77 @@ export class BrowserWindowsTransport implements ITransport {
 
 export function createBrowserWindowsTransport(config: BrowserWindowsTransportConfig = {}): BrowserWindowsTransport {
   return new BrowserWindowsTransport(config);
+}
+
+function isFeedMarker(value: unknown): boolean {
+  return typeof value === "object" && value !== null && (value as Record<string, unknown>).__scomp_feed === true;
+}
+
+function createFeedIterableFromState(
+  transport: BrowserWindowsTransport,
+  state: FeedQueueState,
+  requestId: string,
+  route: string,
+  _options?: ScompClientInvokeOptions,
+): AsyncIterable<unknown> {
+  return {
+    [Symbol.asyncIterator]: async function* () {
+      try {
+        yield* drainFeedState(state);
+      } finally {
+        cleanupServerDeterminesFeed(transport, state, requestId, route);
+      }
+    },
+  };
+}
+
+async function* drainFeedState(state: FeedQueueState): AsyncGenerator<unknown> {
+  while (true) {
+    if (state.queue.length > 0) {
+      const nextValue = state.queue.shift();
+      if (nextValue !== undefined) yield nextValue;
+      if (state.closed && state.queue.length === 0) {
+        if (state.terminalError) throw state.terminalError;
+        return;
+      }
+      continue;
+    }
+
+    if (state.closed) {
+      if (state.terminalError) throw state.terminalError;
+      return;
+    }
+
+    await new Promise<void>((resolve) => {
+      state.waiters.push(resolve);
+    });
+  }
+}
+
+function cleanupServerDeterminesFeed(
+  transport: BrowserWindowsTransport,
+  state: FeedQueueState,
+  requestId: string,
+  route: string,
+): void {
+  const t = transport as unknown as {
+    feedStates: Map<string, unknown>;
+    participantId: string;
+    publishMessage(m: unknown): void;
+  };
+  t.feedStates.delete(requestId);
+  if (!state.stopSent) {
+    state.stopSent = true;
+    t.publishMessage({
+      type: "invoke_feed_stop",
+      sourceId: t.participantId,
+      sentAtMs: Date.now(),
+      requestId,
+      route,
+      operation: "signal",
+      method: "__scomp.unsubscribe",
+      payloadKey: "",
+      payloadHash: "",
+    });
+  }
 }
