@@ -4,31 +4,17 @@ import { createScompClient } from "../src/proxy";
  * Minimal ITransport implementation that records calls for assertion.
  */
 class FakeTransport {
-  lastRequest;
-  lastSignal;
-  lastFeed;
-  requestResult = { result: "ok" };
-  feedChunks = [{ chunk: 1 }, { chunk: 2 }];
+  lastInvoke: { route: string; payload: unknown; options: unknown } | undefined;
+  invokeResult: unknown = { result: "ok" };
 
   registerRoutes() {}
   close() {
     return Promise.resolve();
   }
 
-  async request(route, payload, options) {
-    this.lastRequest = { route, payload, options };
-    return this.requestResult;
-  }
-
-  async signal(route, payload, options) {
-    this.lastSignal = { route, payload, options };
-  }
-
-  async *feed(route, payload, options) {
-    this.lastFeed = { route, payload, options };
-    for (const chunk of this.feedChunks) {
-      yield chunk;
-    }
+  async invoke(route: string, payload: unknown, options?: unknown) {
+    this.lastInvoke = { route, payload, options };
+    return this.invokeResult;
   }
 }
 
@@ -43,11 +29,11 @@ function createTestClient(overrides = {}) {
 
 describe("createScompClient proxy", () => {
   describe("request dispatch", () => {
-    it("calls transport.request with correct route and payload", async () => {
+    it("calls transport.invoke with correct route and payload", async () => {
       const { transport, client } = createTestClient();
       const result = await client.getUser({ id: 42 });
 
-      expect(transport.lastRequest).toEqual({
+      expect(transport.lastInvoke).toEqual({
         route: "getUser",
         payload: { id: 42 },
         options: undefined,
@@ -55,49 +41,55 @@ describe("createScompClient proxy", () => {
       expect(result).toEqual({ result: "ok" });
     });
 
-    it("defaults to request when no routeHints are provided", async () => {
+    it("defaults to invoke when no routeHints are provided", async () => {
       const { transport, client } = createTestClient();
       await client.someMethod("hello");
 
-      expect(transport.lastRequest).toBeDefined();
-      expect(transport.lastRequest.route).toBe("someMethod");
-      expect(transport.lastRequest.payload).toBe("hello");
+      expect(transport.lastInvoke).toBeDefined();
+      expect(transport.lastInvoke!.route).toBe("someMethod");
+      expect(transport.lastInvoke!.payload).toBe("hello");
     });
   });
 
   describe("signal dispatch", () => {
-    it("calls transport.signal when routeHints mark the method as signal", async () => {
+    it("calls transport.invoke regardless of routeHints (routeHints deprecated)", async () => {
       const { transport, client } = createTestClient({
         routeHints: { notifyLogin: "signal" },
       });
 
       await client.notifyLogin({ userId: 7 });
 
-      expect(transport.lastSignal).toEqual({
+      expect(transport.lastInvoke).toEqual({
         route: "notifyLogin",
         payload: { userId: 7 },
         options: undefined,
       });
-      expect(transport.lastRequest).toBeUndefined();
     });
   });
 
   describe("feed dispatch", () => {
-    it("calls transport.feed and returns an async iterable when routeHints mark feed", async () => {
-      const { transport, client } = createTestClient({
+    it("calls transport.invoke regardless of routeHints (routeHints deprecated)", async () => {
+      const transport = new FakeTransport();
+      const chunks = [{ chunk: 1 }, { chunk: 2 }];
+      transport.invokeResult = (async function* () {
+        for (const c of chunks) yield c;
+      })();
+
+      const client = createScompClient({
+        transport,
         routeHints: { liveUsers: "feed" },
       });
 
       const feed = client.liveUsers({ room: "general" });
-      const chunks = [];
+      // invoke is called, result is an async iterable
+      const collected: unknown[] = [];
       for await (const chunk of feed) {
-        chunks.push(chunk);
+        collected.push(chunk);
       }
 
-      expect(transport.lastFeed).toBeDefined();
-      expect(transport.lastFeed.route).toBe("liveUsers");
-      expect(transport.lastFeed.payload).toEqual({ room: "general" });
-      expect(chunks).toEqual([{ chunk: 1 }, { chunk: 2 }]);
+      expect(transport.lastInvoke).toBeDefined();
+      expect(transport.lastInvoke!.route).toBe("liveUsers");
+      expect(collected).toEqual(chunks);
     });
   });
 
@@ -120,7 +112,7 @@ describe("createScompClient proxy", () => {
 
       await client.update({ data: "value" }, { priority: "P0", meta: { callKey: "call-site" } });
 
-      const opts = transport.lastRequest.options;
+      const opts = transport.lastInvoke!.options as Record<string, unknown>;
       expect(opts.priority).toBe("P0");
       expect(opts.meta).toEqual({
         source: "route-default",
@@ -138,7 +130,7 @@ describe("createScompClient proxy", () => {
 
       await client.fetch({ id: 1 });
 
-      expect(transport.lastRequest.options).toEqual({ priority: "P3" });
+      expect(transport.lastInvoke!.options).toEqual({ priority: "P3" });
     });
 
     it("uses only resolver when no routeOptions or call-site options", async () => {
@@ -148,7 +140,7 @@ describe("createScompClient proxy", () => {
 
       await client.fetch({ id: 1 });
 
-      expect(transport.lastRequest.options).toEqual({ targetLatencyMs: 500 });
+      expect(transport.lastInvoke!.options).toEqual({ targetLatencyMs: 500 });
     });
   });
 
@@ -158,7 +150,7 @@ describe("createScompClient proxy", () => {
 
       await client.doStuff({ x: 1 }, { meta: { traceId: "abc-123" } });
 
-      expect(transport.lastRequest.options).toEqual({
+      expect(transport.lastInvoke!.options).toEqual({
         meta: { traceId: "abc-123" },
       });
     });
@@ -173,7 +165,7 @@ describe("createScompClient proxy", () => {
 
       await client.action({}, { meta: { c: "3" } });
 
-      expect(transport.lastRequest.options.meta).toEqual({
+      expect((transport.lastInvoke!.options as Record<string, unknown>).meta).toEqual({
         a: "1",
         b: "2",
         c: "3",
@@ -191,8 +183,9 @@ describe("createScompClient proxy", () => {
 
       await client.urgent({ data: true });
 
-      expect(transport.lastRequest.options.priority).toBe("P0");
-      expect(transport.lastRequest.options.priorityClass).toBe("P0");
+      const opts = transport.lastInvoke!.options as Record<string, unknown>;
+      expect(opts.priority).toBe("P0");
+      expect(opts.priorityClass).toBe("P0");
     });
 
     it("call-site priority overrides route-level priority", async () => {
@@ -204,7 +197,7 @@ describe("createScompClient proxy", () => {
 
       await client.task({}, { priority: "P1" });
 
-      expect(transport.lastRequest.options.priority).toBe("P1");
+      expect((transport.lastInvoke!.options as Record<string, unknown>).priority).toBe("P1");
     });
   });
 
@@ -214,7 +207,7 @@ describe("createScompClient proxy", () => {
 
       await client.users.getById({ id: 5 });
 
-      expect(transport.lastRequest).toEqual({
+      expect(transport.lastInvoke).toEqual({
         route: "users.getById",
         payload: { id: 5 },
         options: undefined,
@@ -226,18 +219,18 @@ describe("createScompClient proxy", () => {
 
       await client.api.v2.users.list({});
 
-      expect(transport.lastRequest.route).toBe("api.v2.users.list");
+      expect(transport.lastInvoke!.route).toBe("api.v2.users.list");
     });
 
-    it("applies routeHints to nested routes", async () => {
+    it("invokes via transport.invoke even with routeHints (deprecated)", async () => {
       const { transport, client } = createTestClient({
         routeHints: { "events.subscribe": "signal" },
       });
 
       await client.events.subscribe({ topic: "orders" });
 
-      expect(transport.lastSignal).toBeDefined();
-      expect(transport.lastSignal.route).toBe("events.subscribe");
+      expect(transport.lastInvoke).toBeDefined();
+      expect(transport.lastInvoke!.route).toBe("events.subscribe");
     });
   });
 
@@ -245,10 +238,6 @@ describe("createScompClient proxy", () => {
     it("returns a proxy node for .then (string property)", () => {
       const { client } = createTestClient();
 
-      // The proxy treats 'then' like any other string property — it returns
-      // a new proxy node (which is a callable function). This means
-      // `await proxy` will hang because the runtime sees .then as a
-      // thenable. Consumers should call methods directly, not await the proxy.
       const thenProp = client.then;
       expect(typeof thenProp).toBe("function");
     });
@@ -273,61 +262,17 @@ describe("createScompClient proxy", () => {
     });
   });
 
-  describe("controlled feed controller proxy", () => {
-    it("returns an object with async-iterable and controller proxy", async () => {
-      const { client } = createTestClient({
-        routeHints: { chat: "feed" },
-      });
+  describe("feed via invoke", () => {
+    it("returns an async iterable when invoke resolves to one", async () => {
+      const transport = new FakeTransport();
+      transport.invokeResult = (async function* () {
+        yield { chunk: 1 };
+        yield { chunk: 2 };
+      })();
 
-      const feed = client.chat({ room: "test" });
-
-      // The feed should be async-iterable
-      expect(feed[Symbol.asyncIterator]).toBeDefined();
-
-      // The feed should have a controller property
-      expect(feed.controller).toBeDefined();
-    });
-
-    it("controller proxy dispatches requests with feed and method options", async () => {
-      const { transport, client } = createTestClient({
-        routeHints: { chat: "feed" },
-      });
-
-      const feed = client.chat({ room: "test" });
-
-      // Call a controller method
-      await feed.controller.sendMessage({ text: "hello" });
-
-      // Controller methods go through transport.request with feed/method metadata
-      expect(transport.lastRequest).toBeDefined();
-      expect(transport.lastRequest.route).toBe("chat");
-      expect(transport.lastRequest.payload).toEqual({ text: "hello" });
-      expect(transport.lastRequest.options).toBeDefined();
-      expect(transport.lastRequest.options.method).toBe("sendMessage");
-      expect(typeof transport.lastRequest.options.feed).toBe("string");
-    });
-
-    it("controller proxy dispatches different methods correctly", async () => {
-      const { transport, client } = createTestClient({
-        routeHints: { stream: "feed" },
-      });
-
-      const feed = client.stream({ channel: "alpha" });
-
-      await feed.controller.pause({ reason: "buffering" });
-      expect(transport.lastRequest.options.method).toBe("pause");
-
-      await feed.controller.resume({});
-      expect(transport.lastRequest.options.method).toBe("resume");
-    });
-
-    it("feed data can be consumed via async iteration", async () => {
-      const { client } = createTestClient({
-        routeHints: { events: "feed" },
-      });
-
+      const client = createScompClient({ transport });
       const feed = client.events({ filter: "all" });
-      const chunks = [];
+      const chunks: unknown[] = [];
       for await (const chunk of feed) {
         chunks.push(chunk);
       }
@@ -342,7 +287,7 @@ describe("createScompClient proxy", () => {
 
       await client.slowOp({}, { deadlineAtMs: 1000 });
 
-      expect(transport.lastRequest.options).toEqual({ deadlineAtMs: 1000 });
+      expect(transport.lastInvoke!.options).toEqual({ deadlineAtMs: 1000 });
     });
 
     it("forwards targetLatencyMs from routeOptions", async () => {
@@ -354,7 +299,7 @@ describe("createScompClient proxy", () => {
 
       await client.fast({});
 
-      expect(transport.lastRequest.options).toEqual({ targetLatencyMs: 50 });
+      expect(transport.lastInvoke!.options).toEqual({ targetLatencyMs: 50 });
     });
   });
 
@@ -364,7 +309,7 @@ describe("createScompClient proxy", () => {
 
       await client.plain({ data: 1 });
 
-      expect(transport.lastRequest.options).toBeUndefined();
+      expect(transport.lastInvoke!.options).toBeUndefined();
     });
   });
 });

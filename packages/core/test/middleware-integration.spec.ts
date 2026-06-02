@@ -27,7 +27,7 @@ function simpleClientFactory<C extends object>(transport: ITransport, token: { n
     get(_target, method: string) {
       return (payload: unknown) => {
         const route = `${token.name}.${method}`;
-        return transport.request(route, payload);
+        return transport.invoke(route, payload);
       };
     },
   });
@@ -100,17 +100,9 @@ describe("auth middleware integration through transport", () => {
     const recordingTransport: ITransport = {
       registerRoutes: (r) => inner.registerRoutes(r),
       close: () => inner.close(),
-      async request(route, payload, options?) {
+      async invoke(route, payload, options?) {
         recorded.push({ route, options });
-        return inner.request(route, payload, options);
-      },
-      async signal(route, payload, options?) {
-        recorded.push({ route, options });
-        return inner.signal(route, payload, options);
-      },
-      feed(route, payload, options?) {
-        recorded.push({ route, options });
-        return inner.feed(route, payload, options);
+        return inner.invoke(route, payload, options);
       },
     };
 

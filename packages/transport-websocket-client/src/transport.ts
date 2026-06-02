@@ -17,7 +17,6 @@ import type {
 } from "@scompr/types";
 import {
   createSocketConnection,
-  drainPendingFeedChunks,
   enqueueFeedChunk,
   type FeedState,
   handleDisconnect,
@@ -66,37 +65,32 @@ export class WebSocketClientTransport implements ITransport {
     }
   }
 
-  async request(route: string, payload: unknown, options?: ScompClientInvokeOptions): Promise<unknown> {
-    return this.sendRpc(route, "request", payload, options);
+  async invoke(route: string, payload: unknown, options?: ScompClientInvokeOptions): Promise<unknown> {
+    const response = await this.sendRpc(route, "invoke", payload, options);
+
+    // Detect feed from response (server includes feed hash for feed routes)
+    if (response != null && typeof response === "object" && "feed" in (response as object)) {
+      const feedHash = String((response as Record<string, unknown>).feed ?? "");
+      if (!feedHash) {
+        throw new Error("Feed start response did not include a feed identifier.");
+      }
+      return this.createFeedAsyncIterable(route, feedHash, options);
+    }
+
+    // Request: return payload value; Signal: return undefined
+    return response;
   }
 
-  async signal(route: string, payload: unknown, options?: ScompClientInvokeOptions): Promise<void> {
-    const socket = await this.getSocket();
-    const meta = await this.composeOutboundMeta(options);
-
-    const envelope: Record<string, unknown> = {
-      route,
-      op: "signal",
-      payload,
-      meta,
-    };
-    if (options?.feed) envelope.feed = options.feed;
-    if (options?.method) envelope.method = options.method;
-
-    socket.send(JSON.stringify(envelope));
-  }
-
-  feed(route: string, payload: unknown, options?: ScompClientInvokeOptions): AsyncIterable<unknown> {
+  private createFeedAsyncIterable(
+    route: string,
+    feedHash: string,
+    _options?: ScompClientInvokeOptions,
+  ): AsyncIterable<unknown> {
     const self = this;
+    const bufferLimit = this.config.feedBufferHighWaterMark ?? 1_024;
 
     return {
       async *[Symbol.asyncIterator]() {
-        const handshake = await self.sendRpc(route, "feed", payload, options);
-        const feedHash = String((handshake as Record<string, unknown> | null | undefined)?.feed ?? "");
-        if (!feedHash) {
-          throw new Error("Feed start response did not include a feed identifier.");
-        }
-
         const state: FeedState = {
           queue: [],
           waiters: [],
@@ -113,7 +107,15 @@ export class WebSocketClientTransport implements ITransport {
           state.queue.push(rejection);
         }
 
-        drainPendingFeedChunks(feedHash, state, self.pendingFeedChunks);
+        // Drain pending chunks that arrived before the generator started,
+        // applying the same buffer limit as live chunks.
+        const pending = self.pendingFeedChunks.get(feedHash);
+        if (pending && pending.length > 0) {
+          self.pendingFeedChunks.delete(feedHash);
+          for (const message of pending) {
+            enqueueFeedChunk(state, message, bufferLimit);
+          }
+        }
 
         try {
           while (true) {

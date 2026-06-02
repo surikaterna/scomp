@@ -61,6 +61,7 @@ export const SCOMP_DEFAULT_OPERATION_PRIORITIES: Readonly<Record<ScompTransportO
     request: "P2",
     signal: "P3",
     feed: "P1",
+    invoke: "P2",
   });
 
 function valueToPriorityIndex(value: unknown): PriorityIndex | undefined {

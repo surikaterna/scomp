@@ -114,16 +114,8 @@ export class NodeWebSocketServerTransport implements ITransport {
     });
   }
 
-  async request(route: string, payload: unknown, options?: ScompClientInvokeOptions): Promise<unknown> {
-    return this.getOutboundTransport().request(route, payload, options);
-  }
-
-  async signal(route: string, payload: unknown, options?: ScompClientInvokeOptions): Promise<void> {
-    await this.getOutboundTransport().signal(route, payload, options);
-  }
-
-  feed(route: string, payload: unknown, options?: ScompClientInvokeOptions): AsyncIterable<unknown> {
-    return this.getOutboundTransport().feed(route, payload, options);
+  async invoke(route: string, payload: unknown, options?: ScompClientInvokeOptions): Promise<unknown> {
+    return this.getOutboundTransport().invoke(route, payload, options);
   }
 
   private getOutboundTransport(): ITransport {

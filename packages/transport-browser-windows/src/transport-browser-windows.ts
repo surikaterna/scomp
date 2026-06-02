@@ -178,6 +178,27 @@ export class BrowserWindowsTransport implements ITransport {
   feed(route: string, payload: unknown, options?: ScompClientInvokeOptions): AsyncIterable<unknown> {
     return feedWithContext(this.clientContext, route, payload, options);
   }
+  async invoke(route: string, payload: unknown, options?: ScompClientInvokeOptions): Promise<unknown> {
+    const intents = this.config.routeIntents;
+    let routeIntent: "request" | "signal" | "feed" | undefined;
+    if (intents) {
+      if (Array.isArray(intents)) {
+        const entry = intents.find((i) => i.route === route);
+        routeIntent = entry?.kind;
+      } else {
+        routeIntent = (intents as Record<string, "request" | "signal" | "feed">)[route];
+      }
+    }
+    if (routeIntent === "signal") {
+      await signalWithContext(this.clientContext, route, payload, options);
+      return undefined;
+    }
+    if (routeIntent === "feed") {
+      return feedWithContext(this.clientContext, route, payload, options);
+    }
+    // Default to request behavior
+    return requestWithContext(this.clientContext, route, payload, options);
+  }
   private handleIncoming(message: BrowserWindowsProtocolMessage): void {
     dispatchIncomingMessage(this.participantId, message, {
       invokeResponse: (nextMessage) => {

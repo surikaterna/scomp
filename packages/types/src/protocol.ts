@@ -1,4 +1,4 @@
-export type ScompTransportOperation = "request" | "signal" | "feed";
+export type ScompTransportOperation = "request" | "signal" | "feed" | "invoke";
 
 export type ScompPriorityIndex = 0 | 1 | 2 | 3 | 4;
 

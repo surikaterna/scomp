@@ -23,16 +23,12 @@ function makeCtx(overrides: Partial<ScompMiddlewareContext> = {}): ScompMiddlewa
 function createFakeTransport(overrides: Partial<ITransport> = {}): ITransport & {
   registeredRouter: CompiledRouter | undefined;
   closeCalled: boolean;
-  requestCalls: Array<{ route: string; payload: unknown; options?: unknown }>;
-  signalCalls: Array<{ route: string; payload: unknown; options?: unknown }>;
-  feedCalls: Array<{ route: string; payload: unknown; options?: unknown }>;
+  invokeCalls: Array<{ route: string; payload: unknown; options?: unknown }>;
 } {
   const fake = {
     registeredRouter: undefined as CompiledRouter | undefined,
     closeCalled: false,
-    requestCalls: [] as Array<{ route: string; payload: unknown; options?: unknown }>,
-    signalCalls: [] as Array<{ route: string; payload: unknown; options?: unknown }>,
-    feedCalls: [] as Array<{ route: string; payload: unknown; options?: unknown }>,
+    invokeCalls: [] as Array<{ route: string; payload: unknown; options?: unknown }>,
     registerRoutes(router: Record<string, unknown>) {
       fake.registeredRouter = router as CompiledRouter;
     },
@@ -40,25 +36,11 @@ function createFakeTransport(overrides: Partial<ITransport> = {}): ITransport & 
       fake.closeCalled = true;
       return overrides.close?.() ?? Promise.resolve();
     },
-    request:
-      overrides.request ??
+    invoke:
+      overrides.invoke ??
       (async (route: string, payload: unknown, options?: unknown) => {
-        fake.requestCalls.push({ route, payload, options });
+        fake.invokeCalls.push({ route, payload, options });
         return { result: "ok" };
-      }),
-    signal:
-      overrides.signal ??
-      (async (route: string, payload: unknown, options?: unknown) => {
-        fake.signalCalls.push({ route, payload, options });
-      }),
-    feed:
-      overrides.feed ??
-      ((route: string, payload: unknown, options?: unknown) => {
-        fake.feedCalls.push({ route, payload, options });
-        return (async function* () {
-          yield 1;
-          yield 2;
-        })();
       }),
   };
   return fake;
@@ -207,7 +189,7 @@ describe("createMiddlewareTransport", () => {
     assert.equal(wrapped, inner);
   });
 
-  it("intercepts request() calls", async () => {
+  it("intercepts invoke() calls", async () => {
     const inner = createFakeTransport();
     const mw: ScompMiddleware = {
       name: "test",
@@ -217,13 +199,13 @@ describe("createMiddlewareTransport", () => {
     };
 
     const wrapped = createMiddlewareTransport(inner, [mw]);
-    await wrapped.request("r", "original");
+    await wrapped.invoke("r", "original");
 
-    assert.equal(inner.requestCalls.length, 1);
-    assert.equal(inner.requestCalls[0].payload, "intercepted");
+    assert.equal(inner.invokeCalls.length, 1);
+    assert.equal(inner.invokeCalls[0].payload, "intercepted");
   });
 
-  it("intercepts signal() calls", async () => {
+  it("intercepts invoke() for signal-like calls", async () => {
     const inner = createFakeTransport();
     const mw: ScompMiddleware = {
       name: "test",
@@ -231,27 +213,34 @@ describe("createMiddlewareTransport", () => {
     };
 
     const wrapped = createMiddlewareTransport(inner, [mw]);
-    await wrapped.signal("r", "original");
+    await wrapped.invoke("r", "original");
 
-    assert.equal(inner.signalCalls.length, 1);
-    assert.equal(inner.signalCalls[0].payload, "sig-intercepted");
+    assert.equal(inner.invokeCalls.length, 1);
+    assert.equal(inner.invokeCalls[0].payload, "sig-intercepted");
   });
 
-  it("intercepts feed() calls", async () => {
-    const inner = createFakeTransport();
+  it("intercepts invoke() for feed-like calls", async () => {
+    const inner = createFakeTransport({
+      invoke: async (_route: string, _payload: unknown, _options?: unknown) => {
+        return (async function* () {
+          yield 1;
+          yield 2;
+        })();
+      },
+    });
     const mw: ScompMiddleware = {
       name: "test",
       outbound: async (ctx, next) => next({ ...ctx, payload: "feed-intercepted" }),
     };
 
     const wrapped = createMiddlewareTransport(inner, [mw]);
+    const result = await wrapped.invoke("r", "original");
+
+    // Result is an async iterable
     const chunks: unknown[] = [];
-    for await (const chunk of wrapped.feed("r", "original")) {
+    for await (const chunk of result as AsyncIterable<unknown>) {
       chunks.push(chunk);
     }
-
-    assert.equal(inner.feedCalls.length, 1);
-    assert.equal(inner.feedCalls[0].payload, "feed-intercepted");
     assert.deepEqual(chunks, [1, 2]);
   });
 
@@ -280,10 +269,10 @@ describe("createMiddlewareTransport", () => {
     };
 
     const wrapped = createMiddlewareTransport(inner, [mw]);
-    await wrapped.request("r", "data");
+    await wrapped.invoke("r", "data");
 
-    assert.equal(inner.requestCalls.length, 1);
-    const opts = inner.requestCalls[0].options as { meta?: Record<string, unknown> } | undefined;
+    assert.equal(inner.invokeCalls.length, 1);
+    const opts = inner.invokeCalls[0].options as { meta?: Record<string, unknown> } | undefined;
     assert.equal(opts?.meta?.token, "abc");
   });
 
@@ -297,8 +286,8 @@ describe("createMiddlewareTransport", () => {
     };
 
     const wrapped = createMiddlewareTransport(inner, [mw]);
-    await assert.rejects(() => wrapped.request("r", "data"), { message: "blocked" });
-    assert.equal(inner.requestCalls.length, 0);
+    await assert.rejects(() => wrapped.invoke("r", "data"), { message: "blocked" });
+    assert.equal(inner.invokeCalls.length, 0);
   });
 
   it("multiple middleware compose correctly", async () => {
@@ -325,7 +314,7 @@ describe("createMiddlewareTransport", () => {
     };
 
     const wrapped = createMiddlewareTransport(inner, [mw1, mw2]);
-    await wrapped.request("r", "data");
+    await wrapped.invoke("r", "data");
 
     assert.deepEqual(order, ["first-before", "second-before", "second-after", "first-after"]);
   });

@@ -1,7 +1,12 @@
 ---
-"@scompr/core": minor
-"@scompr/client": minor
-"@scompr/transport-inprocess": minor
+"@scompr/core": major
+"@scompr/client": major
+"@scompr/transport-inprocess": major
+"@scompr/transport-websocket-client": major
+"@scompr/transport-websocket-server": major
+"@scompr/transport-browser-windows": major
+"@scompr/transport-rabbitmq": major
+"@scompr/types": minor
 ---
 
-Add unified `invoke()` transport method and `ScompResult` dual-protocol return type. The client proxy now automatically dispatches all calls through `invoke()` when available, eliminating the need for `routeHints`. The server response determines whether the result is a value (request), void (signal), or stream (feed). Consumer code uses natural patterns: `await` for requests/signals, `for await...of` for feeds.
+**BREAKING:** `ITransport` interface now requires only `invoke()`. The `request()`, `signal()`, and `feed()` methods have been removed. All transports dispatch through a single `invoke()` method that determines behavior from the route's registered kind. `ClientRouteHints` are deprecated and no longer needed — the transport handles dispatch automatically.

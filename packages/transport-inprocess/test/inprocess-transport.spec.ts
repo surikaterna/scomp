@@ -34,7 +34,7 @@ function buildRouter(...services: Array<{ router: CompiledRouter }>): CompiledRo
 /* ---------- tests ---------- */
 
 describe("createInprocessTransport", () => {
-  it("handles request/response via ITransport.request()", async () => {
+  it("handles request/response via invoke()", async () => {
     const mathToken = createContractToken<MathContract>("math");
     const service = createScompService(mathToken).implement({
       multiply: async (input) => input.left * input.right,
@@ -43,14 +43,14 @@ describe("createInprocessTransport", () => {
     const transport = createInprocessTransport();
     transport.registerRoutes(service.router);
 
-    const result = await transport.request("math.multiply", {
+    const result = await transport.invoke("math.multiply", {
       left: 4,
       right: 5,
     });
     assert.equal(result, 20);
   });
 
-  it("handles async generator feeds via ITransport.feed()", async () => {
+  it("handles async generator feeds via invoke()", async () => {
     const streamToken = createContractToken<StreamContract>("stream");
     const service = createScompService(streamToken).implement({
       feeds: {
@@ -65,9 +65,10 @@ describe("createInprocessTransport", () => {
     const transport = createInprocessTransport();
     transport.registerRoutes(service.router);
 
+    const result = await transport.invoke("stream.countTo", { limit: 3 });
     const values: Array<number> = [];
-    for await (const value of transport.feed("stream.countTo", { limit: 3 })) {
-      values.push(value as number);
+    for await (const value of result as AsyncIterable<number>) {
+      values.push(value);
     }
 
     assert.deepEqual(values, [1, 2, 3]);
@@ -93,15 +94,16 @@ describe("createInprocessTransport", () => {
     const transport = createInprocessTransport();
     transport.registerRoutes(service.router);
 
+    const result = await transport.invoke("watcher.watch", {});
     const values: Array<number> = [];
-    for await (const value of transport.feed("watcher.watch", {})) {
-      values.push(value as number);
+    for await (const value of result as AsyncIterable<number>) {
+      values.push(value);
     }
 
     assert.deepEqual(values, [7, 8]);
   });
 
-  it("handles signal (fire-and-forget) via ITransport.signal()", async () => {
+  it("handles signal (fire-and-forget) via invoke()", async () => {
     const commands: Array<string> = [];
     const cmdToken = createContractToken<CommandContract>("cmd");
     const service = createScompService(cmdToken).implement({
@@ -115,12 +117,13 @@ describe("createInprocessTransport", () => {
     const transport = createInprocessTransport();
     transport.registerRoutes(service.router);
 
-    await transport.signal("cmd.log", { message: "fire-and-forget" });
+    const result = await transport.invoke("cmd.log", { message: "fire-and-forget" });
+    assert.equal(result, undefined);
 
     assert.deepEqual(commands, ["fire-and-forget"]);
   });
 
-  it("rejects request calls for feed routes", async () => {
+  it("invoke returns AsyncIterable for feed routes", async () => {
     const streamToken = createContractToken<StreamContract>("stream");
     const service = createScompService(streamToken).implement({
       feeds: {
@@ -135,13 +138,11 @@ describe("createInprocessTransport", () => {
     const transport = createInprocessTransport();
     transport.registerRoutes(service.router);
 
-    await assert.rejects(
-      () => transport.request("stream.countTo", { limit: 3 }),
-      /is a feed and cannot be used as request\/response/,
-    );
+    const result = await transport.invoke("stream.countTo", { limit: 3 });
+    assert.ok(result != null && typeof result === "object" && Symbol.asyncIterator in (result as object));
   });
 
-  it("rejects feed calls for non-feed routes", () => {
+  it("invoke throws for non-feed handlers that don't return AsyncIterable", async () => {
     const mathToken = createContractToken<MathContract>("math");
     const service = createScompService(mathToken).implement({
       multiply: async (input) => input.left * input.right,
@@ -150,7 +151,9 @@ describe("createInprocessTransport", () => {
     const transport = createInprocessTransport();
     transport.registerRoutes(service.router);
 
-    assert.throws(() => transport.feed("math.multiply", { left: 3, right: 4 }), /is not a feed route/);
+    // request kind just returns the value
+    const result = await transport.invoke("math.multiply", { left: 3, right: 4 });
+    assert.equal(result, 12);
   });
 
   it("routes sync and async signal failures to onSignalError", async () => {
@@ -175,11 +178,10 @@ describe("createInprocessTransport", () => {
     });
     transport.registerRoutes(service.router);
 
-    assert.doesNotThrow(() => {
-      void transport.signal("fail.failSync", {});
-    });
+    // Sync signal failure should not throw (caught by onSignalError)
+    await transport.invoke("fail.failSync", {});
 
-    void transport.signal("fail.failAsync", { value: "payload" });
+    await transport.invoke("fail.failAsync", { value: "payload" });
     await new Promise((resolve) => setTimeout(resolve, 10));
 
     assert.equal(observedErrors.length, 2);
@@ -189,10 +191,10 @@ describe("createInprocessTransport", () => {
     assert.equal((observedErrors[1]?.error as Error).message, "async failure: payload");
   });
 
-  it("throws when calling methods before registerRoutes", async () => {
+  it("throws when calling invoke before registerRoutes", async () => {
     const transport = createInprocessTransport();
 
-    await assert.rejects(() => transport.request("math.multiply", { left: 1, right: 2 }), /No routes registered/);
+    await assert.rejects(() => transport.invoke("math.multiply", { left: 1, right: 2 }), /No routes registered/);
   });
 
   it("throws for unknown routes", async () => {
@@ -204,7 +206,7 @@ describe("createInprocessTransport", () => {
     const transport = createInprocessTransport();
     transport.registerRoutes(service.router);
 
-    await assert.rejects(() => transport.request("math.nonexistent", {}), /Route "math.nonexistent" not found/);
+    await assert.rejects(() => transport.invoke("math.nonexistent", {}), /Route "math.nonexistent" not found/);
   });
 
   it("supports multiple services via combined router", async () => {
@@ -227,15 +229,16 @@ describe("createInprocessTransport", () => {
     const transport = createInprocessTransport();
     transport.registerRoutes(buildRouter(mathService, streamService));
 
-    const product = await transport.request("math.multiply", {
+    const product = await transport.invoke("math.multiply", {
       left: 3,
       right: 7,
     });
     assert.equal(product, 21);
 
+    const result = await transport.invoke("stream.countTo", { limit: 2 });
     const values: Array<number> = [];
-    for await (const v of transport.feed("stream.countTo", { limit: 2 })) {
-      values.push(v as number);
+    for await (const v of result as AsyncIterable<number>) {
+      values.push(v);
     }
     assert.deepEqual(values, [1, 2]);
   });
@@ -251,7 +254,7 @@ describe("createInprocessTransport", () => {
 
     await transport.close();
 
-    await assert.rejects(() => transport.request("math.multiply", { left: 1, right: 2 }), /No routes registered/);
+    await assert.rejects(() => transport.invoke("math.multiply", { left: 1, right: 2 }), /No routes registered/);
   });
 
   it("applies parser when present on a route", async () => {
@@ -269,7 +272,7 @@ describe("createInprocessTransport", () => {
     const transport = createInprocessTransport();
     transport.registerRoutes(service.router);
 
-    const result = await transport.request("math.multiply", {
+    const result = await transport.invoke("math.multiply", {
       left: "6",
       right: "7",
     });
