@@ -1,5 +1,14 @@
 # @scompr/transport-websocket-server-runtime
 
+## 0.2.0
+
+### Patch Changes
+
+- d59ca8b: Add `v: 1` protocol version field to all wire envelope types for forward compatibility
+- Updated dependencies [4b57524]
+  - @scompr/core@0.1.1
+  - @scompr/transport-shared@0.1.1
+
 ## 0.1.0
 
 ### Minor Changes

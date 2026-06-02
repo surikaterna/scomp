@@ -1,5 +1,15 @@
 # @scompr/transport-websocket-client
 
+## 0.2.0
+
+### Patch Changes
+
+- d59ca8b: Add `v: 1` protocol version field to all wire envelope types for forward compatibility
+- 4b57524: **BREAKING:** `ITransport` interface now requires only `invoke()`. The `request()`, `signal()`, and `feed()` methods have been removed. All transports dispatch through a single `invoke()` method that determines behavior from the route's registered kind. `ClientRouteHints` are deprecated and no longer needed — the transport handles dispatch automatically.
+- Updated dependencies [4b57524]
+  - @scompr/core@0.1.1
+  - @scompr/transport-shared@0.1.1
+
 ## 0.1.0
 
 ### Minor Changes

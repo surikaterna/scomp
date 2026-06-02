@@ -1,5 +1,12 @@
 # @scompr/transport-shared
 
+## 0.2.0
+
+### Patch Changes
+
+- Updated dependencies [4b57524]
+  - @scompr/core@0.1.1
+
 ## 0.1.0
 
 ### Minor Changes
