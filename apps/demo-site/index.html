@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>sComPR — Interactive Demos</title>
+  <link rel="stylesheet" href="/src/styles.css" />
+</head>
+<body>
+  <div class="landing">
+    <header class="landing-header">
+      <h1>sComPR</h1>
+      <p class="tagline">TypeScript Service Composition Framework</p>
+    </header>
+    <main class="landing-demos">
+      <a href="inprocess.html" class="demo-card">
+        <h2>In-Process RPC</h2>
+        <p>Full contract → service → client flow running in a single page. No server needed.</p>
+        <span class="demo-badge">@scompr/transport-inprocess</span>
+      </a>
+      <a href="cross-window.html" class="demo-card">
+        <h2>Cross-Window Communication</h2>
+        <p>Two iframes communicating via BroadcastChannel. Real-time message log.</p>
+        <span class="demo-badge">@scompr/transport-browser-windows</span>
+      </a>
+    </main>
+    <footer class="landing-footer">
+      <a href="https://github.com/surikaterna/scomp">GitHub</a>
+    </footer>
+  </div>
+</body>
+</html>
