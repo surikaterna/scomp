@@ -1,6 +1,6 @@
 {
   "name": "@scompr/core",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Core runtime for the sComPR service composition framework",
   "license": "MIT",
   "repository": {
