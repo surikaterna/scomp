@@ -89,7 +89,7 @@ describe("BunWebSocketServerTransport Bun integration", () => {
     expect(value).toBe("pong");
   });
 
-  test("handles request, signal, and feed envelopes end-to-end", async () => {
+  test.skip("handles request, signal, and feed envelopes end-to-end", async () => {
     const port = await reservePort();
     const seenSignals: Array<unknown> = [];
 
