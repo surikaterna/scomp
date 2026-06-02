@@ -1,5 +1,12 @@
 # @scompr/transport-websocket-shared
 
+## 1.0.0
+
+### Patch Changes
+
+- Updated dependencies [4b57524]
+  - @scompr/core@1.0.0
+
 ## 0.1.0
 
 ### Minor Changes

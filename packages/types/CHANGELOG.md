@@ -1,5 +1,15 @@
 # @scompr/types
 
+## 0.2.0
+
+### Minor Changes
+
+- 4b57524: **BREAKING:** `ITransport` interface now requires only `invoke()`. The `request()`, `signal()`, and `feed()` methods have been removed. All transports dispatch through a single `invoke()` method that determines behavior from the route's registered kind. `ClientRouteHints` are deprecated and no longer needed — the transport handles dispatch automatically.
+
+### Patch Changes
+
+- d59ca8b: Add `v: 1` protocol version field to all wire envelope types for forward compatibility
+
 ## 0.1.0
 
 ### Minor Changes

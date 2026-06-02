@@ -1,5 +1,17 @@
 # @scompr/transport-browser-windows
 
+## 1.0.0
+
+### Major Changes
+
+- 4b57524: **BREAKING:** `ITransport` interface now requires only `invoke()`. The `request()`, `signal()`, and `feed()` methods have been removed. All transports dispatch through a single `invoke()` method that determines behavior from the route's registered kind. `ClientRouteHints` are deprecated and no longer needed — the transport handles dispatch automatically.
+
+### Patch Changes
+
+- Updated dependencies [4b57524]
+  - @scompr/core@1.0.0
+  - @scompr/transport-shared@1.0.0
+
 ## 0.1.0
 
 ### Minor Changes
