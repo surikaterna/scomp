@@ -24,11 +24,6 @@ async function init() {
     const transport = createBrowserWindowsTransport({
       mode: "broadcast-channel",
       channelName: "scompr-demo",
-      routeIntents: {
-        "demo.double": "request",
-        "demo.alert": "signal",
-        "demo.prices": "feed",
-      },
     });
 
     const service = createScompService(DemoService).implement({
@@ -72,9 +67,7 @@ async function init() {
       },
     });
 
-    transport.registerRoutes(service.router);
-
-    // Use createScompPeer for automatic route kind extraction (no routeHints needed)
+    // peer.provides() registers routes on the transport automatically
     const peer = createScompPeer({
       transports: [transport],
       clientFactory: createClientFactory(),

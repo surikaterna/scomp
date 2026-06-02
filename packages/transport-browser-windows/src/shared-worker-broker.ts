@@ -102,12 +102,12 @@ export class BrowserWindowsSharedWorkerBroker {
         return;
       case "heartbeat":
       case "hello_ack":
+      case "invoke_feed_chunk":
       case "host_request":
       case "host_signal":
       case "host_feed_start":
       case "host_feed_stop":
       case "invoke_response":
-      case "invoke_feed_chunk":
         return;
       default:
         return;

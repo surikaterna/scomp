@@ -1,11 +1,15 @@
-import { createScompClient } from "@scompr/client";
+import { createContractToken, createScompPeer } from "@scompr/core";
+import { createClientFactory } from "@scompr/client";
 import { createBrowserWindowsTransport } from "@scompr/transport-browser-windows";
 
+// Contract shared between host and client
 interface DemoContract {
   double(n: number): Promise<number>;
   alert(payload: { msg: string }): void;
   prices(params: Record<string, never>): AsyncIterable<{ symbol: string; price: number; ts: number }>;
 }
+
+const DemoService = createContractToken<DemoContract>("demo");
 
 function postLog(kind: string, message: string): void {
   window.parent.postMessage({ type: "demo-log", source: "client", kind, message }, "*");
@@ -22,27 +26,18 @@ async function init() {
     const transport = createBrowserWindowsTransport({
       mode: "broadcast-channel",
       channelName: "scompr-demo",
-      routeIntents: {
-        "demo.double": "request",
-        "demo.alert": "signal",
-        "demo.prices": "feed",
-      },
     });
 
-    // Small delay to let host register first
-    await new Promise((r) => setTimeout(r, 300));
+    // Small delay to let host register and leader election to complete
+    await new Promise((r) => setTimeout(r, 500));
 
-    // Cross-process consumer: routeHints are required here because the service
-    // is registered in a different frame/process and route metadata is not
-    // available locally. This is the legitimate use case for explicit hints.
-    const client = createScompClient<DemoContract>({
-      transport,
-      routeHints: {
-        "demo.double": "request",
-        "demo.alert": "signal",
-        "demo.prices": "feed",
-      },
+    const peer = createScompPeer({
+      transports: [transport],
+      clientFactory: createClientFactory(),
+      controlPlane: false,
     });
+
+    const client = peer.consumes(DemoService);
 
     if (statusEl) statusEl.textContent = "Client ready";
     postLog("request", "Client initialized");
