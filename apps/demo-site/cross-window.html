@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cross-Window Communication Demo — sComPR</title>
+  <link rel="stylesheet" href="/src/styles.css" />
+</head>
+<body>
+  <div class="demo-page">
+    <header class="demo-header">
+      <a href="index.html" class="back-link">← Back</a>
+      <h1>Cross-Window Communication Demo</h1>
+    </header>
+    <div class="frames-layout">
+      <div class="frame-container">
+        <h2>Host (registers routes)</h2>
+        <iframe id="host-frame" src="host-frame.html"></iframe>
+      </div>
+      <div class="frame-container">
+        <h2>Client (invokes routes)</h2>
+        <iframe id="client-frame" src="client-frame.html"></iframe>
+      </div>
+    </div>
+    <section class="log-panel">
+      <h2>Event Log</h2>
+      <div id="log" class="log-output"></div>
+    </section>
+  </div>
+  <script type="module" src="/src/cross-window-parent.ts"></script>
+</body>
+</html>

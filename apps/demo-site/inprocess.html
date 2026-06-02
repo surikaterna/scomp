@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>In-Process RPC Demo — sComPR</title>
+  <link rel="stylesheet" href="/src/styles.css" />
+</head>
+<body>
+  <div class="demo-page">
+    <header class="demo-header">
+      <a href="index.html" class="back-link">← Back</a>
+      <h1>In-Process RPC Demo</h1>
+    </header>
+    <div class="demo-layout">
+      <section class="panel code-panel">
+        <h2>Service Definition</h2>
+        <pre class="code-display"><code id="code-display"></code></pre>
+      </section>
+      <section class="panel controls-panel">
+        <h2>Interactive Console</h2>
+        <div class="button-group">
+          <button id="btn-request">Request: getUser(7)</button>
+          <button id="btn-signal">Signal: notifyLogin</button>
+          <button id="btn-feed-start">Feed: liveUsers</button>
+          <button id="btn-feed-stop" disabled>Stop Feed</button>
+        </div>
+      </section>
+    </div>
+    <section class="log-panel">
+      <h2>Log</h2>
+      <div id="log" class="log-output"></div>
+    </section>
+  </div>
+  <script type="module" src="/src/inprocess-demo.ts"></script>
+</body>
+</html>

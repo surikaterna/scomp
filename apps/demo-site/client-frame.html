@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Client Frame</title>
+  <link rel="stylesheet" href="/src/styles.css" />
+</head>
+<body class="frame-body">
+  <div class="frame-content">
+    <div class="frame-status" id="status">Initializing...</div>
+    <div class="button-group">
+      <button id="btn-request">math.double(21)</button>
+      <button id="btn-signal">notifications.alert</button>
+      <button id="btn-feed-start">ticker.prices (start)</button>
+      <button id="btn-feed-stop" disabled>Stop</button>
+    </div>
+    <div id="frame-log" class="frame-log"></div>
+  </div>
+  <script type="module" src="/src/client-frame.ts"></script>
+</body>
+</html>

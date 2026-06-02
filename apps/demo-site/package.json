@@ -1,0 +1,21 @@
+{
+  "name": "@scompr/demo-site",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@scompr/core": "workspace:*",
+    "@scompr/client": "workspace:*",
+    "@scompr/transport-inprocess": "workspace:*",
+    "@scompr/transport-browser-windows": "workspace:*"
+  },
+  "devDependencies": {
+    "vite": "^6.3.0",
+    "typescript": "^6.0.2"
+  }
+}
