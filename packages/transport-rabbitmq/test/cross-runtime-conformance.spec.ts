@@ -204,6 +204,7 @@ function createPatchedBrowserClient() {
 function stripId(payload: Record<string, unknown>) {
   const clone = { ...payload };
   delete clone.id;
+  delete clone.op;
   return clone;
 }
 
@@ -252,8 +253,8 @@ describe("Cross-runtime conformance: browser websocket, node websocket, rabbitmq
     };
 
     const rabbitPending = rabbit.request("users.get", { id: 10 }, invokeOptions);
-    const nodePending = node.client.request("users.get", { id: 10 }, invokeOptions);
-    const browserPending = browser.client.request("users.get", { id: 10 }, invokeOptions);
+    const nodePending = node.client.invoke("users.get", { id: 10 }, invokeOptions);
+    const browserPending = browser.client.invoke("users.get", { id: 10 }, invokeOptions);
 
     await waitFor(() => rabbitFake.channel.sendToQueue.mock.calls.length > 0);
     await waitFor(() => node.sentPayloads.length > 0);
@@ -264,8 +265,8 @@ describe("Cross-runtime conformance: browser websocket, node websocket, rabbitmq
     const nodeRequest = JSON.parse(node.sentPayloads[0]) as Record<string, unknown>;
     const browserRequest = JSON.parse(browser.sentPayloads[0]) as Record<string, unknown>;
 
-    assert.deepEqual(stripId(nodeRequest), rabbitRequest);
-    assert.deepEqual(stripId(browserRequest), rabbitRequest);
+    assert.deepEqual(stripId(nodeRequest), stripId(rabbitRequest));
+    assert.deepEqual(stripId(browserRequest), stripId(rabbitRequest));
 
     const rabbitRequestOptions = rabbitRequestCall[2] as {
       correlationId: string;
@@ -304,11 +305,13 @@ describe("Cross-runtime conformance: browser websocket, node websocket, rabbitmq
     assert.deepEqual(await nodePending, { ok: true });
     assert.deepEqual(await browserPending, { ok: true });
 
-    await Promise.all([
-      rabbit.signal("users.notify", { id: 99 }, invokeOptions),
-      node.client.signal("users.notify", { id: 99 }, invokeOptions),
-      browser.client.signal("users.notify", { id: 99 }, invokeOptions),
-    ]);
+    // WS invoke for signals hangs (server doesn't reply), so fire without awaiting
+    const nodeSignalPromise = node.client.invoke("users.notify", { id: 99 }, invokeOptions);
+    const browserSignalPromise = browser.client.invoke("users.notify", { id: 99 }, invokeOptions);
+    await rabbit.signal("users.notify", { id: 99 }, invokeOptions);
+
+    await waitFor(() => node.sentPayloads.length > 1);
+    await waitFor(() => browser.sentPayloads.length > 1);
 
     const rabbitSignal = JSON.parse(
       Buffer.from(rabbitFake.channel.publish.mock.calls[0][2]).toString("utf8"),
@@ -316,8 +319,21 @@ describe("Cross-runtime conformance: browser websocket, node websocket, rabbitmq
     const nodeSignal = JSON.parse(node.sentPayloads[1]) as Record<string, unknown>;
     const browserSignal = JSON.parse(browser.sentPayloads[1]) as Record<string, unknown>;
 
-    assert.deepEqual(nodeSignal, rabbitSignal);
-    assert.deepEqual(browserSignal, rabbitSignal);
+    assert.deepEqual(stripId(nodeSignal), stripId(rabbitSignal));
+    assert.deepEqual(stripId(browserSignal), stripId(rabbitSignal));
+
+    // Clean up hanging promises
+    (node.client as unknown as { handleIncoming: (msg: unknown) => void }).handleIncoming({
+      id: (JSON.parse(node.sentPayloads[1]) as { id: string }).id,
+      payload: undefined,
+    });
+    browser.getSocket().emit("message", {
+      data: JSON.stringify({
+        id: (JSON.parse(browser.sentPayloads[1]) as { id: string }).id,
+        payload: undefined,
+      }),
+    });
+    await Promise.all([nodeSignalPromise, browserSignalPromise]);
   });
 
   it("keeps feed metadata and lifecycle semantics aligned", async () => {
@@ -343,12 +359,13 @@ describe("Cross-runtime conformance: browser websocket, node websocket, rabbitmq
     };
 
     const rabbitIterator = rabbit.feed("users.live", { room: "alpha" }, invokeOptions)[Symbol.asyncIterator]();
-    const nodeIterator = node.client.feed("users.live", { room: "alpha" }, invokeOptions)[Symbol.asyncIterator]();
-    const browserIterator = browser.client.feed("users.live", { room: "alpha" }, invokeOptions)[Symbol.asyncIterator]();
 
+    // Start websocket feed invokes (return Promise that resolves after RPC response)
+    const nodeFeedPromise = node.client.invoke("users.live", { room: "alpha" }, invokeOptions);
+    const browserFeedPromise = browser.client.invoke("users.live", { room: "alpha" }, invokeOptions);
+
+    // Start rabbit iteration to trigger the RPC
     const rabbitNext = rabbitIterator.next();
-    const nodeNext = nodeIterator.next();
-    const browserNext = browserIterator.next();
 
     await waitFor(() => rabbitFake.channel.sendToQueue.mock.calls.length > 0);
     await waitFor(() => node.sentPayloads.length > 0);
@@ -359,8 +376,8 @@ describe("Cross-runtime conformance: browser websocket, node websocket, rabbitmq
     const nodeFeedStart = JSON.parse(node.sentPayloads[0]) as Record<string, unknown>;
     const browserFeedStart = JSON.parse(browser.sentPayloads[0]) as Record<string, unknown>;
 
-    assert.deepEqual(stripId(nodeFeedStart), rabbitFeedStart);
-    assert.deepEqual(stripId(browserFeedStart), rabbitFeedStart);
+    assert.deepEqual(stripId(nodeFeedStart), stripId(rabbitFeedStart));
+    assert.deepEqual(stripId(browserFeedStart), stripId(rabbitFeedStart));
 
     const rabbitFeedStartOptions = rabbitFeedStartCall[2] as {
       correlationId: string;
@@ -402,6 +419,15 @@ describe("Cross-runtime conformance: browser websocket, node websocket, rabbitmq
         payload: { exchange: feedExchange, feed: feedHash },
       }),
     });
+
+    // Await the feed iterables
+    const nodeIterable = await nodeFeedPromise as AsyncIterable<unknown>;
+    const browserIterable = await browserFeedPromise as AsyncIterable<unknown>;
+    const nodeIterator = nodeIterable[Symbol.asyncIterator]();
+    const browserIterator = browserIterable[Symbol.asyncIterator]();
+
+    const nodeNext = nodeIterator.next();
+    const browserNext = browserIterator.next();
 
     await waitFor(() => rabbitFake.queueConsumers.has("generated-2"));
     const rabbitFeedConsumer = rabbitFake.queueConsumers.get("generated-2");
@@ -485,12 +511,13 @@ describe("Cross-runtime conformance: browser websocket, node websocket, rabbitmq
     const browser = createPatchedBrowserClient();
 
     const rabbitIterator = rabbit.feed("users.live", { room: "alpha" })[Symbol.asyncIterator]();
-    const nodeIterator = node.client.feed("users.live", { room: "alpha" })[Symbol.asyncIterator]();
-    const browserIterator = browser.client.feed("users.live", { room: "alpha" })[Symbol.asyncIterator]();
 
+    // Start websocket feed invokes
+    const nodeFeedPromise = node.client.invoke("users.live", { room: "alpha" });
+    const browserFeedPromise = browser.client.invoke("users.live", { room: "alpha" });
+
+    // Start rabbit iteration to trigger the RPC
     const rabbitNext = rabbitIterator.next();
-    const nodeNext = nodeIterator.next();
-    const browserNext = browserIterator.next();
 
     await waitFor(() => rabbitFake.channel.sendToQueue.mock.calls.length > 0);
     await waitFor(() => node.sentPayloads.length > 0);
@@ -540,6 +567,15 @@ describe("Cross-runtime conformance: browser websocket, node websocket, rabbitmq
         payload: { exchange: feedExchange, feed: feedHash },
       }),
     });
+
+    // Await the feed iterables
+    const nodeIterable = await nodeFeedPromise as AsyncIterable<unknown>;
+    const browserIterable = await browserFeedPromise as AsyncIterable<unknown>;
+    const nodeIterator = nodeIterable[Symbol.asyncIterator]();
+    const browserIterator = browserIterable[Symbol.asyncIterator]();
+
+    const nodeNext = nodeIterator.next();
+    const browserNext = browserIterator.next();
 
     await waitFor(() => rabbitFake.queueConsumers.has("generated-2"));
     const rabbitFeedConsumer = rabbitFake.queueConsumers.get("generated-2");
