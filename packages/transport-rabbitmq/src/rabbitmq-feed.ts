@@ -30,6 +30,7 @@ export async function publishFeed(
         runningFeed.exchange,
         "",
         serializeToBuffer({
+          v: 1,
           channel: "feed",
           feed: runningFeed.key,
           type: "next",
@@ -47,6 +48,7 @@ export async function publishFeed(
       runningFeed.exchange,
       "",
       serializeToBuffer({
+        v: 1,
         channel: "feed",
         feed: runningFeed.key,
         type: "done",
@@ -62,6 +64,7 @@ export async function publishFeed(
       runningFeed.exchange,
       "",
       serializeToBuffer({
+        v: 1,
         channel: "feed",
         feed: runningFeed.key,
         type: "error",

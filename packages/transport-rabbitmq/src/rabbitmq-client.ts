@@ -69,6 +69,7 @@ export async function sendRpc(
 
   const serviceName = toServiceName(route);
   const body = serializeToBuffer(ctx.serializer, {
+    v: 1,
     route,
     payload,
     op,

@@ -296,6 +296,7 @@ export class WebSocketClientTransport implements ITransport {
 
     const outboundMeta = await this.composeOutboundMeta(options);
     const envelope: ScompTransportRequestEnvelope = {
+      v: 1,
       id,
       route,
       op,

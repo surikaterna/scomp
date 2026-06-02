@@ -132,6 +132,7 @@ export interface ScompTransportPrincipal {
 }
 
 export interface ScompTransportRequestEnvelope {
+  v?: number;
   id?: string;
   route: string;
   op: ScompTransportOperation;
@@ -144,6 +145,7 @@ export interface ScompTransportRequestEnvelope {
 export type ScompTransportRequest = ScompTransportRequestEnvelope;
 
 export interface ScompTransportSuccessResponseEnvelope {
+  v?: number;
   id?: string;
   payload?: unknown;
   meta?: ScompTransportMessageMeta;
@@ -169,6 +171,7 @@ export const SCOMP_ERROR_CODES: ReadonlyArray<ScompErrorCode> = [
 ] as const;
 
 export interface ScompTransportErrorResponseEnvelope {
+  v?: number;
   id?: string;
   error: string;
   code?: ScompErrorCode;
@@ -210,6 +213,7 @@ export type ScompControlPlaneSuccessResponse = {
 export type ScompFeedChunkType = "next" | "done" | "error";
 
 export interface ScompFeedChunkEnvelope {
+  v?: number;
   channel: "feed";
   feed: string;
   type: ScompFeedChunkType;

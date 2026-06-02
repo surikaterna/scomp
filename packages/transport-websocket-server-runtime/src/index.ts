@@ -277,6 +277,7 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
     for (const socket of runningFeed.subscribers) {
       if (!this.config.isSocketOpen(socket)) continue;
       this.config.onFeedChunk(socket, {
+        v: 1,
         channel: "feed",
         ...chunk,
       } satisfies ScompFeedChunkEnvelope);
@@ -291,6 +292,7 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
   ): void {
     if (!id || !this.config.isSocketOpen(socket)) return;
     this.config.onReply(socket, {
+      v: 1,
       id,
       payload,
       meta,
@@ -306,6 +308,7 @@ export class WebSocketServerRuntime<Socket extends RuntimeSocket> {
   ): void {
     if (!id || !this.config.isSocketOpen(socket)) return;
     this.config.onReply(socket, {
+      v: 1,
       id,
       error: error instanceof Error ? error.message : String(error),
       code,
