@@ -131,6 +131,7 @@ export function replyWithPayload(ctx: RpcContext, message: ConsumeMessage, paylo
   ctx.getCurrentChannel()?.sendToQueue(
     replyTo,
     ctx.serializeToBuffer({
+      v: 1,
       payload,
     } satisfies ScompTransportResponseEnvelope),
     {
@@ -149,6 +150,7 @@ export function replyWithError(ctx: RpcContext, message: ConsumeMessage, error: 
   ctx.getCurrentChannel()?.sendToQueue(
     replyTo,
     ctx.serializeToBuffer({
+      v: 1,
       error: error instanceof Error ? error.message : String(error),
       code,
     } satisfies ScompTransportResponseEnvelope),

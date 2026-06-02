@@ -128,6 +128,7 @@ export class RabbitMQTransport implements ITransport {
     await channel.assertExchange(SIGNAL_EXCHANGE, "topic", { durable: true });
 
     const content = this.serializeToBuffer({
+      v: 1,
       route,
       payload,
       op: "signal",
