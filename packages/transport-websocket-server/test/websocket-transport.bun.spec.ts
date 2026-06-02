@@ -85,7 +85,7 @@ describe("BunWebSocketServerTransport Bun integration", () => {
     });
     transports.push(client);
 
-    const value = await client.request("health.ping", null);
+    const value = await client.invoke("health.ping", null);
     expect(value).toBe("pong");
   });
 
@@ -128,12 +128,13 @@ describe("BunWebSocketServerTransport Bun integration", () => {
     });
     transports.push(client);
 
-    await expect(client.request("math.double", 21)).resolves.toBe(42);
+    await expect(client.invoke("math.double", 21)).resolves.toBe(42);
 
-    await client.signal("math.notify", { id: 7 });
+    await client.invoke("math.notify", { id: 7 });
     await wait(20);
     expect(seenSignals).toEqual([{ id: 7 }]);
 
-    await expect(collect(client.feed("math.count", { room: "main" }))).resolves.toEqual([1, 2, 3]);
+    const feedResult = await client.invoke("math.count", { room: "main" });
+    await expect(collect(feedResult as AsyncIterable<number>)).resolves.toEqual([1, 2, 3]);
   });
 });
