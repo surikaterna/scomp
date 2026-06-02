@@ -2,6 +2,7 @@ import {
   type ControlledAsyncIterable,
   createFeedHash,
   type ITransport,
+  type RouteKindMap,
   type ScompClientInvokeOptions,
   ScompFeed,
 } from "@scompr/core";
@@ -303,3 +304,28 @@ export function createScompClient<Contract extends object>(
 }
 
 export type ClientRouteIntentMap<Contract extends object> = ContractRouteIntents<Contract>;
+
+/**
+ * Creates a {@link ClientFactory}-compatible function for use with `createScompPeer`.
+ *
+ * The returned factory merges route kinds provided by the peer (from registered
+ * services) with any config-level `routeHints`, giving peer-provided kinds priority.
+ * This eliminates the need for manual `routeHints` when the consuming peer also
+ * provides the service locally.
+ */
+export function createClientFactory(options?: {
+  routeHints?: ClientRouteHints;
+  routeOptions?: ClientRouteOptions;
+  routeOptionResolver?: ClientRouteOptionResolver;
+}): <C extends object>(transport: ITransport, token: { name: string }, routeKinds?: RouteKindMap) => C {
+  return <C extends object>(transport: ITransport, token: { name: string }, routeKinds?: RouteKindMap): C => {
+    const mergedHints: ClientRouteHints = { ...options?.routeHints, ...routeKinds };
+    return createProxyNode(
+      transport,
+      Object.keys(mergedHints).length > 0 ? mergedHints : undefined,
+      options?.routeOptions,
+      options?.routeOptionResolver,
+      [token.name],
+    ) as unknown as C;
+  };
+}

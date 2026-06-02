@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createScompPeer } from "../src";
-import type { ITransport, CompiledRouter, ServiceDefinition } from "../src";
+import type { ITransport, CompiledRouter, ServiceDefinition, RouteKindMap } from "../src";
 import { createContractToken } from "../src";
 
 /* ---------- helpers ---------- */
@@ -40,11 +40,11 @@ function fakeService(name: string, routes: Record<string, string>): ServiceDefin
 }
 
 function stubClientFactory() {
-  const calls: Array<{ transport: ITransport; tokenName: string }> = [];
+  const calls: Array<{ transport: ITransport; tokenName: string; routeKinds?: RouteKindMap }> = [];
 
-  function factory<C extends object>(transport: ITransport, token: { name: string }): C {
+  function factory<C extends object>(transport: ITransport, token: { name: string }, routeKinds?: RouteKindMap): C {
     const proxy = { __stub: token.name } as unknown as C;
-    calls.push({ transport, tokenName: token.name });
+    calls.push({ transport, tokenName: token.name, routeKinds });
     return proxy;
   }
 
@@ -173,6 +173,35 @@ describe("IScompPeer.consumes()", () => {
 
     const token = createContractToken<{ x(): Promise<void> }>("x");
     assert.throws(() => peer.consumes(token), { message: "Peer is closed." });
+  });
+
+  it("passes route kinds from registered services to clientFactory", () => {
+    const t1 = createFakeTransport();
+    const { factory, calls } = stubClientFactory();
+    const peer = createScompPeer({ transports: [t1], clientFactory: factory, controlPlane: false });
+
+    const svc = fakeService("greeter", { hello: "request", notify: "signal", stream: "feed" });
+    peer.provides(svc);
+
+    const token = createContractToken<object>("greeter");
+    peer.consumes(token);
+
+    assert.deepEqual(calls[0].routeKinds, {
+      "greeter.hello": "request",
+      "greeter.notify": "signal",
+      "greeter.stream": "feed",
+    });
+  });
+
+  it("passes undefined routeKinds when no matching routes exist", () => {
+    const t1 = createFakeTransport();
+    const { factory, calls } = stubClientFactory();
+    const peer = createScompPeer({ transports: [t1], clientFactory: factory, controlPlane: false });
+
+    const token = createContractToken<object>("unknown");
+    peer.consumes(token);
+
+    assert.equal(calls[0].routeKinds, undefined);
   });
 });
 

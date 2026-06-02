@@ -5,6 +5,7 @@ export {
   type ClientRouteOptionResolver,
   type ClientRouteOptions,
   type CreateScompClientConfig,
+  createClientFactory,
   createScompClient,
   type ScompClientCallOptions,
   type ScompClientProxy,

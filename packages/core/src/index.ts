@@ -85,6 +85,7 @@ export {
   type CreateScompPeerConfig,
   createScompPeer,
   type IScompPeer,
+  type RouteKindMap,
 } from "./peer";
 export {
   normalizeScompPriority,
