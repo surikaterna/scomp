@@ -1,9 +1,9 @@
-import { createContractToken, createScompService } from "@scompr/core";
-import { createScompClient } from "@scompr/client";
+import { createContractToken, createScompService, createScompPeer } from "@scompr/core";
+import { createClientFactory } from "@scompr/client";
 import { createInprocessTransport } from "@scompr/transport-inprocess";
 import { log } from "./log";
 
-// --- Contract Definition ---
+// --- Contract ---
 interface UserServiceContract {
   getUser(id: number): Promise<{ id: number; name: string }>;
   notifyLogin(userId: number): void;
@@ -57,37 +57,52 @@ const service = createScompService(UserService).implement({
   },
 });
 
-// --- Transport + Client ---
+// --- Peer setup ---
 const transport = createInprocessTransport();
-transport.registerRoutes(service.router);
-
-const client = createScompClient<UserServiceContract>({
-  transport,
-  routeHints: {
-    "users.getUser": "request",
-    "users.notifyLogin": "signal",
-    "users.liveUsers": "feed",
-  },
+const peer = createScompPeer({
+  transports: [transport],
+  clientFactory: createClientFactory({
+    routeHints: {
+      "users.getUser": "request",
+      "users.notifyLogin": "signal",
+      "users.liveUsers": "feed",
+    },
+  }),
+  controlPlane: false,
 });
 
-// --- Display the code ---
+peer.provides(service);
+const client = peer.consumes(UserService);
+
+// --- Display code ---
 const codeEl = document.getElementById("code-display");
 if (codeEl) {
-  codeEl.textContent = `interface UserServiceContract {
+  codeEl.textContent = `// Define contract and token
+interface UserServiceContract {
   getUser(id: number): Promise<{ id: number; name: string }>;
   notifyLogin(userId: number): void;
   liveUsers(filter): AsyncIterable<{ id; name; ts }>;
 }
+const UserService = createContractToken<UserServiceContract>("users");
 
+// Implement service
 const service = createScompService(UserService).implement({
   requests: { getUser(id) { ... } },
-  signals: { notifyLogin(userId) { ... } },
-  feeds:   { liveUsers(filter) { ... } },
+  signals:  { notifyLogin(userId) { ... } },
+  feeds:    { liveUsers(filter) { ... } },
 });
 
+// Wire up with a peer
 const transport = createInprocessTransport();
-transport.registerRoutes(service.router);
-const client = createScompClient<UserServiceContract>({ transport });`;
+const peer = createScompPeer({
+  transports: [transport],
+  clientFactory: createClientFactory({ routeHints }),
+});
+peer.provides(service);
+
+// Consume with full type safety
+const client = peer.consumes(UserService);
+await client.getUser(7); // → route "users.getUser"`;
 }
 
 // --- Wire up buttons ---
@@ -95,13 +110,13 @@ let feedIterator: AsyncIterator<{ id: number; name: string; ts: number }> | null
 let feedRunning = false;
 
 document.getElementById("btn-request")?.addEventListener("click", async () => {
-  log("client", "request", "→ users.getUser(7)");
+  log("client", "request", "→ client.getUser(7)");
   const result = await client.getUser(7);
   log("client", "request", `← ${JSON.stringify(result)}`);
 });
 
 document.getElementById("btn-signal")?.addEventListener("click", async () => {
-  log("client", "signal", "→ users.notifyLogin(42)");
+  log("client", "signal", "→ client.notifyLogin(42)");
   await client.notifyLogin(42);
   log("client", "signal", "← (fire-and-forget acknowledged)");
 });
@@ -114,7 +129,7 @@ document.getElementById("btn-feed-start")?.addEventListener("click", async () =>
   btnStart.disabled = true;
   btnStop.disabled = false;
 
-  log("client", "feed", "→ users.liveUsers({ online: true }) [subscribing]");
+  log("client", "feed", "→ client.liveUsers({ online: true }) [subscribing]");
   const feed = client.liveUsers({ online: true });
   const iterator = feed[Symbol.asyncIterator]();
   feedIterator = iterator;

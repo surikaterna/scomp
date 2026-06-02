@@ -1,4 +1,5 @@
-import { createContractToken, createScompService } from "@scompr/core";
+import { createContractToken, createScompService, createScompPeer } from "@scompr/core";
+import { createClientFactory } from "@scompr/client";
 import { createBrowserWindowsTransport } from "@scompr/transport-browser-windows";
 
 // Contract shared between host and client
@@ -71,7 +72,19 @@ async function init() {
       },
     });
 
-    transport.registerRoutes(service.router);
+    const peer = createScompPeer({
+      transports: [transport],
+      clientFactory: createClientFactory({
+        routeHints: {
+          "demo.double": "request",
+          "demo.alert": "signal",
+          "demo.prices": "feed",
+        },
+      }),
+      controlPlane: false,
+    });
+
+    peer.provides(service);
 
     if (statusEl) statusEl.textContent = "Host ready — routes registered";
     postLog("request", "Host initialized, routes registered");

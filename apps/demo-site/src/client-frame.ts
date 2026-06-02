@@ -1,15 +1,14 @@
-import { createScompClient } from "@scompr/client";
+import { createContractToken, createScompPeer } from "@scompr/core";
+import { createClientFactory } from "@scompr/client";
 import { createBrowserWindowsTransport } from "@scompr/transport-browser-windows";
 
-interface DemoMethods {
+interface DemoContract {
   double(n: number): Promise<number>;
   alert(payload: { msg: string }): void;
   prices(params: Record<string, never>): AsyncIterable<{ symbol: string; price: number; ts: number }>;
 }
 
-interface DemoApi {
-  demo: DemoMethods;
-}
+const DemoService = createContractToken<DemoContract>("demo");
 
 function postLog(kind: string, message: string): void {
   window.parent.postMessage({ type: "demo-log", source: "client", kind, message }, "*");
@@ -36,14 +35,19 @@ async function init() {
     // Small delay to let host register first
     await new Promise((r) => setTimeout(r, 300));
 
-    const client = createScompClient<DemoApi>({
-      transport,
-      routeHints: {
-        "demo.double": "request",
-        "demo.alert": "signal",
-        "demo.prices": "feed",
-      },
+    const peer = createScompPeer({
+      transports: [transport],
+      clientFactory: createClientFactory({
+        routeHints: {
+          "demo.double": "request",
+          "demo.alert": "signal",
+          "demo.prices": "feed",
+        },
+      }),
+      controlPlane: false,
     });
+
+    const client = peer.consumes(DemoService);
 
     if (statusEl) statusEl.textContent = "Client ready";
     postLog("request", "Client initialized");
@@ -52,7 +56,7 @@ async function init() {
     document.getElementById("btn-request")?.addEventListener("click", async () => {
       postLog("request", "→ demo.double(21)");
       try {
-        const result = await client.demo.double(21);
+        const result = await client.double(21);
         postLog("request", `← ${result}`);
       } catch (err) {
         postLog("error", `Error: ${err}`);
@@ -62,7 +66,7 @@ async function init() {
     document.getElementById("btn-signal")?.addEventListener("click", async () => {
       postLog("signal", '→ demo.alert({ msg: "hello" })');
       try {
-        await client.demo.alert({ msg: "hello" });
+        await client.alert({ msg: "hello" });
         postLog("signal", "← (sent)");
       } catch (err) {
         postLog("error", `Error: ${err}`);
@@ -79,7 +83,7 @@ async function init() {
 
       postLog("feed", "→ demo.prices [subscribing]");
       try {
-        const feed = client.demo.prices({} as Record<string, never>);
+        const feed = client.prices({} as Record<string, never>);
         const iterator = feed[Symbol.asyncIterator]();
         feedIterator = iterator;
 

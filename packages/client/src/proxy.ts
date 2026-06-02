@@ -302,4 +302,25 @@ export function createScompClient<Contract extends object>(
   ) as unknown as ScompClientProxy<Contract>;
 }
 
+/**
+ * Creates a ClientFactory for use with createScompPeer.
+ * The returned factory produces client proxies that prefix all routes
+ * with the contract token name.
+ */
+export function createClientFactory(options?: {
+  routeHints?: ClientRouteHints;
+  routeOptions?: ClientRouteOptions;
+  routeOptionResolver?: ClientRouteOptionResolver;
+}): <C extends object>(transport: ITransport, token: { name: string }) => C {
+  return <C extends object>(transport: ITransport, token: { name: string }): C => {
+    return createProxyNode(
+      transport,
+      options?.routeHints,
+      options?.routeOptions,
+      options?.routeOptionResolver,
+      [token.name],
+    ) as unknown as C;
+  };
+}
+
 export type ClientRouteIntentMap<Contract extends object> = ContractRouteIntents<Contract>;
