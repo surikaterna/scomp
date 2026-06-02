@@ -114,5 +114,42 @@ export function createInprocessTransport(config: InprocessTransportConfig = {}):
 
       throw new Error(`Feed handler for route "${route}" did not return an AsyncIterable.`);
     },
+
+    async invoke(route: string, payload: unknown, options?: ScompClientInvokeOptions): Promise<unknown> {
+      const compiledRoute = resolveRoute(router, route);
+      const ctx: ScompHandlerContext = { route, operation: compiledRoute.kind, meta: options?.meta };
+
+      if (compiledRoute.kind === "signal") {
+        try {
+          const result = invokeHandler(compiledRoute, payload, ctx);
+          void Promise.resolve(result).catch((error) => {
+            if (config.onSignalError) {
+              config.onSignalError(error, route);
+              return;
+            }
+            queueMicrotask(() => {
+              throw error;
+            });
+          });
+        } catch (error) {
+          if (config.onSignalError) {
+            config.onSignalError(error, route);
+            return undefined;
+          }
+          throw error;
+        }
+        return undefined;
+      }
+
+      if (compiledRoute.kind === "feed") {
+        const result = invokeHandler(compiledRoute, payload, ctx);
+        if (isAsyncIterable(result)) {
+          return result;
+        }
+        throw new Error(`Feed handler for route "${route}" did not return an AsyncIterable.`);
+      }
+
+      return Promise.resolve(invokeHandler(compiledRoute, payload, ctx));
+    },
   };
 }

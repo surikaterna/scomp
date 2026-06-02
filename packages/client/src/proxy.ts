@@ -12,6 +12,7 @@ import type {
   ScompPriorityHint,
   ScompTransportMessageMeta,
 } from "@scompr/types";
+import { createScompResult } from "./scomp-result";
 
 type UnknownFunction = (...args: Array<unknown>) => unknown;
 
@@ -278,6 +279,13 @@ function createProxyNode(
         routeOptionResolver,
       );
 
+      // Prefer unified invoke() when available
+      if (transport.invoke) {
+        const promise = transport.invoke(route, invocation.payload, invocation.options);
+        return createScompResult(promise);
+      }
+
+      // Fallback: legacy dispatch via routeHints (for transports without invoke())
       if (routeType === "signal") {
         return transport.signal(route, invocation.payload, invocation.options);
       }

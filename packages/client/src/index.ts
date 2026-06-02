@@ -11,3 +11,5 @@ export {
   type ScompClientProxy,
   type ScompControlledFeed,
 } from "./proxy";
+
+export { createScompResult, type ScompResult } from "./scomp-result";
