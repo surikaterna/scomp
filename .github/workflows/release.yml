@@ -36,11 +36,9 @@ jobs:
         uses: changesets/action@v1
         with:
           version: bunx changeset version
+          publish: npx changeset publish
           title: "chore: version packages"
           commit: "chore: version packages"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Publish to npm via Trusted Publishing
-        if: steps.changesets.outputs.hasChangesets == 'false'
-        run: npm publish --access public --workspaces --if-present
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
