@@ -41,6 +41,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Publish to npm via Trusted Publishing
+      - name: Publish to npm
         if: steps.changesets.outputs.hasChangesets == 'false'
-        run: npm publish --access public --workspaces --if-present
+        run: npm publish --provenance --access public --workspaces --if-present
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
