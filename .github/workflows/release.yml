@@ -23,6 +23,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+          registry-url: "https://registry.npmjs.org"
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -35,8 +36,13 @@ jobs:
         uses: changesets/action@v1
         with:
           version: bunx changeset version
-          publish: npm publish --workspaces --provenance --access public
           title: "chore: version packages"
           commit: "chore: version packages"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish to npm (OIDC trusted publishing)
+        if: steps.changesets.outputs.hasChangesets == 'false'
+        run: |
+          unset NODE_AUTH_TOKEN
+          npm publish --workspaces --provenance --access public
