@@ -41,8 +41,25 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Debug npm config
+        if: steps.changesets.outputs.hasChangesets == 'false'
+        run: |
+          echo "--- npm version ---"
+          npm --version
+          echo "--- .npmrc content ---"
+          cat ~/.npmrc 2>/dev/null || echo "no ~/.npmrc"
+          cat .npmrc 2>/dev/null || echo "no .npmrc"
+          echo "--- NODE_AUTH_TOKEN set? ---"
+          if [ -z "${NODE_AUTH_TOKEN}" ]; then echo "NOT SET"; else echo "SET (masked)"; fi
+          echo "--- npm whoami ---"
+          npm whoami 2>&1 || true
+
       - name: Publish to npm (OIDC trusted publishing)
         if: steps.changesets.outputs.hasChangesets == 'false'
         run: |
           unset NODE_AUTH_TOKEN
-          npm publish --workspaces --provenance --access public
+          echo "--- NODE_AUTH_TOKEN after unset ---"
+          if [ -z "${NODE_AUTH_TOKEN}" ]; then echo "NOT SET"; else echo "SET"; fi
+          echo "--- Attempting single package publish (types) ---"
+          npm publish packages/types --provenance --access public --loglevel verbose 2>&1 || true
+          echo "--- Exit code: $? ---"
