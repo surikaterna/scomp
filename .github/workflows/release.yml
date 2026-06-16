@@ -36,18 +36,9 @@ jobs:
         uses: changesets/action@v1
         with:
           version: bunx changeset version
+          publish: npx changeset publish
           title: "chore: version packages"
           commit: "chore: version packages"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Publish to npm (OIDC trusted publishing)
-        if: steps.changesets.outputs.hasChangesets == 'false'
-        run: |
-          # Remove .npmrc that setup-node created (has invalid GITHUB_TOKEN as auth)
-          rm -f "${NPM_CONFIG_USERCONFIG}"
-          unset NPM_CONFIG_USERCONFIG
-          unset NODE_AUTH_TOKEN
-          # Configure registry without token — npm will use OIDC via --provenance
-          npm config set registry https://registry.npmjs.org/
-          npm publish --workspaces --provenance --access public
+          NPM_CONFIG_PROVENANCE: true
