@@ -46,6 +46,7 @@ jobs:
         run: |
           echo "registry=https://registry.npmjs.org/" > "$NPM_CONFIG_USERCONFIG"
           unset NODE_AUTH_TOKEN
-          npm publish --provenance --access public --workspaces --if-present
+          npx changeset publish
         env:
           NODE_AUTH_TOKEN: ""
+          NPM_CONFIG_PROVENANCE: "true"
