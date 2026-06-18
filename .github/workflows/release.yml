@@ -22,7 +22,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "24"
           registry-url: "https://registry.npmjs.org"
 
       - name: Install dependencies
@@ -44,6 +44,6 @@ jobs:
       - name: Publish to npm (Trusted Publishing)
         if: steps.changesets.outputs.hasChangesets == 'false'
         run: |
-          # Replace setup-node's .npmrc (has _authToken line that blocks OIDC)
           echo "registry=https://registry.npmjs.org/" > "$NPM_CONFIG_USERCONFIG"
+          npm --version
           npm publish --provenance --access public --workspaces --if-present
