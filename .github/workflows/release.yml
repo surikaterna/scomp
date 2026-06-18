@@ -45,5 +45,7 @@ jobs:
         if: steps.changesets.outputs.hasChangesets == 'false'
         run: |
           echo "registry=https://registry.npmjs.org/" > "$NPM_CONFIG_USERCONFIG"
-          npm --version
+          unset NODE_AUTH_TOKEN
           npm publish --provenance --access public --workspaces --if-present
+        env:
+          NODE_AUTH_TOKEN: ""
