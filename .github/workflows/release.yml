@@ -18,7 +18,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: "1.3.11"
 
       - uses: actions/setup-node@v4
         with:
@@ -31,11 +31,14 @@ jobs:
       - name: Build
         run: bun run build
 
+      - name: Validate release tooling
+        run: bun run test:release
+
       - name: Create Release Pull Request or Publish
         id: changesets
         uses: changesets/action@v1
         with:
-          version: bunx changeset version
+          version: bun run version
           title: "chore: version packages"
           commit: "chore: version packages"
         env:
@@ -46,7 +49,7 @@ jobs:
         run: |
           echo "registry=https://registry.npmjs.org/" > "$NPM_CONFIG_USERCONFIG"
           unset NODE_AUTH_TOKEN
-          npx changeset publish
+          bun run release
         env:
           NODE_AUTH_TOKEN: ""
           NPM_CONFIG_PROVENANCE: "true"

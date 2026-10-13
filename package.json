@@ -6,11 +6,13 @@
     "build": "bunx turbo run build --concurrency=2",
     "build:ts": "tsc -b tsconfig.build.json",
     "smoke:transport-browser-windows": "bun ./check-transport-browser-windows-bundler-smoke.mjs",
-    "lint": "bunx turbo run lint",
+    "lint": "bunx biome check scripts/release && bunx turbo run lint",
     "test": "bunx turbo run test --concurrency=2",
     "changeset": "changeset",
-    "release": "changeset publish",
-    "version": "changeset version"
+    "release": "node scripts/release/release.mjs publish",
+    "release:check": "node scripts/release/release.mjs check",
+    "test:release": "node --test scripts/release/*.test.mjs",
+    "version": "changeset version && bun install --lockfile-only"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.13",

@@ -17,7 +17,32 @@ Typed service contracts bound to runtime tokens. Symmetric peer model. Controlle
 bunx turbo run build    # build all packages
 bunx turbo run test     # run all tests
 bunx turbo run lint     # lint all packages
+bun run test:release    # test release validation and publication ordering
+bun run release:check   # after build: pack and inspect all public npm libraries
 ```
+
+## Release flow
+
+Changesets controls versions and release PRs. `bun run version` also refreshes
+the Bun lockfile's workspace versions; Bun's packer uses those versions when
+resolving `workspace:*` ranges. Keep the lockfile update in the version PR.
+
+CI packs every public library with Bun 1.3.11 and validates the actual tarball:
+dependency and peer ranges must match the current workspace manifests, no local
+dependency protocols may remain, and built entry points must exist. Source
+manifests keep their workspace ranges and are never rewritten for publication.
+
+The release workflow runs `bun run release` with npm trusted publishing. It
+packs and validates all libraries before any registry write, checks which exact
+versions already exist, and publishes only the checked tarball paths in runtime
+dependency order. npm does not repack directories or run lifecycle scripts.
+Registry/authentication failures stop publication rather than being treated as
+missing versions. Publication currently supports stable versions on `latest`;
+prereleases need an explicit channel policy before enabling them.
+
+Existing npm versions are immutable. Corrected archives require new patch
+versions through Changesets; rerunning publication does not repair an already
+published version. A partial publish can be rerun to skip versions that exist.
 
 ## Core concepts
 
