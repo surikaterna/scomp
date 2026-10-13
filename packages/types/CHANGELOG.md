@@ -1,5 +1,11 @@
 # @scompr/types
 
+## 0.2.1
+
+### Patch Changes
+
+- 734ee03: Republish the library family using validated npm tarballs with resolved workspace dependency and peer dependency ranges, so consumers can install the packages outside this monorepo.
+
 ## 0.2.0
 
 ### Patch Changes

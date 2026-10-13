@@ -1,5 +1,15 @@
 # @scompr/demo-site
 
+## 0.0.3
+
+### Patch Changes
+
+- Updated dependencies [734ee03]
+  - @scompr/core@0.2.1
+  - @scompr/client@0.2.1
+  - @scompr/transport-inprocess@0.2.1
+  - @scompr/transport-browser-windows@0.2.1
+
 ## 0.0.2
 
 ### Patch Changes
