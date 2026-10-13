@@ -1,5 +1,17 @@
 # @scompr/demo
 
+## 0.1.3
+
+### Patch Changes
+
+- Updated dependencies [734ee03]
+  - @scompr/types@0.2.1
+  - @scompr/core@0.2.1
+  - @scompr/client@0.2.1
+  - @scompr/transport-rabbitmq@0.2.1
+  - @scompr/transport-websocket-client@0.2.1
+  - @scompr/transport-websocket-server@0.2.1
+
 ## 0.1.2
 
 ### Patch Changes

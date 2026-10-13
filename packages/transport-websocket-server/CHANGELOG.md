@@ -1,5 +1,14 @@
 # @scompr/transport-websocket-server
 
+## 0.2.1
+
+### Patch Changes
+
+- 734ee03: Republish the library family using validated npm tarballs with resolved workspace dependency and peer dependency ranges, so consumers can install the packages outside this monorepo.
+- Updated dependencies [734ee03]
+  - @scompr/core@0.2.1
+  - @scompr/transport-shared@0.2.1
+
 ## 0.2.0
 
 ### Patch Changes
